@@ -70,7 +70,12 @@ export default function Dashboard() {
           <h2 className="font-semibold text-slate-300 mb-4">Distribución por cajas</h2>
           <div className="space-y-2">
             {stats.boxes.map(({ box, count }) => (
-              <div key={box} className="flex items-center gap-3">
+              <div
+                key={box}
+                className="flex items-center gap-3 cursor-pointer hover:opacity-75 transition-opacity"
+                onClick={() => navigate(`/words?box=${box}`)}
+                title={`Ver palabras en caja ${box}`}
+              >
                 <span className="text-xs text-slate-500 w-12 shrink-0">Caja {box}</span>
                 <div className="flex-1 bg-slate-700 rounded-full h-3 overflow-hidden">
                   <div

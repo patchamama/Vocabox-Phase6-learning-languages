@@ -15,8 +15,6 @@ from ..services.spaced_repetition import process_answer
 
 router = APIRouter(prefix="/review", tags=["review"])
 
-EXERCISE_TYPES = ["write", "multiple_choice"]
-
 
 @router.get("", response_model=List[ReviewWordOut])
 def get_review_words(
@@ -31,29 +29,52 @@ def get_review_words(
             UserWord.user_id == current_user.id,
             UserWord.next_review_date <= now,
         )
-        .options(joinedload(UserWord.word))
+        .options(joinedload(UserWord.word).joinedload(Word.tema))
         .limit(limit)
         .all()
     )
 
-    # Unique significados as distractors pool
-    all_significados = list(
+    # Randomize order so words aren't always reviewed in insertion order
+    random.shuffle(due)
+
+    # Build pools by type (word vs phrase) based on significado
+    all_sigs = list(
         {w.significado for w in db.query(Word.significado).limit(200).all()}
     )
+    word_sigs = [s for s in all_sigs if " " not in s]
+    phrase_sigs = [s for s in all_sigs if " " in s]
 
     result: List[ReviewWordOut] = []
     for uw in due:
-        exercise_type = random.choice(EXERCISE_TYPES)
-        choices = None
+        is_phrase = " " in uw.word.palabra or " " in uw.word.significado
 
-        if exercise_type == "multiple_choice":
-            wrong = [s for s in all_significados if s != uw.word.significado]
-            if len(wrong) >= 3:
-                wrong_choices = random.sample(wrong, 3)
-                choices = wrong_choices + [uw.word.significado]
-                random.shuffle(choices)
-            else:
-                exercise_type = "write"
+        # Phrases always use multiple_choice (typing phrases on mobile is too hard)
+        if is_phrase:
+            exercise_type = "multiple_choice"
+        else:
+            exercise_type = random.choice(["write", "multiple_choice"])
+
+        # Build distractor pool matching the type of the correct significado
+        if " " in uw.word.significado:
+            pool = [s for s in phrase_sigs if s != uw.word.significado]
+            if len(pool) < 3:
+                pool = [s for s in all_sigs if s != uw.word.significado]
+        else:
+            pool = [s for s in word_sigs if s != uw.word.significado]
+            if len(pool) < 3:
+                pool = [s for s in all_sigs if s != uw.word.significado]
+
+        # Always generate choices so mobile users can toggle write → options
+        choices = None
+        if len(pool) >= 3:
+            wrong_choices = random.sample(pool, 3)
+            choices = wrong_choices + [uw.word.significado]
+            random.shuffle(choices)
+        elif exercise_type == "multiple_choice":
+            # Not enough distractors — fall back to write
+            exercise_type = "write"
+
+        tema_nombre = uw.word.tema.nombre if uw.word.tema else None
 
         result.append(
             ReviewWordOut(
@@ -67,6 +88,7 @@ def get_review_words(
                 audio_url=uw.word.audio_url,
                 exercise_type=exercise_type,
                 choices=choices,
+                tema_nombre=tema_nombre,
             )
         )
 

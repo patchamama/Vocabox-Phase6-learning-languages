@@ -3,20 +3,27 @@ import type { ReviewWord } from '../../types'
 
 interface Props {
   word: ReviewWord
-  onAnswer: (correct: boolean) => void
+  onAnswer: (correct: boolean, userInput: string) => void
 }
 
 export default function WriteExercise({ word, onAnswer }: Props) {
   const [input, setInput] = useState('')
   const [revealed, setRevealed] = useState(false)
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null)
+  const [showOptions, setShowOptions] = useState(false)
+  const [selectedChoice, setSelectedChoice] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  const choices = word.choices ?? null
 
   useEffect(() => {
     setInput('')
     setRevealed(false)
     setIsCorrect(null)
-    inputRef.current?.focus()
+    setShowOptions(false)
+    setSelectedChoice(null)
+    if (!showOptions) inputRef.current?.focus()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [word.user_word_id])
 
   const speak = () => {
@@ -27,10 +34,26 @@ export default function WriteExercise({ word, onAnswer }: Props) {
 
   const check = (e: FormEvent) => {
     e.preventDefault()
-    const correct =
-      input.trim().toLowerCase() === word.significado.trim().toLowerCase()
+    const correct = input.trim().toLowerCase() === word.significado.trim().toLowerCase()
     setIsCorrect(correct)
     setRevealed(true)
+  }
+
+  // Options mode: pick a choice, show result, auto-advance
+  const pickChoice = (choice: string) => {
+    if (selectedChoice) return
+    const correct = choice === word.significado
+    setSelectedChoice(choice)
+    setIsCorrect(correct)
+    setRevealed(true)
+    setTimeout(() => onAnswer(correct, choice), 900)
+  }
+
+  const choiceClass = (choice: string) => {
+    if (!selectedChoice) return 'bg-slate-700 hover:bg-slate-600 border-slate-600 cursor-pointer'
+    if (choice === word.significado) return 'bg-green-500/20 border-green-500 text-green-200'
+    if (choice === selectedChoice) return 'bg-red-500/20 border-red-500 text-red-200'
+    return 'bg-slate-700 border-slate-600 opacity-40'
   }
 
   return (
@@ -47,9 +70,35 @@ export default function WriteExercise({ word, onAnswer }: Props) {
         >
           🔊
         </button>
+        {word.tema_nombre && (
+          <p className="text-xs text-slate-600 mt-2">{word.tema_nombre}</p>
+        )}
       </div>
 
-      {!revealed ? (
+      {/* Options mode */}
+      {showOptions && choices ? (
+        <div className="flex flex-wrap gap-2">
+          {choices.map((choice, i) => (
+            <button
+              key={i}
+              onClick={() => pickChoice(choice)}
+              className={`px-4 py-2 rounded-xl border-2 font-medium text-sm transition-all duration-200 ${choiceClass(choice)}`}
+            >
+              {choice}
+            </button>
+          ))}
+          {!revealed && (
+            <button
+              type="button"
+              onClick={() => { setShowOptions(false); setTimeout(() => inputRef.current?.focus(), 50) }}
+              className="w-full text-xs text-slate-500 hover:text-slate-300 transition-colors pt-1"
+            >
+              Escribir respuesta
+            </button>
+          )}
+        </div>
+      ) : !revealed ? (
+        /* Write mode */
         <form onSubmit={check} className="space-y-3">
           <input
             ref={inputRef}
@@ -71,8 +120,18 @@ export default function WriteExercise({ word, onAnswer }: Props) {
           >
             No sé
           </button>
+          {choices && (
+            <button
+              type="button"
+              onClick={() => setShowOptions(true)}
+              className="w-full text-xs text-slate-500 hover:text-slate-300 transition-colors pt-1"
+            >
+              Ver opciones
+            </button>
+          )}
         </form>
       ) : (
+        /* Revealed — write mode result */
         <div className="space-y-4 animate-slide-up">
           <div
             className={`card text-center border-2 ${
@@ -94,13 +153,13 @@ export default function WriteExercise({ word, onAnswer }: Props) {
 
           <div className="flex gap-3">
             <button
-              onClick={() => onAnswer(false)}
+              onClick={() => onAnswer(false, input.trim())}
               className="flex-1 btn-secondary border border-red-500/50 text-red-300"
             >
               Marcar mal
             </button>
             <button
-              onClick={() => onAnswer(true)}
+              onClick={() => onAnswer(true, input.trim())}
               className="flex-1 btn-primary bg-green-600 hover:bg-green-700"
             >
               Marcar bien

@@ -41,8 +41,21 @@ export const wordsApi = {
     idioma_destino: string
     tema_id?: number
   }) => api.post('/words', data),
+  update: (id: number, data: {
+    palabra?: string
+    significado?: string
+    idioma_origen?: string
+    idioma_destino?: string
+    tema_id?: number | null
+  }) => api.put(`/words/${id}`, data),
   delete: (id: number) => api.delete(`/words/${id}`),
+  deleteAll: () => api.delete('/words/all'),
+  exportCsv: () => api.get('/words/export', { responseType: 'blob' }),
   myWords: () => api.get('/words/my'),
+}
+
+export const languagesApi = {
+  list: () => api.get('/languages'),
 }
 
 export const reviewApi = {

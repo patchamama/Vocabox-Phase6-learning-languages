@@ -1,9 +1,34 @@
 @echo off
-setlocal
+setlocal enabledelayedexpansion
 
 set VENV_DIR=.venv
 
 echo === Vocabox Backend ===
+
+:: ── Read PORT from .env (fallback to 9009) ────────────────────────────────────
+set PORT=9009
+if exist ".env" (
+    for /f "usebackq tokens=1,* delims==" %%a in (".env") do (
+        if "%%a"=="PORT" (
+            set _raw=%%b
+            :: strip leading/trailing spaces
+            for /f "tokens=* delims= " %%x in ("!_raw!") do set PORT=%%x
+        )
+    )
+)
+
+:: ── Free the port if something is already listening on it ─────────────────────
+echo [0/3] Checking port %PORT%...
+set _FREED=0
+for /f "tokens=5" %%P in ('netstat -ano 2^>nul ^| findstr /C.":%PORT% " ^| findstr "LISTENING"') do (
+    taskkill /F /PID %%P >nul 2>&1
+    set _FREED=1
+)
+if "!_FREED!"=="1" (
+    echo       Process on port %PORT% stopped.
+) else (
+    echo       Port %PORT% is free.
+)
 
 :: ── Virtual environment ───────────────────────────────────────────────────────
 if exist "%VENV_DIR%\Scripts\activate.bat" (
@@ -35,7 +60,7 @@ if errorlevel 1 (
 echo       Done.
 
 :: ── Run ───────────────────────────────────────────────────────────────────────
-echo [3/3] Starting server ^(port from .env, default 9009^)...
+echo [3/3] Starting server on port %PORT%...
 echo.
 python run.py
 

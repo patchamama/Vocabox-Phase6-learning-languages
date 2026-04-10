@@ -14,6 +14,7 @@ class ReviewWordOut(BaseModel):
     audio_url: Optional[str] = None
     exercise_type: str  # "write" | "multiple_choice"
     choices: Optional[List[str]] = None
+    tema_nombre: Optional[str] = None
 
 
 class AnswerIn(BaseModel):

@@ -3,7 +3,7 @@ import type { ReviewWord } from '../../types'
 
 interface Props {
   word: ReviewWord
-  onAnswer: (correct: boolean) => void
+  onAnswer: (correct: boolean, userInput: string) => void
 }
 
 export default function MultipleChoiceExercise({ word, onAnswer }: Props) {
@@ -23,7 +23,7 @@ export default function MultipleChoiceExercise({ word, onAnswer }: Props) {
   const pick = (choice: string) => {
     if (selected) return
     setSelected(choice)
-    setTimeout(() => onAnswer(choice === word.significado), 900)
+    setTimeout(() => onAnswer(choice === word.significado, choice), 900)
   }
 
   const choiceClass = (choice: string) => {
@@ -47,14 +47,17 @@ export default function MultipleChoiceExercise({ word, onAnswer }: Props) {
         >
           🔊
         </button>
+        {word.tema_nombre && (
+          <p className="text-xs text-slate-600 mt-2">{word.tema_nombre}</p>
+        )}
       </div>
 
-      <div className="space-y-3">
+      <div className="flex flex-wrap gap-2">
         {choices.map((choice, i) => (
           <button
             key={i}
             onClick={() => pick(choice)}
-            className={`w-full p-4 rounded-xl border-2 text-left font-medium transition-all duration-200 ${choiceClass(choice)}`}
+            className={`px-4 py-2 rounded-xl border-2 font-medium text-sm transition-all duration-200 ${choiceClass(choice)}`}
           >
             {choice}
           </button>

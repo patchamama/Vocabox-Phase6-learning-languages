@@ -8,7 +8,7 @@ from . import models  # noqa: F401
 
 Base.metadata.create_all(bind=engine)
 
-from .routers import auth, import_router, review, stats, temas, words
+from .routers import auth, import_router, languages, review, stats, temas, words
 
 # ── Language dictionary seed data ─────────────────────────────────────────────
 
@@ -72,6 +72,7 @@ app.include_router(review.router)
 app.include_router(stats.router)
 app.include_router(temas.router)
 app.include_router(import_router.router)
+app.include_router(languages.router)
 
 
 @app.get("/", tags=["root"])

@@ -40,6 +40,7 @@ export interface ReviewWord {
   audio_url: string | null
   exercise_type: 'write' | 'multiple_choice'
   choices: string[] | null
+  tema_nombre: string | null
 }
 
 export interface ImportRowPreview {
@@ -64,6 +65,12 @@ export interface ImportPreview {
 export interface ImportResult {
   imported: number
   skipped: number
+}
+
+export interface Language {
+  code: string
+  name_es: string | null
+  name_en: string | null
 }
 
 export interface BoxStats {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { importApi, temasApi } from '../api/client'
+import TemaSelect from '../components/TemaSelect'
 import type { ImportPreview, ImportResult, Tema } from '../types'
 
 type Step = 'upload' | 'preview' | 'result'
@@ -190,16 +191,12 @@ export default function Import() {
             {/* Optional tema */}
             <div>
               <label className="text-xs text-slate-400 block mb-1">Asignar tema (opcional)</label>
-              <select
-                className="input text-sm"
+              <TemaSelect
+                temas={temas}
                 value={temaId}
-                onChange={(e) => setTemaId(e.target.value)}
-              >
-                <option value="">Sin tema</option>
-                {temas.map((t) => (
-                  <option key={t.id} value={t.id}>{t.nombre}</option>
-                ))}
-              </select>
+                onChange={setTemaId}
+                onTemaCreated={(t) => setTemas((prev) => [...prev, t])}
+              />
             </div>
           </div>
 
