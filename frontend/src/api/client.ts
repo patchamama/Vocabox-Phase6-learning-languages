@@ -79,6 +79,11 @@ export const temasApi = {
   create: (nombre: string, color: string) => api.post('/temas', { nombre, color }),
 }
 
+export const testApi = {
+  simulate: () => api.post('/test/simulate'),
+  reset: () => api.post('/test/reset'),
+}
+
 import type { ImportRowPreview } from '../types'
 
 export const importApi = {

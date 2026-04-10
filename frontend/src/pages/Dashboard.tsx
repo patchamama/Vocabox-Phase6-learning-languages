@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { statsApi } from '../api/client'
+import { statsApi, testApi } from '../api/client'
 import type { Stats } from '../types'
 import { useAuthStore } from '../stores/authStore'
 
@@ -22,16 +22,26 @@ export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [selectedBoxes, setSelectedBoxes] = useState<Set<number>>(new Set(ALL_BOXES))
 
+  // Test-mode state (only rendered for username === 'test')
+  const [isSimulating, setIsSimulating] = useState(false)
+  const [simMsg, setSimMsg] = useState<{ text: string; ok: boolean } | null>(null)
+
+  const isTestUser = user?.username?.toLowerCase() === 'test'
+
+  const refreshStats = async () => {
+    const r = await statsApi.get()
+    setStats(r.data)
+  }
+
   useEffect(() => {
-    statsApi.get().then((r) => setStats(r.data)).catch(() => {})
+    refreshStats().catch(() => {})
   }, [])
 
   const toggleBox = (box: number) => {
     setSelectedBoxes((prev) => {
       const next = new Set(prev)
       if (next.has(box)) {
-        // Don't allow deselecting the last one
-        if (next.size === 1) return prev
+        if (next.size === 1) return prev   // keep at least one selected
         next.delete(box)
       } else {
         next.add(box)
@@ -42,7 +52,6 @@ export default function Dashboard() {
 
   const maxCount = stats ? Math.max(...stats.boxes.map((b) => b.count), 1) : 1
 
-  // Pending count for the currently selected boxes
   const pendingInSelected = stats
     ? stats.boxes
         .filter((b) => selectedBoxes.has(b.box))
@@ -51,12 +60,49 @@ export default function Dashboard() {
 
   const startReview = () => {
     const allSelected = selectedBoxes.size === ALL_BOXES.length
-    if (allSelected) {
-      navigate('/review')
-    } else {
-      navigate(`/review?boxes=${[...selectedBoxes].sort().join(',')}`)
+    navigate(allSelected ? '/review' : `/review?boxes=${[...selectedBoxes].sort().join(',')}`)
+  }
+
+  // ── Test mode helpers ─────────────────────────────────────────────────────
+
+  const showMsg = (text: string, ok: boolean) => {
+    setSimMsg({ text, ok })
+    setTimeout(() => setSimMsg(null), 4000)
+  }
+
+  const handleSimulate = async () => {
+    setIsSimulating(true)
+    setSimMsg(null)
+    try {
+      const { data } = await testApi.simulate()
+      await refreshStats()
+      setSelectedBoxes(new Set(ALL_BOXES))
+      showMsg(`Simulado: ${data.words} palabras distribuidas entre cajas`, true)
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      showMsg(detail ?? 'Error al simular', false)
+    } finally {
+      setIsSimulating(false)
     }
   }
+
+  const handleReset = async () => {
+    setIsSimulating(true)
+    setSimMsg(null)
+    try {
+      const { data } = await testApi.reset()
+      await refreshStats()
+      setSelectedBoxes(new Set(ALL_BOXES))
+      showMsg(`Restablecido: ${data.words} palabras en caja 0`, true)
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      showMsg(detail ?? 'Error al restablecer', false)
+    } finally {
+      setIsSimulating(false)
+    }
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="p-4 pt-8 space-y-6 animate-slide-up">
@@ -78,9 +124,7 @@ export default function Dashboard() {
           </div>
           <div className="text-slate-400 text-sm mt-1">Para repasar hoy</div>
           {stats && selectedBoxes.size < ALL_BOXES.length && (
-            <div className="text-xs text-slate-600 mt-1">
-              ({stats.pending_today} total)
-            </div>
+            <div className="text-xs text-slate-600 mt-1">({stats.pending_today} total)</div>
           )}
         </div>
         <div className="card text-center">
@@ -108,7 +152,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Box distribution with selection */}
+      {/* Box distribution */}
       {stats && (
         <div className="card">
           <div className="flex justify-between items-center mb-4">
@@ -124,11 +168,7 @@ export default function Dashboard() {
               <button
                 onClick={() =>
                   setSelectedBoxes(
-                    new Set(
-                      stats.boxes
-                        .filter((b) => b.pending_today > 0)
-                        .map((b) => b.box)
-                    )
+                    new Set(stats.boxes.filter((b) => b.pending_today > 0).map((b) => b.box))
                   )
                 }
                 className="hover:text-slate-300 transition-colors"
@@ -144,28 +184,21 @@ export default function Dashboard() {
               return (
                 <div
                   key={box}
-                  className={`flex items-center gap-3 transition-opacity ${
-                    !isSelected ? 'opacity-40' : ''
-                  }`}
+                  className={`flex items-center gap-3 transition-opacity ${!isSelected ? 'opacity-40' : ''}`}
                 >
-                  {/* Checkbox */}
                   <input
                     type="checkbox"
                     checked={isSelected}
                     onChange={() => toggleBox(box)}
                     className="w-3.5 h-3.5 rounded accent-blue-500 shrink-0 cursor-pointer"
                   />
-
-                  {/* Box label */}
                   <span
-                    className="text-xs text-slate-500 w-10 shrink-0 cursor-pointer"
+                    className="text-xs text-slate-500 w-10 shrink-0 cursor-pointer hover:text-slate-300 transition-colors"
                     onClick={() => navigate(`/words?box=${box}`)}
                     title="Ver palabras en esta caja"
                   >
                     Caja {box}
                   </span>
-
-                  {/* Progress bar */}
                   <div
                     className="flex-1 bg-slate-700 rounded-full h-3 overflow-hidden cursor-pointer"
                     onClick={() => navigate(`/words?box=${box}`)}
@@ -176,14 +209,10 @@ export default function Dashboard() {
                       style={{ width: count > 0 ? `${(count / maxCount) * 100}%` : '0%' }}
                     />
                   </div>
-
-                  {/* Counts: total + pending */}
                   <div className="flex items-center gap-1 shrink-0 min-w-[52px] justify-end">
                     <span className="text-xs text-slate-400">{count}</span>
                     {pending_today > 0 && (
-                      <span className="text-xs text-blue-400 font-medium">
-                        +{pending_today}
-                      </span>
+                      <span className="text-xs text-blue-400 font-medium">+{pending_today}</span>
                     )}
                   </div>
                 </div>
@@ -194,6 +223,53 @@ export default function Dashboard() {
           <p className="text-xs text-slate-600 mt-3">
             Pulsa una caja para ver sus palabras · marca/desmarca para filtrar el repaso
           </p>
+        </div>
+      )}
+
+      {/* ── Test mode panel (only for username 'test') ── */}
+      {isTestUser && (
+        <div className="card border border-yellow-500/25 space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-base">🧪</span>
+            <h3 className="text-sm font-semibold text-yellow-400 tracking-wide">
+              Herramientas de prueba
+            </h3>
+          </div>
+
+          <p className="text-xs text-slate-500 leading-relaxed">
+            <strong className="text-slate-400">Simular día</strong> redistribuye aleatoriamente
+            tus palabras entre las 7 cajas con una mezcla realista de pendientes para hoy.
+            <br />
+            <strong className="text-slate-400">Resetear</strong> devuelve todo a la caja 0
+            con revisión inmediata.
+          </p>
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleSimulate}
+              disabled={isSimulating}
+              className="flex-1 py-2.5 px-3 bg-yellow-600/20 hover:bg-yellow-600/30 border border-yellow-500/30 text-yellow-300 text-sm rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSimulating ? '…' : 'Simular día'}
+            </button>
+            <button
+              onClick={handleReset}
+              disabled={isSimulating}
+              className="flex-1 py-2.5 px-3 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSimulating ? '…' : 'Resetear todo'}
+            </button>
+          </div>
+
+          {simMsg && (
+            <p
+              className={`text-xs font-medium ${
+                simMsg.ok ? 'text-green-400' : 'text-red-400'
+              }`}
+            >
+              {simMsg.ok ? '✓ ' : '✗ '}{simMsg.text}
+            </p>
+          )}
         </div>
       )}
     </div>
