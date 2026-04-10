@@ -45,6 +45,18 @@ export default function FirstLetterExercise({ word, onAnswer, autoAdvanceMs }: P
     setFlash(null)
   }, [word.user_word_id])
 
+  // Keyboard support
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const ch = e.key.toLowerCase()
+      if (ch.length !== 1 || !/[a-záéíóúüàèìòùñäëïöüß]/.test(ch)) return
+      pick(ch)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [word.user_word_id, chosen, flash])
+
   const pick = (letter: string) => {
     if (flash) return
     const nextIndex = chosen.length

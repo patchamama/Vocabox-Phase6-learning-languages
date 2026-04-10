@@ -8,7 +8,7 @@
  * Wrong completion → flash red, reset.
  * Correct → onAnswer(true).
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReviewWord } from '../../types'
 
 interface LetterTile {
@@ -46,6 +46,16 @@ export default function AnagramExercise({ word, onAnswer }: Props) {
   const [filledIds, setFilledIds] = useState<(string | null)[]>([])
   const [flash, setFlash] = useState<'correct' | 'error' | null>(null)
 
+  // Refs to access latest state inside keyboard handler
+  const tilesRef = useRef(tiles)
+  const filledRef = useRef(filled)
+  const filledIdsRef = useRef(filledIds)
+  const flashRef = useRef(flash)
+  useEffect(() => { tilesRef.current = tiles }, [tiles])
+  useEffect(() => { filledRef.current = filled }, [filled])
+  useEffect(() => { filledIdsRef.current = filledIds }, [filledIds])
+  useEffect(() => { flashRef.current = flash }, [flash])
+
   // Build slot layout: array of chars+spaces from target
   const layout = useMemo(() => target.split(''), [target])
   // Slots = only non-space chars (indexed)
@@ -57,6 +67,36 @@ export default function AnagramExercise({ word, onAnswer }: Props) {
     setFilledIds(Array(slotCount).fill(null))
     setFlash(null)
   }, [word.user_word_id, initialTiles, slotCount])
+
+  // Keyboard support
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (flashRef.current) return
+      if (e.key === 'Backspace') {
+        e.preventDefault()
+        const curFilled = filledRef.current
+        const curFilledIds = filledIdsRef.current
+        const lastFilled = [...curFilled].reverse().findIndex((f) => f !== null)
+        if (lastFilled === -1) return
+        const idx = curFilled.length - 1 - lastFilled
+        const tileId = curFilledIds[idx]
+        const newFilled = [...curFilled]; newFilled[idx] = null
+        const newFilledIds = [...curFilledIds]; newFilledIds[idx] = null
+        setFilled(newFilled)
+        setFilledIds(newFilledIds)
+        setTiles((prev) => prev.map((t) => t.id === tileId ? { ...t, used: false } : t))
+        return
+      }
+      const ch = e.key.toLowerCase()
+      if (ch.length !== 1 || !/[a-záéíóúüàèìòùñäëïöüß]/.test(ch)) return
+      const curTiles = tilesRef.current
+      const tile = curTiles.find((t) => !t.used && t.char.toLowerCase() === ch)
+      if (tile) pickTile(tile)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [word.user_word_id])
 
   const nextSlotIndex = filled.findIndex((f) => f === null)
 

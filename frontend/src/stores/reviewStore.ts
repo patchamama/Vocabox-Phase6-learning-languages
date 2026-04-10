@@ -70,6 +70,30 @@ function log(...args: unknown[]) {
   console.log('[ReviewStore]', ...args)
 }
 
+/** Fisher-Yates shuffle that avoids placing the same userWordId consecutively. */
+function shuffleNoConsecutive(items: QueueItem[]): QueueItem[] {
+  const arr = [...items]
+  // standard Fisher-Yates
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+  }
+  // fix consecutive duplicates with a single pass
+  const getId = (it: QueueItem) => it.kind === 'single' ? it.userWordId : it.userWordIds[0]
+  for (let i = 0; i < arr.length - 1; i++) {
+    if (getId(arr[i]) === getId(arr[i + 1])) {
+      // find a non-conflicting swap target
+      for (let j = i + 2; j < arr.length; j++) {
+        if (getId(arr[j]) !== getId(arr[i])) {
+          ;[arr[i + 1], arr[j]] = [arr[j], arr[i + 1]]
+          break
+        }
+      }
+    }
+  }
+  return arr
+}
+
 // ── Queue building ────────────────────────────────────────────────────────────
 
 type QueueItem =
@@ -162,7 +186,7 @@ function buildSessionQueue(
         }
       }
     }
-    return { items, roundWordTypes: [wordTypes, {}, {}] }
+    return { items: shuffleNoConsecutive(items), roundWordTypes: [wordTypes, {}, {}] }
   }
 
   // Safe mode: 3 rounds
@@ -171,8 +195,18 @@ function buildSessionQueue(
 
   for (let r = 0; r < 3; r++) {
     const { items, wordExerciseType } = buildRoundQueue(words, rounds[r], [])
-    // Shuffle within each round so it's not always the same order
-    const shuffled = [...items].sort(() => Math.random() - 0.5)
+    let shuffled = shuffleNoConsecutive(items)
+
+    // Avoid the same word appearing consecutively across round boundary
+    if (allItems.length > 0) {
+      const lastItem = allItems[allItems.length - 1]
+      const lastId = lastItem.kind === 'single' ? lastItem.userWordId : lastItem.userWordIds[0]
+      const firstId = shuffled[0].kind === 'single' ? shuffled[0].userWordId : shuffled[0].userWordIds[0]
+      if (firstId === lastId && shuffled.length > 1) {
+        ;[shuffled[0], shuffled[1]] = [shuffled[1], shuffled[0]]
+      }
+    }
+
     allItems.push(...shuffled)
     roundWordTypes.push(wordExerciseType)
   }
