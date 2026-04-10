@@ -9,17 +9,45 @@ import WriteExercise from '../components/exercises/WriteExercise'
 import { useReviewStore } from '../stores/reviewStore'
 import { useSettingsStore } from '../stores/settingsStore'
 
+interface LastEntry {
+  input: string
+  correctAnswer: string
+  wasCorrect: boolean
+}
+
+const BOX_BG = [
+  'bg-red-500',
+  'bg-orange-500',
+  'bg-yellow-400',
+  'bg-lime-400',
+  'bg-cyan-400',
+  'bg-blue-500',
+  'bg-purple-500',
+]
+
+const EXERCISE_LABEL: Record<string, string> = {
+  multiple_choice: 'Opción múltiple',
+  write: 'Escribir',
+  pair_match: 'Pareo',
+  first_letter: 'Letra inicial',
+  anagram: 'Anagrama',
+}
+
 export default function Review() {
   const [searchParams] = useSearchParams()
-  const { reviewMode, wordsPerSession } = useSettingsStore()
+  const {
+    reviewMode, wordsPerSession, transitionDelay, transitionType,
+    safeRound1, safeRound2, safeRound3, autoPlayAudio,
+  } = useSettingsStore()
 
   const {
-    pairBatch,
     results,
     isLoading,
     isFinished,
     inErrorPhase,
     errorQueue,
+    currentRound,
+    totalRounds,
     loadReview,
     handleSingleAnswer,
     handlePairMatchComplete,
@@ -27,10 +55,16 @@ export default function Review() {
     reset,
     currentWord,
     currentExerciseType,
+    currentPairWords,
     progressPct,
     errorQueueSize,
     errorResolvedCount,
   } = useReviewStore()
+
+  const [lastEntry, setLastEntry] = useState<LastEntry | null>(null)
+  const [pendingAdvance, setPendingAdvance] = useState(false)
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState({ palabra: '', significado: '' })
@@ -43,11 +77,83 @@ export default function Review() {
     : undefined
 
   useEffect(() => {
-    loadReview(selectedBoxes, wordsPerSession, reviewMode)
-    return () => { reset() }
+    // Only load if not already in an active session
+    const state = useReviewStore.getState()
+    if (!state.isFinished && state.allWords.length === 0) {
+      loadReview(selectedBoxes, wordsPerSession, reviewMode, [safeRound1, safeRound2, safeRound3])
+    }
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // ── Transition logic ─────────────────────────────────────────────────────────
+  /**
+   * Schedule or show a "continue" button before calling the actual advance action.
+   * Used by all single-word exercises after they resolve.
+   */
+  const scheduleAdvance = (action: () => void) => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    if (transitionType === 'button') {
+      setPendingAction(() => action)
+      setPendingAdvance(true)
+    } else {
+      setPendingAdvance(true)
+      const ms = transitionDelay * 1000
+      timerRef.current = setTimeout(() => {
+        setPendingAdvance(false)
+        setPendingAction(null)
+        action()
+      }, ms)
+    }
+  }
+
+  const confirmAdvance = () => {
+    if (!pendingAction) return
+    if (timerRef.current) clearTimeout(timerRef.current)
+    setPendingAdvance(false)
+    const fn = pendingAction
+    setPendingAction(null)
+    fn()
+  }
+
+  // ── Answer handlers ──────────────────────────────────────────────────────────
+  const onSingleAnswer = (correct: boolean, userInput: string = '') => {
+    const word = currentWord()
+    if (!word) return
+    const capturedId = word.user_word_id
+    setLastEntry({ input: userInput, correctAnswer: word.significado, wasCorrect: correct })
+    setIsEditing(false)
+    scheduleAdvance(() => handleSingleAnswer(capturedId, correct))
+  }
+
+  // ── Edit handlers ────────────────────────────────────────────────────────────
+  const openEdit = () => {
+    const word = currentWord()
+    if (!word) return
+    setEditForm({ palabra: word.palabra, significado: word.significado })
+    setIsEditing(true)
+    setTimeout(() => editPalabraRef.current?.focus(), 50)
+  }
+
+  const handleSaveEdit = async () => {
+    const word = currentWord()
+    if (!word) return
+    const p = editForm.palabra.trim()
+    const s = editForm.significado.trim()
+    if (!p || !s) return
+    setIsSaving(true)
+    try {
+      await wordsApi.update(word.word_id, { palabra: p, significado: s })
+      patchWord(word.user_word_id, { palabra: p, significado: s })
+      setIsEditing(false)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // ── Loading / Finished ───────────────────────────────────────────────────────
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-screen gap-3">
@@ -60,7 +166,6 @@ export default function Review() {
   if (isFinished) {
     const total = results.correct + results.incorrect
     const pct = total > 0 ? Math.round((results.correct / total) * 100) : 0
-
     return (
       <div className="flex items-center justify-center min-h-screen p-4">
         <div className="card max-w-sm w-full text-center animate-slide-up">
@@ -84,7 +189,7 @@ export default function Review() {
             </>
           )}
           <button
-            onClick={() => loadReview(selectedBoxes, wordsPerSession, reviewMode)}
+            onClick={() => loadReview(selectedBoxes, wordsPerSession, reviewMode, [safeRound1, safeRound2, safeRound3])}
             className="btn-primary w-full"
           >
             {total === 0 ? 'Actualizar' : 'Nueva sesión'}
@@ -96,47 +201,22 @@ export default function Review() {
 
   const word = currentWord()
   const exerciseType = currentExerciseType()
-  const isPairMode = pairBatch.length > 0
+  const pairWords = currentPairWords()
+  const isPairMode = exerciseType === 'pair_match'
 
   if (!isPairMode && !word) return null
+  if (isPairMode && pairWords.length < 2) return null
 
-  // ── Progress bar ─────────────────────────────────────────────────────────────
+  // ── Progress ─────────────────────────────────────────────────────────────────
   const greenPct = progressPct()
-  const totalItems = useReviewStore.getState().queue.length
+  const totalWords = useReviewStore.getState().allWords.length
   const errSize = errorQueueSize()
   const errResolved = errorResolvedCount()
-  const redPct = errSize > 0 ? ((errSize - errResolved) / Math.max(totalItems + errSize, 1)) * 100 : 0
+  const redPct = errSize > 0
+    ? ((errSize - errResolved) / Math.max(totalWords + errSize, 1)) * 100
+    : 0
 
-  // ── Edit handlers ────────────────────────────────────────────────────────────
-  const openEdit = () => {
-    if (!word) return
-    setEditForm({ palabra: word.palabra, significado: word.significado })
-    setIsEditing(true)
-    setTimeout(() => editPalabraRef.current?.focus(), 50)
-  }
-
-  const handleSaveEdit = async () => {
-    if (!word) return
-    const p = editForm.palabra.trim()
-    const s = editForm.significado.trim()
-    if (!p || !s) return
-    setIsSaving(true)
-    try {
-      await wordsApi.update(word.word_id, { palabra: p, significado: s })
-      patchWord(word.user_word_id, { palabra: p, significado: s })
-      setIsEditing(false)
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const EXERCISE_LABEL: Record<string, string> = {
-    multiple_choice: 'Opción múltiple',
-    write: 'Escribir',
-    pair_match: 'Pareo',
-    first_letter: 'Letra inicial',
-    anagram: 'Anagrama',
-  }
+  const autoAdvanceMs = transitionType === 'auto' ? transitionDelay * 1000 : undefined
 
   return (
     <div className="p-4 pt-8 min-h-screen flex flex-col">
@@ -144,10 +224,17 @@ export default function Review() {
       {/* ── Progress bar ── */}
       <div className="mb-4">
         <div className="flex justify-between items-center text-xs mb-1">
-          <span className="text-slate-400">
-            {inErrorPhase ? '🔁 Repaso de errores' : exerciseType ? EXERCISE_LABEL[exerciseType] : ''}
+          <span className="text-slate-400 flex items-center gap-1.5">
+            {reviewMode === 'safe' && !inErrorPhase && (
+              <span className="text-xs bg-slate-600 text-slate-300 px-1.5 py-0.5 rounded-full font-medium">
+                R{currentRound + 1}/{totalRounds}
+              </span>
+            )}
+            {inErrorPhase
+              ? '🔁 Repaso de errores'
+              : exerciseType ? EXERCISE_LABEL[exerciseType] : ''}
           </span>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {results.correct > 0 && (
               <span className="text-blue-400 font-medium">✓ {results.correct}</span>
             )}
@@ -155,13 +242,25 @@ export default function Review() {
               <span className="text-red-400 font-medium">✗ {results.incorrect}</span>
             )}
             {!isPairMode && word && (
-              <span className="text-slate-400">Caja {word.box_level}</span>
+              <span
+                className={`text-xs px-2 py-0.5 rounded-full font-bold text-slate-900 ${BOX_BG[word.box_level] ?? 'bg-slate-500'}`}
+              >
+                C{word.box_level}
+              </span>
             )}
-            {!isPairMode && (
+            {!isPairMode && word?.tema_nombre && (
+              <span
+                className="text-xs px-2 py-0.5 rounded-full font-medium text-white"
+                style={{ backgroundColor: word.tema_color ?? '#64748b' }}
+              >
+                {word.tema_nombre}
+              </span>
+            )}
+            {!isPairMode && !pendingAdvance && (
               <button
                 onClick={isEditing ? () => setIsEditing(false) : openEdit}
                 title={isEditing ? 'Cerrar edición' : 'Editar palabra'}
-                className={`px-1.5 transition-colors ${
+                className={`px-1 transition-colors ${
                   isEditing ? 'text-blue-400' : 'text-slate-500 hover:text-slate-300'
                 }`}
               >
@@ -171,19 +270,26 @@ export default function Review() {
           </div>
         </div>
 
-        {/* Composite bar: green (done) + red (errors pending) */}
+        {/* Composite progress bar */}
         <div className="bg-slate-700 rounded-full h-2 overflow-hidden flex">
           <div
-            className="bg-blue-500 h-2 transition-all duration-300"
+            className="bg-blue-500 h-2 transition-all duration-500"
             style={{ width: `${greenPct}%` }}
           />
           {errSize > 0 && (
             <div
-              className="bg-red-500/70 h-2 transition-all duration-300"
+              className="bg-red-500/70 h-2 transition-all duration-500"
               style={{ width: `${redPct}%` }}
             />
           )}
         </div>
+
+        {/* Error queue indicator */}
+        {errSize > 0 && (
+          <p className="text-xs text-red-400/70 mt-0.5 text-right">
+            {errSize - errResolved} pendiente{errSize - errResolved !== 1 ? 's' : ''} de repasar
+          </p>
+        )}
       </div>
 
       {/* ── Inline edit panel ── */}
@@ -226,36 +332,82 @@ export default function Review() {
       <div className="flex-1">
         {isPairMode ? (
           <PairMatchExercise
-            key={pairBatch.map((w) => w.user_word_id).join('-')}
-            words={pairBatch}
-            onComplete={handlePairMatchComplete}
+            key={pairWords.map((w) => w.user_word_id).join('-')}
+            words={pairWords}
+            onComplete={(incorrectIds) => {
+              setLastEntry(null)
+              handlePairMatchComplete(incorrectIds)
+            }}
           />
+        ) : pendingAdvance ? (
+          /* Transition state: show result + continue button */
+          <div className="space-y-4 animate-slide-up">
+            {lastEntry && (
+              <div className={`card text-center border-2 ${lastEntry.wasCorrect ? 'border-green-500/50' : 'border-red-500/50'}`}>
+                <p className={`text-lg font-bold mb-1 ${lastEntry.wasCorrect ? 'text-green-400' : 'text-red-400'}`}>
+                  {lastEntry.wasCorrect ? '✓ Correcto' : '✗ Incorrecto'}
+                </p>
+                {!lastEntry.wasCorrect && lastEntry.input && (
+                  <p className="text-sm text-slate-400 mb-1">Tu respuesta: {lastEntry.input}</p>
+                )}
+                <p className="text-slate-200">{lastEntry.correctAnswer}</p>
+              </div>
+            )}
+            {transitionType === 'button' ? (
+              <button onClick={confirmAdvance} className="btn-primary w-full">
+                Continuar →
+              </button>
+            ) : (
+              <div className="text-center text-xs text-slate-500">
+                Continuando en {transitionDelay}s…
+              </div>
+            )}
+          </div>
         ) : word && exerciseType === 'write' ? (
           <WriteExercise
             key={word.user_word_id}
             word={word}
-            onAnswer={(correct, input) => handleSingleAnswer(word.user_word_id, correct)}
+            autoPlay={autoPlayAudio}
+            onAnswer={(correct, input) => onSingleAnswer(correct, input)}
           />
         ) : word && exerciseType === 'multiple_choice' ? (
           <MultipleChoiceExercise
             key={word.user_word_id}
             word={word}
-            onAnswer={(correct, input) => handleSingleAnswer(word.user_word_id, correct)}
+            autoPlay={autoPlayAudio}
+            onAnswer={(correct, input) => onSingleAnswer(correct, input)}
           />
         ) : word && exerciseType === 'first_letter' ? (
           <FirstLetterExercise
             key={word.user_word_id}
             word={word}
-            onAnswer={(correct) => handleSingleAnswer(word.user_word_id, correct)}
+            autoAdvanceMs={autoAdvanceMs}
+            onAnswer={(correct) => onSingleAnswer(correct)}
           />
         ) : word && exerciseType === 'anagram' ? (
           <AnagramExercise
             key={word.user_word_id}
             word={word}
-            onAnswer={(correct) => handleSingleAnswer(word.user_word_id, correct)}
+            onAnswer={(correct) => onSingleAnswer(correct)}
           />
         ) : null}
       </div>
+
+      {/* ── Último resultado (solo cuando NO está en pendingAdvance) ── */}
+      {lastEntry && !pendingAdvance && (
+        <div className="mt-4 pt-3 border-t border-slate-700/60 text-xs text-slate-500 flex flex-wrap gap-x-3 gap-y-0.5">
+          <span>
+            Anterior:{' '}
+            <span className={lastEntry.wasCorrect ? 'text-green-400' : 'text-red-400'}>
+              {lastEntry.input || '—'}
+            </span>
+          </span>
+          <span>
+            Correcta:{' '}
+            <span className="text-slate-300">{lastEntry.correctAnswer}</span>
+          </span>
+        </div>
+      )}
     </div>
   )
 }

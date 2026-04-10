@@ -4,9 +4,10 @@ import type { ReviewWord } from '../../types'
 interface Props {
   word: ReviewWord
   onAnswer: (correct: boolean, userInput: string) => void
+  autoPlay?: boolean
 }
 
-export default function WriteExercise({ word, onAnswer }: Props) {
+export default function WriteExercise({ word, onAnswer, autoPlay = false }: Props) {
   const [input, setInput] = useState('')
   const [revealed, setRevealed] = useState(false)
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null)
@@ -16,21 +17,27 @@ export default function WriteExercise({ word, onAnswer }: Props) {
 
   const choices = word.choices ?? null
 
+  const speak = () => {
+    speechSynthesis.cancel()
+    const u = new SpeechSynthesisUtterance(word.palabra)
+    u.lang = word.idioma_origen
+    speechSynthesis.speak(u)
+  }
+
   useEffect(() => {
     setInput('')
     setRevealed(false)
     setIsCorrect(null)
     setShowOptions(false)
     setSelectedChoice(null)
-    if (!showOptions) inputRef.current?.focus()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [word.user_word_id])
+    inputRef.current?.focus()
 
-  const speak = () => {
-    const u = new SpeechSynthesisUtterance(word.palabra)
-    u.lang = word.idioma_origen
-    speechSynthesis.speak(u)
-  }
+    if (!autoPlay) return
+    speechSynthesis.cancel()
+    const t = setTimeout(() => speak(), 150)
+    return () => { clearTimeout(t); speechSynthesis.cancel() }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [word.user_word_id, autoPlay])
 
   const check = (e: FormEvent) => {
     e.preventDefault()

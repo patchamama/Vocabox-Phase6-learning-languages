@@ -4,21 +4,28 @@ import type { ReviewWord } from '../../types'
 interface Props {
   word: ReviewWord
   onAnswer: (correct: boolean, userInput: string) => void
+  autoPlay?: boolean
 }
 
-export default function MultipleChoiceExercise({ word, onAnswer }: Props) {
+export default function MultipleChoiceExercise({ word, onAnswer, autoPlay = false }: Props) {
   const [selected, setSelected] = useState<string | null>(null)
   const choices = word.choices ?? [word.significado]
 
-  useEffect(() => {
-    setSelected(null)
-  }, [word.user_word_id])
-
   const speak = () => {
+    speechSynthesis.cancel()
     const u = new SpeechSynthesisUtterance(word.palabra)
     u.lang = word.idioma_origen
     speechSynthesis.speak(u)
   }
+
+  useEffect(() => {
+    setSelected(null)
+    if (!autoPlay) return
+    speechSynthesis.cancel()
+    const t = setTimeout(() => speak(), 150)
+    return () => { clearTimeout(t); speechSynthesis.cancel() }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [word.user_word_id, autoPlay])
 
   const pick = (choice: string) => {
     if (selected) return

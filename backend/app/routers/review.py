@@ -84,6 +84,7 @@ def get_review_words(
             exercise_type = "write"
 
         tema_nombre = uw.word.tema.nombre if uw.word.tema else None
+        tema_color = uw.word.tema.color if uw.word.tema else None
 
         result.append(
             ReviewWordOut(
@@ -98,6 +99,7 @@ def get_review_words(
                 exercise_type=exercise_type,
                 choices=choices,
                 tema_nombre=tema_nombre,
+                tema_color=tema_color,
             )
         )
 

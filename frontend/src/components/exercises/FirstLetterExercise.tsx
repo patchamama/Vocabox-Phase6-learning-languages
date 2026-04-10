@@ -1,13 +1,9 @@
 /**
  * FirstLetterExercise
  *
- * Shows the source word. Answer has blanks: _ _ _ _ _
- * Below: buttons with initial letters of each word in the answer.
- * Letters include the correct initials + 3-4 random extras.
- *
- * For multi-word answers (e.g. "come back"), the user must pick initials
- * in order: first the initial of "come", then of "back".
- * When all initials are chosen correctly → onAnswer(true).
+ * Shows the source word. Answer slots show each target word with a box for its initial letter.
+ * On correct pick: fills the box AND reveals the full word.
+ * On error: flash red, reset.
  */
 import { useEffect, useMemo, useState } from 'react'
 import type { ReviewWord } from '../../types'
@@ -15,6 +11,8 @@ import type { ReviewWord } from '../../types'
 interface Props {
   word: ReviewWord
   onAnswer: (correct: boolean) => void
+  /** ms to wait before calling onAnswer(true). 0 = caller handles timing */
+  autoAdvanceMs?: number
 }
 
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz'
@@ -30,42 +28,42 @@ function buildLetterPool(initials: string[]): string[] {
   for (const ch of shuffled) {
     if (!needed.has(ch) && extras.length < 4) extras.push(ch)
   }
-  const pool = [...initials, ...extras]
-  return pool.sort(() => Math.random() - 0.5)
+  return [...initials, ...extras].sort(() => Math.random() - 0.5)
 }
 
-export default function FirstLetterExercise({ word, onAnswer }: Props) {
+export default function FirstLetterExercise({ word, onAnswer, autoAdvanceMs }: Props) {
   const target = word.significado
-
+  const targetWords = useMemo(() => target.trim().split(/\s+/), [target])
   const initials = useMemo(() => getInitials(target), [target])
   const letterPool = useMemo(() => buildLetterPool(initials), [initials])
 
   const [chosen, setChosen] = useState<string[]>([])
-  const [error, setError] = useState(false)
-  const [done, setDone] = useState(false)
+  const [flash, setFlash] = useState<'error' | 'correct' | null>(null)
 
   useEffect(() => {
     setChosen([])
-    setError(false)
-    setDone(false)
+    setFlash(null)
   }, [word.user_word_id])
 
-  const targetWords = target.trim().split(/\s+/)
-
   const pick = (letter: string) => {
-    if (done || error) return
+    if (flash) return
     const nextIndex = chosen.length
     if (letter.toLowerCase() === initials[nextIndex]) {
       const next = [...chosen, letter.toLowerCase()]
       setChosen(next)
       if (next.length === initials.length) {
-        setDone(true)
-        setTimeout(() => onAnswer(true), 700)
+        setFlash('correct')
+        if (autoAdvanceMs !== undefined) {
+          setTimeout(() => onAnswer(true), autoAdvanceMs)
+        } else {
+          // caller controls when to advance (button mode)
+          setTimeout(() => onAnswer(true), 300)
+        }
       }
     } else {
-      setError(true)
+      setFlash('error')
       setTimeout(() => {
-        setError(false)
+        setFlash(null)
         setChosen([])
       }, 700)
       setTimeout(() => onAnswer(false), 800)
@@ -82,33 +80,53 @@ export default function FirstLetterExercise({ word, onAnswer }: Props) {
         <p className="text-4xl font-bold">{word.palabra}</p>
       </div>
 
-      {/* Blanks */}
-      <div className="card text-center space-y-2">
-        <p className="text-xs text-slate-500 uppercase tracking-widest">Letra inicial de cada palabra</p>
-        <div className="flex gap-3 justify-center flex-wrap">
+      {/* Word slots */}
+      <div className="card text-center space-y-3">
+        <p className="text-xs text-slate-500 uppercase tracking-widest">
+          Letra inicial de cada palabra
+        </p>
+        <div className="flex gap-4 justify-center flex-wrap">
           {targetWords.map((w, i) => {
             const filled = chosen[i]
-            const isError = error && i === chosen.length
+            const isError = flash === 'error' && i === chosen.length
+            const isCorrect = flash === 'correct' || (!!filled && i < chosen.length)
+
             return (
               <div key={i} className="flex flex-col items-center gap-1">
+                {/* Initial letter box */}
                 <span
-                  className={`text-2xl font-bold w-9 h-9 flex items-center justify-center rounded-lg border-2 transition-all ${
+                  className={`text-xl font-bold w-10 h-10 flex items-center justify-center rounded-lg border-2 transition-all duration-200 ${
                     isError
                       ? 'border-red-500 text-red-400 bg-red-500/10'
-                      : filled
+                      : isCorrect
                       ? 'border-green-500 text-green-400 bg-green-500/10'
-                      : 'border-slate-500 text-slate-500'
+                      : 'border-slate-500 text-slate-400'
                   }`}
                 >
                   {filled ? filled.toUpperCase() : '_'}
                 </span>
-                <span className="text-xs text-slate-600">
-                  {'_'.repeat(w.length - 1)}
+                {/* Full word — shown when filled */}
+                <span
+                  className={`text-sm font-medium transition-all duration-300 ${
+                    filled
+                      ? flash === 'correct'
+                        ? 'text-green-400 opacity-100'
+                        : 'text-slate-300 opacity-100'
+                      : 'text-slate-700 opacity-0 select-none'
+                  }`}
+                >
+                  {w}
                 </span>
               </div>
             )
           })}
         </div>
+
+        {flash === 'correct' && (
+          <p className="text-green-400 text-sm font-medium animate-slide-up">
+            ✓ {target}
+          </p>
+        )}
       </div>
 
       {/* Letter buttons */}
@@ -117,10 +135,10 @@ export default function FirstLetterExercise({ word, onAnswer }: Props) {
           <button
             key={i}
             onClick={() => pick(letter)}
-            disabled={done}
+            disabled={flash === 'correct'}
             className={`w-12 h-12 rounded-xl border-2 text-lg font-bold uppercase transition-all active:scale-90 ${
-              done
-                ? 'border-slate-700 text-slate-600'
+              flash === 'correct'
+                ? 'border-slate-700 text-slate-600 bg-slate-800'
                 : 'border-slate-500 bg-slate-700 text-white hover:border-blue-400 hover:bg-slate-600'
             }`}
           >
