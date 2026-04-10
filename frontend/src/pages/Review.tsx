@@ -1,48 +1,49 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import MultipleChoiceExercise from '../components/exercises/MultipleChoiceExercise'
-import WriteExercise from '../components/exercises/WriteExercise'
 import { wordsApi } from '../api/client'
+import AnagramExercise from '../components/exercises/AnagramExercise'
+import FirstLetterExercise from '../components/exercises/FirstLetterExercise'
+import MultipleChoiceExercise from '../components/exercises/MultipleChoiceExercise'
+import PairMatchExercise from '../components/exercises/PairMatchExercise'
+import WriteExercise from '../components/exercises/WriteExercise'
 import { useReviewStore } from '../stores/reviewStore'
-
-interface LastEntry {
-  input: string
-  correctAnswer: string
-  wasCorrect: boolean
-}
+import { useSettingsStore } from '../stores/settingsStore'
 
 export default function Review() {
   const [searchParams] = useSearchParams()
+  const { reviewMode, wordsPerSession } = useSettingsStore()
 
   const {
-    words,
-    currentIndex,
+    pairBatch,
     results,
     isLoading,
     isFinished,
+    inErrorPhase,
+    errorQueue,
     loadReview,
-    submitAnswer,
-    nextWord,
+    handleSingleAnswer,
+    handlePairMatchComplete,
     patchWord,
     reset,
+    currentWord,
+    currentExerciseType,
+    progressPct,
+    errorQueueSize,
+    errorResolvedCount,
   } = useReviewStore()
 
-  const [lastEntry, setLastEntry] = useState<LastEntry | null>(null)
-
-  // Inline edit state
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState({ palabra: '', significado: '' })
   const [isSaving, setIsSaving] = useState(false)
   const editPalabraRef = useRef<HTMLInputElement>(null)
 
-  // Read selected boxes from URL (?boxes=0,1,2,3)
   const boxesParam = searchParams.get('boxes')
   const selectedBoxes = boxesParam
     ? boxesParam.split(',').map(Number).filter((n) => !isNaN(n))
     : undefined
 
   useEffect(() => {
-    loadReview(selectedBoxes)
+    loadReview(selectedBoxes, wordsPerSession, reviewMode)
     return () => { reset() }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -82,7 +83,10 @@ export default function Review() {
               </div>
             </>
           )}
-          <button onClick={() => loadReview(selectedBoxes)} className="btn-primary w-full">
+          <button
+            onClick={() => loadReview(selectedBoxes, wordsPerSession, reviewMode)}
+            className="btn-primary w-full"
+          >
             {total === 0 ? 'Actualizar' : 'Nueva sesión'}
           </button>
         </div>
@@ -90,48 +94,59 @@ export default function Review() {
     )
   }
 
-  const current = words[currentIndex]
-  if (!current) return null
+  const word = currentWord()
+  const exerciseType = currentExerciseType()
+  const isPairMode = pairBatch.length > 0
 
-  const handleAnswer = async (correct: boolean, userInput: string = '') => {
-    setLastEntry({ input: userInput, correctAnswer: current.significado, wasCorrect: correct })
-    setIsEditing(false)
-    await submitAnswer(current.user_word_id, correct)
-    nextWord()
-  }
+  if (!isPairMode && !word) return null
 
+  // ── Progress bar ─────────────────────────────────────────────────────────────
+  const greenPct = progressPct()
+  const totalItems = useReviewStore.getState().queue.length
+  const errSize = errorQueueSize()
+  const errResolved = errorResolvedCount()
+  const redPct = errSize > 0 ? ((errSize - errResolved) / Math.max(totalItems + errSize, 1)) * 100 : 0
+
+  // ── Edit handlers ────────────────────────────────────────────────────────────
   const openEdit = () => {
-    setEditForm({ palabra: current.palabra, significado: current.significado })
+    if (!word) return
+    setEditForm({ palabra: word.palabra, significado: word.significado })
     setIsEditing(true)
     setTimeout(() => editPalabraRef.current?.focus(), 50)
   }
 
   const handleSaveEdit = async () => {
+    if (!word) return
     const p = editForm.palabra.trim()
     const s = editForm.significado.trim()
     if (!p || !s) return
     setIsSaving(true)
     try {
-      await wordsApi.update(current.word_id, { palabra: p, significado: s })
-      patchWord(current.user_word_id, { palabra: p, significado: s })
+      await wordsApi.update(word.word_id, { palabra: p, significado: s })
+      patchWord(word.user_word_id, { palabra: p, significado: s })
       setIsEditing(false)
     } finally {
       setIsSaving(false)
     }
   }
 
-  // Phrases always use multiple choice even if backend said write
-  const isPhrase = current.palabra.includes(' ')
-  const exerciseType = isPhrase ? 'multiple_choice' : current.exercise_type
-  const progressPct = ((currentIndex + 1) / words.length) * 100
+  const EXERCISE_LABEL: Record<string, string> = {
+    multiple_choice: 'Opción múltiple',
+    write: 'Escribir',
+    pair_match: 'Pareo',
+    first_letter: 'Letra inicial',
+    anagram: 'Anagrama',
+  }
 
   return (
     <div className="p-4 pt-8 min-h-screen flex flex-col">
 
-      {/* Progress bar */}
+      {/* ── Progress bar ── */}
       <div className="mb-4">
         <div className="flex justify-between items-center text-xs mb-1">
-          <span className="text-slate-400">{currentIndex + 1} / {words.length}</span>
+          <span className="text-slate-400">
+            {inErrorPhase ? '🔁 Repaso de errores' : exerciseType ? EXERCISE_LABEL[exerciseType] : ''}
+          </span>
           <div className="flex items-center gap-3">
             {results.correct > 0 && (
               <span className="text-blue-400 font-medium">✓ {results.correct}</span>
@@ -139,28 +154,40 @@ export default function Review() {
             {results.incorrect > 0 && (
               <span className="text-red-400 font-medium">✗ {results.incorrect}</span>
             )}
-            <span className="text-slate-400">Caja {current.box_level}</span>
-            <button
-              onClick={isEditing ? () => setIsEditing(false) : openEdit}
-              title={isEditing ? 'Cerrar edición' : 'Editar palabra'}
-              className={`px-1.5 transition-colors ${
-                isEditing ? 'text-blue-400' : 'text-slate-500 hover:text-slate-300'
-              }`}
-            >
-              ✎
-            </button>
+            {!isPairMode && word && (
+              <span className="text-slate-400">Caja {word.box_level}</span>
+            )}
+            {!isPairMode && (
+              <button
+                onClick={isEditing ? () => setIsEditing(false) : openEdit}
+                title={isEditing ? 'Cerrar edición' : 'Editar palabra'}
+                className={`px-1.5 transition-colors ${
+                  isEditing ? 'text-blue-400' : 'text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                ✎
+              </button>
+            )}
           </div>
         </div>
-        <div className="bg-slate-700 rounded-full h-1.5">
+
+        {/* Composite bar: green (done) + red (errors pending) */}
+        <div className="bg-slate-700 rounded-full h-2 overflow-hidden flex">
           <div
-            className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
-            style={{ width: `${progressPct}%` }}
+            className="bg-blue-500 h-2 transition-all duration-300"
+            style={{ width: `${greenPct}%` }}
           />
+          {errSize > 0 && (
+            <div
+              className="bg-red-500/70 h-2 transition-all duration-300"
+              style={{ width: `${redPct}%` }}
+            />
+          )}
         </div>
       </div>
 
-      {/* Inline edit panel */}
-      {isEditing && (
+      {/* ── Inline edit panel ── */}
+      {isEditing && word && (
         <div className="card mb-4 space-y-3 animate-slide-up border-blue-500/30">
           <p className="text-xs font-medium text-slate-400 uppercase tracking-widest">
             Editar palabra
@@ -181,10 +208,7 @@ export default function Review() {
             />
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={() => setIsEditing(false)}
-              className="btn-secondary flex-1 py-2 text-sm"
-            >
+            <button onClick={() => setIsEditing(false)} className="btn-secondary flex-1 py-2 text-sm">
               Cancelar
             </button>
             <button
@@ -198,29 +222,40 @@ export default function Review() {
         </div>
       )}
 
+      {/* ── Exercise ── */}
       <div className="flex-1">
-        {exerciseType === 'write' ? (
-          <WriteExercise word={current} onAnswer={handleAnswer} />
-        ) : (
-          <MultipleChoiceExercise word={current} onAnswer={handleAnswer} />
-        )}
+        {isPairMode ? (
+          <PairMatchExercise
+            key={pairBatch.map((w) => w.user_word_id).join('-')}
+            words={pairBatch}
+            onComplete={handlePairMatchComplete}
+          />
+        ) : word && exerciseType === 'write' ? (
+          <WriteExercise
+            key={word.user_word_id}
+            word={word}
+            onAnswer={(correct, input) => handleSingleAnswer(word.user_word_id, correct)}
+          />
+        ) : word && exerciseType === 'multiple_choice' ? (
+          <MultipleChoiceExercise
+            key={word.user_word_id}
+            word={word}
+            onAnswer={(correct, input) => handleSingleAnswer(word.user_word_id, correct)}
+          />
+        ) : word && exerciseType === 'first_letter' ? (
+          <FirstLetterExercise
+            key={word.user_word_id}
+            word={word}
+            onAnswer={(correct) => handleSingleAnswer(word.user_word_id, correct)}
+          />
+        ) : word && exerciseType === 'anagram' ? (
+          <AnagramExercise
+            key={word.user_word_id}
+            word={word}
+            onAnswer={(correct) => handleSingleAnswer(word.user_word_id, correct)}
+          />
+        ) : null}
       </div>
-
-      {/* Last entry recap */}
-      {lastEntry && (
-        <div className="mt-4 pt-3 border-t border-slate-700/60 text-xs text-slate-500 flex flex-wrap gap-x-3 gap-y-0.5">
-          <span>
-            Anterior:{' '}
-            <span className={lastEntry.wasCorrect ? 'text-blue-400' : 'text-red-400'}>
-              {lastEntry.input || '—'}
-            </span>
-          </span>
-          <span>
-            Correcta:{' '}
-            <span className="text-green-400">{lastEntry.correctAnswer}</span>
-          </span>
-        </div>
-      )}
     </div>
   )
 }

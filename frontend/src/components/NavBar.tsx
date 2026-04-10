@@ -6,6 +6,7 @@ const TABS = [
   { to: '/words', label: 'Palabras', icon: '📝' },
   { to: '/import', label: 'Importar', icon: '📥' },
   { to: '/stats', label: 'Stats', icon: '📊' },
+  { to: '/settings', label: 'Config', icon: '⚙️' },
 ]
 
 export default function NavBar() {

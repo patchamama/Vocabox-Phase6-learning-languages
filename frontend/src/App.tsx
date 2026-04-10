@@ -6,6 +6,7 @@ import Import from './pages/Import'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Review from './pages/Review'
+import Settings from './pages/Settings'
 import Stats from './pages/Stats'
 import Words from './pages/Words'
 import { useAuthStore } from './stores/authStore'
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="words" element={<Words />} />
           <Route path="import" element={<Import />} />
           <Route path="stats" element={<Stats />} />
+          <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
     </BrowserRouter>
