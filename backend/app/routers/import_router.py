@@ -12,7 +12,7 @@ Duplicate detection strategy (per user):
 
 import csv
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import openpyxl
@@ -59,21 +59,37 @@ def resolve_lang_code(lang_name: str, db: Session) -> str:
     return entry.code if entry else name[:2]
 
 
-def parse_csv(content: bytes) -> list[tuple[str, str, str, str]]:
+def parse_csv(content: bytes) -> tuple[list[tuple], bool]:
+    """Returns (rows, is_vocabox_format).
+
+    Vocabox format: palabra, significado, idioma_origen_name, idioma_destino_name, box_level, next_review_date
+    Google Translate format: idioma_origen_name, idioma_destino_name, palabra, significado
+    """
     text = content.decode("utf-8", errors="replace")
     rows = []
-    for row in csv.reader(io.StringIO(text)):
-        if len(row) >= 4:
-            c1, c2, c3, c4 = (c.strip() for c in row[:4])
-            if c1 and c2 and c3 and c4:
-                rows.append((c1, c2, c3, c4))
-    return rows
+    is_vocabox = False
+    for i, row in enumerate(csv.reader(io.StringIO(text))):
+        if len(row) < 4:
+            continue
+        cols = [c.strip() for c in row]
+        c1, c2, c3, c4 = cols[:4]
+        if i == 0 and c1.lower() == "palabra":
+            is_vocabox = True
+            continue  # skip header
+        if not (c1 and c2 and c3 and c4):
+            continue
+        c5 = cols[4] if len(cols) > 4 else ""
+        c6 = cols[5] if len(cols) > 5 else ""
+        rows.append((c1, c2, c3, c4, c5, c6))
+    return rows, is_vocabox
 
 
-def parse_xlsx(content: bytes) -> list[tuple[str, str, str, str]]:
+def parse_xlsx(content: bytes) -> tuple[list[tuple], bool]:
+    """Returns (rows, is_vocabox_format)."""
     wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
     ws = wb.active
     rows = []
+    is_vocabox = False
     for i, row in enumerate(ws.iter_rows(values_only=True)):
         if len(row) < 4:
             continue
@@ -81,13 +97,17 @@ def parse_xlsx(content: bytes) -> list[tuple[str, str, str, str]]:
         c2 = str(row[1] or "").strip()
         c3 = str(row[2] or "").strip()
         c4 = str(row[3] or "").strip()
-        # Skip a header row if columns 3 & 4 are empty
+        if i == 0 and c1.lower() == "palabra":
+            is_vocabox = True
+            continue  # skip header
         if i == 0 and (not c3 or not c4):
-            continue
+            continue  # Google Translate header row
         if c1 and c2 and c3 and c4:
-            rows.append((c1, c2, c3, c4))
+            c5 = str(row[4] or "").strip() if len(row) > 4 else ""
+            c6 = str(row[5] or "").strip() if len(row) > 5 else ""
+            rows.append((c1, c2, c3, c4, c5, c6))
     wb.close()
-    return rows
+    return rows, is_vocabox
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -107,13 +127,20 @@ async def preview_import(
 
     content = await file.read()
 
-    raw_rows = parse_csv(content) if filename.endswith(".csv") else parse_xlsx(content)
+    raw_rows, is_vocabox = parse_csv(content) if filename.endswith(".csv") else parse_xlsx(content)
     if not raw_rows:
         raise HTTPException(status_code=400, detail="No valid rows found in the file")
 
-    # Detect language pair from first row
-    src_lang_name = raw_rows[0][0]
-    tgt_lang_name = raw_rows[0][1]
+    # Detect language pair.
+    # Vocabox format: (palabra, significado, src_lang_name, dst_lang_name, box_level, date)
+    # Google Translate format: (src_lang_name, dst_lang_name, palabra, significado, "", "")
+    if is_vocabox:
+        src_lang_name = raw_rows[0][2]
+        tgt_lang_name = raw_rows[0][3]
+    else:
+        src_lang_name = raw_rows[0][0]
+        tgt_lang_name = raw_rows[0][1]
+
     src_code = resolve_lang_code(src_lang_name, db)
     tgt_code = resolve_lang_code(tgt_lang_name, db)
 
@@ -138,9 +165,27 @@ async def preview_import(
     seen_in_file: set[tuple[str, str, str, str]] = set()
     preview_rows: list[ImportRowPreview] = []
 
-    for (_, _, src_word, tgt_word) in raw_rows:
+    for row in raw_rows:
+        if is_vocabox:
+            src_word, tgt_word, _, _, box_str, date_str = row
+        else:
+            _, _, src_word, tgt_word, box_str, date_str = row
+
         if not src_word or not tgt_word:
             continue
+
+        # Parse optional Vocabox fields
+        box_level: Optional[int] = None
+        next_review_date: Optional[datetime] = None
+        if is_vocabox:
+            try:
+                box_level = int(box_str) if box_str else None
+            except ValueError:
+                box_level = None
+            try:
+                next_review_date = datetime.fromisoformat(date_str) if date_str else None
+            except ValueError:
+                next_review_date = None
 
         key = (normalize_phrase(src_word), normalize_phrase(tgt_word), src_code, tgt_code)
         is_dup = key in existing or key in seen_in_file
@@ -153,6 +198,8 @@ async def preview_import(
                 idioma_origen=src_code,
                 idioma_destino=tgt_code,
                 is_duplicate=is_dup,
+                box_level=box_level,
+                next_review_date=next_review_date,
             )
         )
 
@@ -260,8 +307,8 @@ def confirm_import(
                 UserWord(
                     user_id=current_user.id,
                     word_id=word_id,
-                    box_level=0,
-                    next_review_date=now,
+                    box_level=row.box_level if row.box_level is not None else 0,
+                    next_review_date=row.next_review_date if row.next_review_date is not None else now,
                 )
             )
             imported += 1

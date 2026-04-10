@@ -34,11 +34,13 @@ def export_words(
 
     output = io.StringIO()
     writer = csv.writer(output)
+    writer.writerow(["palabra", "significado", "idioma_origen", "idioma_destino", "box_level", "next_review_date"])
     for uw in user_words:
         w = uw.word
         src = lang_map.get(w.idioma_origen, w.idioma_origen)
         dst = lang_map.get(w.idioma_destino, w.idioma_destino)
-        writer.writerow([w.palabra, w.significado, src, dst])
+        review_date = uw.next_review_date.isoformat() if uw.next_review_date else ""
+        writer.writerow([w.palabra, w.significado, src, dst, uw.box_level, review_date])
 
     content = output.getvalue()
     return StreamingResponse(

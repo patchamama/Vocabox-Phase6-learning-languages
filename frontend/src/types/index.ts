@@ -49,6 +49,8 @@ export interface ImportRowPreview {
   idioma_origen: string
   idioma_destino: string
   is_duplicate: boolean
+  box_level?: number | null
+  next_review_date?: string | null
 }
 
 export interface ImportPreview {

@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional
 
 from pydantic import BaseModel
@@ -9,6 +10,8 @@ class ImportRowPreview(BaseModel):
     idioma_origen: str
     idioma_destino: str
     is_duplicate: bool
+    box_level: Optional[int] = None
+    next_review_date: Optional[datetime] = None
 
 
 class ImportPreviewOut(BaseModel):

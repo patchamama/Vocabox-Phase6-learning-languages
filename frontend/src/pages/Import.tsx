@@ -107,7 +107,8 @@ export default function Import() {
       {step === 'upload' && (
         <div className="space-y-4">
           <p className="text-slate-400 text-sm">
-            Sube un archivo exportado desde Google Translate (.csv o .xlsx).
+            Sube un archivo exportado desde Google Translate (.csv o .xlsx) o desde Vocabox.
+            Los archivos Vocabox restauran la caja y fecha de revisión de cada palabra.
             Las palabras que ya tengas serán detectadas y omitidas.
           </p>
 
@@ -221,6 +222,11 @@ export default function Import() {
                     <span className="text-slate-500 mx-1.5">→</span>
                     <span className="text-slate-300">{row.significado}</span>
                   </div>
+                  {row.box_level != null && !row.is_duplicate && (
+                    <span className="text-xs bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded-full shrink-0">
+                      C{row.box_level}
+                    </span>
+                  )}
                   {row.is_duplicate && (
                     <span className="text-xs text-slate-600 shrink-0">duplicada</span>
                   )}
