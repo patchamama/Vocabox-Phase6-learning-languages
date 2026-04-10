@@ -86,14 +86,35 @@ export default function Stats() {
 
       <div className="card">
         <h2 className="font-semibold text-slate-300 mb-3">Sistema Leitner</h2>
-        <div className="space-y-1.5">
-          {BOX_INFO.map(({ label, interval }, i) => (
-            <div key={i} className="flex items-center gap-2 text-sm">
-              <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: BOX_COLORS[i] }} />
-              <span className="text-white font-medium w-14">{label}:</span>
-              <span className="text-slate-400">{interval}</span>
-            </div>
-          ))}
+        <div className="divide-y divide-slate-700/50">
+          {BOX_INFO.map(({ label, interval }, i) => {
+            const boxStat = stats.boxes.find((b) => b.box === i)
+            const count = boxStat?.count ?? 0
+            const pending = boxStat?.pending_today ?? 0
+            return (
+              <div
+                key={i}
+                className={`flex items-center gap-2 py-2 text-sm ${count === 0 ? 'opacity-40' : ''}`}
+              >
+                <div
+                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: BOX_COLORS[i] }}
+                />
+                <span className="text-white font-medium w-14 shrink-0">{label}</span>
+                <span className="text-slate-500 text-xs flex-1">{interval}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-slate-400 text-xs tabular-nums">{count}</span>
+                  {pending > 0 ? (
+                    <span className="text-xs font-medium text-blue-400 bg-blue-400/10 px-2 py-0.5 rounded-full tabular-nums">
+                      +{pending} hoy
+                    </span>
+                  ) : (
+                    <span className="text-xs text-slate-700 w-[60px]" />
+                  )}
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
     </div>
