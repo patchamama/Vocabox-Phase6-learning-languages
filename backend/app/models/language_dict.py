@@ -1,0 +1,16 @@
+from sqlalchemy import Column, Integer, String
+
+from ..database import Base
+
+
+class LanguageDict(Base):
+    """Language names in 4 UI languages, keyed by ISO 639-1 code."""
+
+    __tablename__ = "language_dict"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(10), unique=True, nullable=False)  # ISO 639-1: "de", "es" …
+    name_es = Column(String(60))   # Alemán, Español, Inglés …
+    name_en = Column(String(60))   # German, Spanish, English …
+    name_de = Column(String(60))   # Deutsch, Spanisch, Englisch …
+    name_fr = Column(String(60))   # Allemand, Espagnol, Anglais …

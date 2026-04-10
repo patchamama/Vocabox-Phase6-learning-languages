@@ -1,0 +1,49 @@
+from datetime import datetime
+from typing import Optional
+
+from pydantic import BaseModel
+
+
+class TemaBase(BaseModel):
+    nombre: str
+    color: str = "#3B82F6"
+
+
+class TemaOut(TemaBase):
+    id: int
+
+    model_config = {"from_attributes": True}
+
+
+class WordCreate(BaseModel):
+    palabra: str
+    significado: str
+    idioma_origen: str = "de"
+    idioma_destino: str = "es"
+    tema_id: Optional[int] = None
+    audio_url: Optional[str] = None
+
+
+class WordUpdate(BaseModel):
+    palabra: Optional[str] = None
+    significado: Optional[str] = None
+    idioma_origen: Optional[str] = None
+    idioma_destino: Optional[str] = None
+    tema_id: Optional[int] = None
+
+
+class WordOut(WordCreate):
+    id: int
+    tema: Optional[TemaOut] = None
+
+    model_config = {"from_attributes": True}
+
+
+class UserWordOut(BaseModel):
+    id: int
+    word: WordOut
+    box_level: int
+    next_review_date: datetime
+    last_reviewed: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
