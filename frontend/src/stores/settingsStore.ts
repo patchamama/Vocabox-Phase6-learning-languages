@@ -17,6 +17,8 @@ interface SettingsState {
   safeRound3: RoundType
   /** Auto-play word pronunciation when an exercise loads */
   autoPlayAudio: boolean
+  /** Filter out phrases (>2 words) across the whole app */
+  wordsOnly: boolean
 
   setReviewMode: (mode: ReviewMode) => void
   setWordsPerSession: (n: number) => void
@@ -24,6 +26,7 @@ interface SettingsState {
   setTransitionType: (t: TransitionType) => void
   setSafeRound: (round: 1 | 2 | 3, type: RoundType) => void
   setAutoPlayAudio: (v: boolean) => void
+  setWordsOnly: (v: boolean) => void
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -37,12 +40,14 @@ export const useSettingsStore = create<SettingsState>()(
       safeRound2: 'first_letter',
       safeRound3: 'random',
       autoPlayAudio: false,
+      wordsOnly: false,
       setReviewMode: (reviewMode) => set({ reviewMode }),
       setWordsPerSession: (wordsPerSession) => set({ wordsPerSession }),
       setTransitionDelay: (transitionDelay) => set({ transitionDelay }),
       setTransitionType: (transitionType) => set({ transitionType }),
       setSafeRound: (round, type) => set({ [`safeRound${round}`]: type } as Pick<SettingsState, 'safeRound1' | 'safeRound2' | 'safeRound3'>),
       setAutoPlayAudio: (autoPlayAudio) => set({ autoPlayAudio }),
+      setWordsOnly: (wordsOnly) => set({ wordsOnly }),
     }),
     { name: 'vocabox-settings' }
   )

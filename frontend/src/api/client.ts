@@ -72,7 +72,7 @@ export const reviewApi = {
 }
 
 export const statsApi = {
-  get: () => api.get('/stats'),
+  get: (wordsOnly = false) => api.get('/stats', { params: wordsOnly ? { words_only: true } : {} }),
 }
 
 export const temasApi = {

@@ -69,9 +69,9 @@ function RoundSelector({
 export default function Settings() {
   const {
     reviewMode, wordsPerSession, transitionDelay, transitionType,
-    safeRound1, safeRound2, safeRound3, autoPlayAudio,
+    safeRound1, safeRound2, safeRound3, autoPlayAudio, wordsOnly,
     setReviewMode, setWordsPerSession, setTransitionDelay, setTransitionType,
-    setSafeRound, setAutoPlayAudio,
+    setSafeRound, setAutoPlayAudio, setWordsOnly,
   } = useSettingsStore()
 
   return (
@@ -169,6 +169,17 @@ export default function Settings() {
           onChange={setAutoPlayAudio}
           label="Reproducir audio automáticamente"
           description="Pronuncia la palabra al iniciarse cada ejercicio (opción múltiple y escritura)."
+        />
+      </div>
+
+      {/* Words only */}
+      <div className="card space-y-3">
+        <h2 className="font-semibold text-slate-200">Contenido</h2>
+        <Toggle
+          value={wordsOnly}
+          onChange={setWordsOnly}
+          label="Solo palabras (sin frases)"
+          description="Excluye entradas de más de 2 palabras en el repaso, la lista y las estadísticas."
         />
       </div>
 

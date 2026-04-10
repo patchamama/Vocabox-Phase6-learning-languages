@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { statsApi, testApi } from '../api/client'
 import type { Stats } from '../types'
 import { useAuthStore } from '../stores/authStore'
+import { useSettingsStore } from '../stores/settingsStore'
 
 const BOX_COLORS = [
   'bg-red-500',
@@ -21,7 +22,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const [stats, setStats] = useState<Stats | null>(null)
   const [selectedBoxes, setSelectedBoxes] = useState<Set<number>>(new Set(ALL_BOXES))
-  const [wordsOnly, setWordsOnly] = useState(false)
+  const { wordsOnly, setWordsOnly } = useSettingsStore()
 
   // Test-mode state (only rendered for username === 'test')
   const [isSimulating, setIsSimulating] = useState(false)
@@ -29,14 +30,20 @@ export default function Dashboard() {
 
   const isTestUser = user?.username?.toLowerCase() === 'test'
 
-  const refreshStats = async () => {
-    const r = await statsApi.get()
+  const refreshStats = async (wo = wordsOnly) => {
+    const r = await statsApi.get(wo)
     setStats(r.data)
   }
 
   useEffect(() => {
     refreshStats().catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    refreshStats(wordsOnly).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wordsOnly])
 
   const toggleBox = (box: number) => {
     setSelectedBoxes((prev) => {
@@ -60,13 +67,8 @@ export default function Dashboard() {
     : 0
 
   const startReview = () => {
-    const params = new URLSearchParams()
-    if (selectedBoxes.size < ALL_BOXES.length) {
-      params.set('boxes', [...selectedBoxes].sort().join(','))
-    }
-    if (wordsOnly) params.set('wordsOnly', 'true')
-    const qs = params.toString()
-    navigate(qs ? `/review?${qs}` : '/review')
+    const allSelected = selectedBoxes.size === ALL_BOXES.length
+    navigate(allSelected ? '/review' : `/review?boxes=${[...selectedBoxes].sort().join(',')}`)
   }
 
   // ── Test mode helpers ─────────────────────────────────────────────────────
@@ -81,7 +83,7 @@ export default function Dashboard() {
     setSimMsg(null)
     try {
       const { data } = await testApi.simulate()
-      await refreshStats()
+      await refreshStats(wordsOnly)
       setSelectedBoxes(new Set(ALL_BOXES))
       showMsg(`Simulado: ${data.words} palabras distribuidas entre cajas`, true)
     } catch (e: unknown) {
@@ -97,7 +99,7 @@ export default function Dashboard() {
     setSimMsg(null)
     try {
       const { data } = await testApi.reset()
-      await refreshStats()
+      await refreshStats(wordsOnly)
       setSelectedBoxes(new Set(ALL_BOXES))
       showMsg(`Restablecido: ${data.words} palabras en caja 0`, true)
     } catch (e: unknown) {
@@ -234,7 +236,7 @@ export default function Dashboard() {
 
       {/* Words-only filter */}
       <button
-        onClick={() => setWordsOnly((v) => !v)}
+        onClick={() => setWordsOnly(!wordsOnly)}
         className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-slate-600 bg-slate-700/40 hover:border-slate-500 transition-all text-left"
       >
         <div>

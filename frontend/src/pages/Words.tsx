@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { languagesApi, temasApi, wordsApi } from '../api/client'
 import LanguageSelect from '../components/LanguageSelect'
 import TemaSelect from '../components/TemaSelect'
+import { useSettingsStore } from '../stores/settingsStore'
 import type { Language, Tema, UserWord } from '../types'
 
 const BOX_COLORS = [
@@ -28,6 +29,14 @@ const SELECT_CLASS =
 
 export default function Words() {
   const [searchParams] = useSearchParams()
+  const { autoPlayAudio, wordsOnly } = useSettingsStore()
+
+  const speak = (palabra: string, idioma: string) => {
+    speechSynthesis.cancel()
+    const u = new SpeechSynthesisUtterance(palabra)
+    u.lang = idioma
+    speechSynthesis.speak(u)
+  }
 
   // ── Data ─────────────────────────────────────────────────────────────────────
   const [userWords, setUserWords] = useState<UserWord[]>([])
@@ -80,6 +89,7 @@ export default function Words() {
 
   // ── Derived ──────────────────────────────────────────────────────────────────
   const filtered = userWords.filter((uw) => {
+    if (wordsOnly && (uw.word.palabra.split(' ').length > 2 || uw.word.significado.split(' ').length > 2)) return false
     if (filterBox !== null && uw.box_level !== filterBox) return false
     if (filterTema !== null && uw.word.tema_id !== filterTema) return false
     if (filterSearch) {
@@ -92,13 +102,17 @@ export default function Words() {
     return true
   })
 
-  const toggleReveal = (wordId: number) => {
+  const toggleReveal = (uw: UserWord) => {
+    const isCurrentlyRevealed = revealed.has(uw.word.id)
     setRevealed((prev) => {
       const next = new Set(prev)
-      if (next.has(wordId)) next.delete(wordId)
-      else next.add(wordId)
+      if (isCurrentlyRevealed) next.delete(uw.word.id)
+      else next.add(uw.word.id)
       return next
     })
+    if (!isCurrentlyRevealed && autoPlayAudio) {
+      speak(uw.word.palabra, uw.word.idioma_origen)
+    }
   }
 
   const switchViewMode = (mode: 'list' | 'flashcard') => {
@@ -391,21 +405,35 @@ export default function Words() {
             return isRevealed ? (
               <button
                 key={uw.word.id}
-                onClick={() => toggleReveal(uw.word.id)}
+                onClick={() => toggleReveal(uw)}
                 className="w-full text-left bg-slate-800 border border-blue-500/40 rounded-2xl px-4 py-3 space-y-1 transition-all active:scale-[0.99]"
               >
                 <div className="flex items-baseline gap-3 flex-wrap">
                   <span className="font-semibold">{uw.word.palabra}</span>
                   <span className="text-slate-300 text-sm">→ {uw.word.significado}</span>
                 </div>
-                {uw.word.tema && (
-                  <p className="text-xs text-slate-500">{uw.word.tema.nombre}</p>
-                )}
+                <div className="flex items-center gap-2 mt-1">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); speak(uw.word.palabra, uw.word.idioma_origen) }}
+                    className="text-slate-400 hover:text-blue-400 transition-colors text-base leading-none"
+                    title="Reproducir"
+                  >
+                    🔊
+                  </button>
+                  {uw.word.tema && (
+                    <span
+                      className="text-xs px-2 py-0.5 rounded-full font-medium text-white"
+                      style={{ backgroundColor: uw.word.tema.color ?? '#64748b' }}
+                    >
+                      {uw.word.tema.nombre}
+                    </span>
+                  )}
+                </div>
               </button>
             ) : (
               <button
                 key={uw.word.id}
-                onClick={() => toggleReveal(uw.word.id)}
+                onClick={() => toggleReveal(uw)}
                 className="px-3 py-1.5 bg-slate-800 border border-slate-600 rounded-lg text-sm hover:bg-slate-700 hover:border-slate-500 transition-colors active:scale-95"
               >
                 {flashSide === 'palabra' ? uw.word.palabra : uw.word.significado}
@@ -480,7 +508,12 @@ export default function Words() {
                   <p className="font-semibold truncate">{uw.word.palabra}</p>
                   <p className="text-slate-400 text-sm truncate">{uw.word.significado}</p>
                   {uw.word.tema && (
-                    <p className="text-xs text-slate-600 mt-0.5">{uw.word.tema.nombre}</p>
+                    <span
+                      className="inline-block text-xs px-2 py-0.5 rounded-full font-medium text-white mt-0.5"
+                      style={{ backgroundColor: uw.word.tema.color ?? '#64748b' }}
+                    >
+                      {uw.word.tema.nombre}
+                    </span>
                   )}
                 </div>
                 <span
@@ -488,6 +521,13 @@ export default function Words() {
                 >
                   C{uw.box_level}
                 </span>
+                <button
+                  onClick={() => speak(uw.word.palabra, uw.word.idioma_origen)}
+                  className="text-slate-500 hover:text-blue-400 transition-colors px-1 shrink-0 text-base"
+                  title="Reproducir"
+                >
+                  🔊
+                </button>
                 <button
                   onClick={() => startEdit(uw)}
                   className="text-slate-500 hover:text-blue-400 transition-colors px-2 shrink-0"

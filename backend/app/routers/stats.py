@@ -1,13 +1,14 @@
 from datetime import datetime
 from typing import List
 
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
 from ..dependencies import get_current_user
 from ..models.user import User
 from ..models.user_word import UserWord
+from ..models.word import Word
 from ..schemas.stats import BoxStats, StatsOut
 
 router = APIRouter(prefix="/stats", tags=["stats"])
@@ -15,11 +16,23 @@ router = APIRouter(prefix="/stats", tags=["stats"])
 
 @router.get("", response_model=StatsOut)
 def get_stats(
+    words_only: bool = Query(default=False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     now = datetime.utcnow()
-    all_uw = db.query(UserWord).filter(UserWord.user_id == current_user.id).all()
+    all_uw = (
+        db.query(UserWord)
+        .filter(UserWord.user_id == current_user.id)
+        .options(joinedload(UserWord.word))
+        .all()
+    )
+
+    if words_only:
+        all_uw = [
+            uw for uw in all_uw
+            if len(uw.word.palabra.split()) <= 2 and len(uw.word.significado.split()) <= 2
+        ]
 
     total_words = len(all_uw)
     pending_today = sum(1 for uw in all_uw if uw.next_review_date <= now)

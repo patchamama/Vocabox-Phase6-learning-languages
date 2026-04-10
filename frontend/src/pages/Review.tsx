@@ -38,7 +38,7 @@ export default function Review() {
   const [searchParams] = useSearchParams()
   const {
     reviewMode, wordsPerSession, transitionDelay, transitionType,
-    safeRound1, safeRound2, safeRound3, autoPlayAudio,
+    safeRound1, safeRound2, safeRound3, autoPlayAudio, wordsOnly,
   } = useSettingsStore()
 
   const {
@@ -76,7 +76,6 @@ export default function Review() {
   const selectedBoxes = boxesParam
     ? boxesParam.split(',').map(Number).filter((n) => !isNaN(n))
     : undefined
-  const wordsOnly = searchParams.get('wordsOnly') === 'true'
 
   useEffect(() => {
     // Only load if not already in an active session
