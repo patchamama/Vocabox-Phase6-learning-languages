@@ -25,7 +25,14 @@ def get_stats(
     pending_today = sum(1 for uw in all_uw if uw.next_review_date <= now)
 
     boxes: List[BoxStats] = [
-        BoxStats(box=b, count=sum(1 for uw in all_uw if uw.box_level == b))
+        BoxStats(
+            box=b,
+            count=sum(1 for uw in all_uw if uw.box_level == b),
+            pending_today=sum(
+                1 for uw in all_uw
+                if uw.box_level == b and uw.next_review_date <= now
+            ),
+        )
         for b in range(7)
     ]
 

@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class BoxStats(BaseModel):
     box: int
     count: int
+    pending_today: int = 0
 
 
 class StatsOut(BaseModel):

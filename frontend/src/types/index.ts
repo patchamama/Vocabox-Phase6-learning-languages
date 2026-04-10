@@ -76,6 +76,7 @@ export interface Language {
 export interface BoxStats {
   box: number
   count: number
+  pending_today: number
 }
 
 export interface Stats {

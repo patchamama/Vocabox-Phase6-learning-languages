@@ -1,8 +1,8 @@
 import random
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
@@ -19,20 +19,29 @@ router = APIRouter(prefix="/review", tags=["review"])
 @router.get("", response_model=List[ReviewWordOut])
 def get_review_words(
     limit: int = 20,
+    boxes: Optional[str] = Query(default=None, description="Comma-separated box levels, e.g. '0,1,2'"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     now = datetime.utcnow()
-    due = (
+    box_filter = (
+        [int(b.strip()) for b in boxes.split(",") if b.strip()]
+        if boxes
+        else None
+    )
+
+    query = (
         db.query(UserWord)
         .filter(
             UserWord.user_id == current_user.id,
             UserWord.next_review_date <= now,
         )
         .options(joinedload(UserWord.word).joinedload(Word.tema))
-        .limit(limit)
-        .all()
     )
+    if box_filter is not None:
+        query = query.filter(UserWord.box_level.in_(box_filter))
+
+    due = query.limit(limit).all()
 
     # Randomize order so words aren't always reviewed in insertion order
     random.shuffle(due)

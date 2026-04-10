@@ -59,7 +59,13 @@ export const languagesApi = {
 }
 
 export const reviewApi = {
-  getReview: (limit = 20) => api.get('/review', { params: { limit } }),
+  getReview: (limit = 20, boxes?: number[]) =>
+    api.get('/review', {
+      params: {
+        limit,
+        ...(boxes && boxes.length < 7 ? { boxes: boxes.join(',') } : {}),
+      },
+    }),
   submitAnswer: (user_word_id: number, correct: boolean) =>
     api.post('/review/answer', { user_word_id, correct }),
 }

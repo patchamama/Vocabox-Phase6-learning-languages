@@ -8,9 +8,10 @@ interface ReviewState {
   results: { correct: number; incorrect: number }
   isLoading: boolean
   isFinished: boolean
-  loadReview: () => Promise<void>
+  loadReview: (boxes?: number[]) => Promise<void>
   submitAnswer: (user_word_id: number, correct: boolean) => Promise<void>
   nextWord: () => void
+  patchWord: (user_word_id: number, patch: Partial<Pick<ReviewWord, 'palabra' | 'significado' | 'tema_nombre'>>) => void
   reset: () => void
 }
 
@@ -21,10 +22,10 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   isLoading: false,
   isFinished: false,
 
-  loadReview: async () => {
+  loadReview: async (boxes?: number[]) => {
     set({ isLoading: true, isFinished: false, currentIndex: 0, results: { correct: 0, incorrect: 0 } })
     try {
-      const { data } = await reviewApi.getReview()
+      const { data } = await reviewApi.getReview(20, boxes)
       set({ words: data, isLoading: false, isFinished: data.length === 0 })
     } catch {
       set({ isLoading: false, isFinished: true })
@@ -49,6 +50,14 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
     } else {
       set({ currentIndex: currentIndex + 1 })
     }
+  },
+
+  patchWord: (user_word_id, patch) => {
+    set((state) => ({
+      words: state.words.map((w) =>
+        w.user_word_id === user_word_id ? { ...w, ...patch } : w
+      ),
+    }))
   },
 
   reset: () =>
