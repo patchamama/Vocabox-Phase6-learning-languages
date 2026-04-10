@@ -10,6 +10,7 @@ import { useReviewStore } from '../stores/reviewStore'
 import { useSettingsStore } from '../stores/settingsStore'
 
 interface LastEntry {
+  question: string
   input: string
   correctAnswer: string
   wasCorrect: boolean
@@ -75,12 +76,13 @@ export default function Review() {
   const selectedBoxes = boxesParam
     ? boxesParam.split(',').map(Number).filter((n) => !isNaN(n))
     : undefined
+  const wordsOnly = searchParams.get('wordsOnly') === 'true'
 
   useEffect(() => {
     // Only load if not already in an active session
     const state = useReviewStore.getState()
     if (!state.isFinished && state.allWords.length === 0) {
-      loadReview(selectedBoxes, wordsPerSession, reviewMode, [safeRound1, safeRound2, safeRound3])
+      loadReview(selectedBoxes, wordsPerSession, reviewMode, [safeRound1, safeRound2, safeRound3], wordsOnly)
     }
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
@@ -123,7 +125,7 @@ export default function Review() {
     const word = currentWord()
     if (!word) return
     const capturedId = word.user_word_id
-    setLastEntry({ input: userInput, correctAnswer: word.significado, wasCorrect: correct })
+    setLastEntry({ question: word.palabra, input: userInput, correctAnswer: word.significado, wasCorrect: correct })
     setIsEditing(false)
     scheduleAdvance(() => handleSingleAnswer(capturedId, correct))
   }
@@ -189,7 +191,7 @@ export default function Review() {
             </>
           )}
           <button
-            onClick={() => loadReview(selectedBoxes, wordsPerSession, reviewMode, [safeRound1, safeRound2, safeRound3])}
+            onClick={() => loadReview(selectedBoxes, wordsPerSession, reviewMode, [safeRound1, safeRound2, safeRound3], wordsOnly)}
             className="btn-primary w-full"
           >
             {total === 0 ? 'Actualizar' : 'Nueva sesión'}
@@ -347,6 +349,7 @@ export default function Review() {
                 <p className={`text-lg font-bold mb-1 ${lastEntry.wasCorrect ? 'text-green-400' : 'text-red-400'}`}>
                   {lastEntry.wasCorrect ? '✓ Correcto' : '✗ Incorrecto'}
                 </p>
+                <p className="text-slate-500 text-xs mb-1">{lastEntry.question}</p>
                 {!lastEntry.wasCorrect && lastEntry.input && (
                   <p className="text-sm text-slate-400 mb-1">Tu respuesta: {lastEntry.input}</p>
                 )}
@@ -395,17 +398,14 @@ export default function Review() {
 
       {/* ── Último resultado (solo cuando NO está en pendingAdvance) ── */}
       {lastEntry && !pendingAdvance && (
-        <div className="mt-4 pt-3 border-t border-slate-700/60 text-xs text-slate-500 flex flex-wrap gap-x-3 gap-y-0.5">
-          <span>
-            Anterior:{' '}
-            <span className={lastEntry.wasCorrect ? 'text-green-400' : 'text-red-400'}>
-              {lastEntry.input || '—'}
-            </span>
+        <div className="mt-4 pt-3 border-t border-slate-700/60 text-xs text-slate-500 flex flex-wrap gap-x-2 gap-y-0.5 items-baseline">
+          <span className="text-slate-600">{lastEntry.question}</span>
+          <span className="text-slate-700">·</span>
+          <span className={lastEntry.wasCorrect ? 'text-green-400' : 'text-red-400'}>
+            {lastEntry.input || '—'}
           </span>
-          <span>
-            Correcta:{' '}
-            <span className="text-slate-300">{lastEntry.correctAnswer}</span>
-          </span>
+          <span className="text-slate-700">→</span>
+          <span className="text-slate-400">{lastEntry.correctAnswer}</span>
         </div>
       )}
     </div>

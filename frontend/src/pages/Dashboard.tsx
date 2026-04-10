@@ -21,6 +21,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const [stats, setStats] = useState<Stats | null>(null)
   const [selectedBoxes, setSelectedBoxes] = useState<Set<number>>(new Set(ALL_BOXES))
+  const [wordsOnly, setWordsOnly] = useState(false)
 
   // Test-mode state (only rendered for username === 'test')
   const [isSimulating, setIsSimulating] = useState(false)
@@ -59,8 +60,13 @@ export default function Dashboard() {
     : 0
 
   const startReview = () => {
-    const allSelected = selectedBoxes.size === ALL_BOXES.length
-    navigate(allSelected ? '/review' : `/review?boxes=${[...selectedBoxes].sort().join(',')}`)
+    const params = new URLSearchParams()
+    if (selectedBoxes.size < ALL_BOXES.length) {
+      params.set('boxes', [...selectedBoxes].sort().join(','))
+    }
+    if (wordsOnly) params.set('wordsOnly', 'true')
+    const qs = params.toString()
+    navigate(qs ? `/review?${qs}` : '/review')
   }
 
   // ── Test mode helpers ─────────────────────────────────────────────────────
@@ -225,6 +231,20 @@ export default function Dashboard() {
           </p>
         </div>
       )}
+
+      {/* Words-only filter */}
+      <button
+        onClick={() => setWordsOnly((v) => !v)}
+        className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-slate-600 bg-slate-700/40 hover:border-slate-500 transition-all text-left"
+      >
+        <div>
+          <div className="font-medium text-white text-sm">Solo palabras (sin frases)</div>
+          <div className="text-xs text-slate-400 mt-0.5">Excluye entradas de más de 2 palabras</div>
+        </div>
+        <div className={`w-11 h-6 rounded-full transition-colors shrink-0 ml-3 relative ${wordsOnly ? 'bg-blue-500' : 'bg-slate-600'}`}>
+          <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${wordsOnly ? 'left-6' : 'left-1'}`} />
+        </div>
+      </button>
 
       {/* ── Test mode panel (only for username 'test') ── */}
       {isTestUser && (

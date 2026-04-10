@@ -20,6 +20,7 @@ router = APIRouter(prefix="/review", tags=["review"])
 def get_review_words(
     limit: int = 20,
     boxes: Optional[str] = Query(default=None, description="Comma-separated box levels, e.g. '0,1,2'"),
+    words_only: bool = Query(default=False, description="Return only short entries (≤2 tokens in both palabra and significado)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -41,7 +42,13 @@ def get_review_words(
     if box_filter is not None:
         query = query.filter(UserWord.box_level.in_(box_filter))
 
-    due = query.limit(limit).all()
+    due = query.all()
+
+    # Filter to words-only (≤2 tokens in both fields) if requested
+    if words_only:
+        due = [uw for uw in due if len(uw.word.palabra.split()) <= 2 and len(uw.word.significado.split()) <= 2]
+
+    due = due[:limit]
 
     # Randomize order so words aren't always reviewed in insertion order
     random.shuffle(due)

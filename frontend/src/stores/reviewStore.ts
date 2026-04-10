@@ -213,7 +213,8 @@ interface ReviewState {
     boxes?: number[],
     limit?: number,
     mode?: 'simple' | 'safe',
-    rounds?: [RoundType, RoundType, RoundType]
+    rounds?: [RoundType, RoundType, RoundType],
+    wordsOnly?: boolean
   ) => Promise<void>
   handleSingleAnswer: (userWordId: number, correct: boolean) => void
   handlePairMatchComplete: (incorrectWordIds: number[]) => void
@@ -396,12 +397,12 @@ function findFirstItemOfRound(round: number, items: QueueItem[], totalRounds: nu
 export const useReviewStore = create<ReviewState>((set, get) => ({
   ...INITIAL_DATA,
 
-  loadReview: async (boxes, limit = 20, mode = 'simple', rounds = ['pair_match', 'first_letter', 'random']) => {
-    log('loadReview: limit=', limit, 'mode=', mode)
+  loadReview: async (boxes, limit = 20, mode = 'simple', rounds = ['pair_match', 'first_letter', 'random'], wordsOnly = false) => {
+    log('loadReview: limit=', limit, 'mode=', mode, 'wordsOnly=', wordsOnly)
     set({ ...INITIAL_DATA, isLoading: true, mode })
 
     try {
-      const { data } = await reviewApi.getReview(limit, boxes)
+      const { data } = await reviewApi.getReview(limit, boxes, wordsOnly)
       const words: ReviewWord[] = data
       log('loadReview: received', words.length, 'words')
 

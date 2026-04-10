@@ -69,7 +69,8 @@ export default function WriteExercise({ word, onAnswer, autoPlay = false }: Prop
         <p className="text-xs text-slate-500 uppercase tracking-widest mb-2">
           {word.idioma_origen} → {word.idioma_destino}
         </p>
-        <p className="text-4xl font-bold mb-3">{word.palabra}</p>
+        <p className="font-bold mb-3 break-words hyphens-auto leading-tight
+          text-4xl [word-break:break-word]">{word.palabra}</p>
         <button
           onClick={speak}
           className="text-2xl text-slate-400 hover:text-blue-400 transition-colors"
