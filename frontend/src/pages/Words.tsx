@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { languagesApi, temasApi, wordsApi } from '../api/client'
 import LanguageSelect from '../components/LanguageSelect'
 import TemaSelect from '../components/TemaSelect'
+import WordEditForm from '../components/WordEditForm'
 import { useSettingsStore } from '../stores/settingsStore'
 import type { Language, Tema, UserWord } from '../types'
 
@@ -48,7 +49,6 @@ export default function Words() {
   const [isAdding, setIsAdding] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [editId, setEditId] = useState<number | null>(null)
-  const [editForm, setEditForm] = useState(EMPTY_FORM)
   const [showDeleteAll, setShowDeleteAll] = useState(false)
   const [isBusy, setIsBusy] = useState(false)
 
@@ -137,37 +137,6 @@ export default function Words() {
     }
   }
 
-  // ── Edit ─────────────────────────────────────────────────────────────────────
-  const startEdit = (uw: UserWord) => {
-    setEditId(uw.word.id)
-    setEditForm({
-      palabra: uw.word.palabra,
-      significado: uw.word.significado,
-      idioma_origen: uw.word.idioma_origen,
-      idioma_destino: uw.word.idioma_destino,
-      tema_id: uw.word.tema_id ? String(uw.word.tema_id) : '',
-    })
-  }
-
-  const handleEdit = async (e: FormEvent) => {
-    e.preventDefault()
-    if (!editId) return
-    setIsBusy(true)
-    try {
-      await wordsApi.update(editId, {
-        palabra: editForm.palabra,
-        significado: editForm.significado,
-        idioma_origen: editForm.idioma_origen,
-        idioma_destino: editForm.idioma_destino,
-        tema_id: editForm.tema_id ? parseInt(editForm.tema_id) : null,
-      })
-      setEditId(null)
-      load()
-    } finally {
-      setIsBusy(false)
-    }
-  }
-
   // ── Delete ───────────────────────────────────────────────────────────────────
   const handleDelete = async (wordId: number) => {
     await wordsApi.delete(wordId)
@@ -199,9 +168,6 @@ export default function Words() {
   // ── Field helpers ─────────────────────────────────────────────────────────────
   const setAddField = (field: keyof typeof EMPTY_FORM) => (value: string) =>
     setForm((f) => ({ ...f, [field]: value }))
-
-  const setEditField = (field: keyof typeof EMPTY_FORM) => (value: string) =>
-    setEditForm((f) => ({ ...f, [field]: value }))
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
@@ -448,54 +414,19 @@ export default function Words() {
         <div className="space-y-2">
           {filtered.map((uw) =>
             editId === uw.word.id ? (
-              <form
+              <WordEditForm
                 key={uw.word.id}
-                onSubmit={handleEdit}
-                className="card space-y-3 animate-slide-up"
-              >
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    className="input"
-                    placeholder="Palabra (origen)"
-                    value={editForm.palabra}
-                    onChange={(e) => setEditField('palabra')(e.target.value)}
-                    required
-                  />
-                  <input
-                    className="input"
-                    placeholder="Significado"
-                    value={editForm.significado}
-                    onChange={(e) => setEditField('significado')(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <LanguageSelect
-                    languages={languages}
-                    value={editForm.idioma_origen}
-                    onChange={setEditField('idioma_origen')}
-                  />
-                  <LanguageSelect
-                    languages={languages}
-                    value={editForm.idioma_destino}
-                    onChange={setEditField('idioma_destino')}
-                  />
-                </div>
-                <TemaSelect
-                  temas={temas}
-                  value={editForm.tema_id}
-                  onChange={setEditField('tema_id')}
-                  onTemaCreated={(t) => setTemas((prev) => [...prev, t])}
-                />
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setEditId(null)} className="btn-secondary flex-1">
-                    Cancelar
-                  </button>
-                  <button type="submit" disabled={isBusy} className="btn-primary flex-1">
-                    {isBusy ? 'Guardando...' : 'Guardar'}
-                  </button>
-                </div>
-              </form>
+                word={{
+                  word_id: uw.word.id,
+                  palabra: uw.word.palabra,
+                  significado: uw.word.significado,
+                  idioma_origen: uw.word.idioma_origen,
+                  idioma_destino: uw.word.idioma_destino,
+                  tema_id: uw.word.tema_id,
+                }}
+                onSaved={() => { setEditId(null); load() }}
+                onCancel={() => setEditId(null)}
+              />
             ) : (
               <div key={uw.word.id} className="card flex items-center gap-3 py-3">
                 {uw.word.tema && (
@@ -529,7 +460,7 @@ export default function Words() {
                   🔊
                 </button>
                 <button
-                  onClick={() => startEdit(uw)}
+                  onClick={() => setEditId(uw.word.id)}
                   className="text-slate-500 hover:text-blue-400 transition-colors px-2 shrink-0"
                   title="Editar"
                 >

@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { wordsApi } from '../api/client'
 import AnagramExercise from '../components/exercises/AnagramExercise'
 import FirstLetterExercise from '../components/exercises/FirstLetterExercise'
 import MultipleChoiceExercise from '../components/exercises/MultipleChoiceExercise'
 import PairMatchExercise from '../components/exercises/PairMatchExercise'
 import WriteExercise from '../components/exercises/WriteExercise'
+import WordEditForm from '../components/WordEditForm'
 import { useReviewStore } from '../stores/reviewStore'
 import { useSettingsStore } from '../stores/settingsStore'
 
@@ -62,9 +62,6 @@ export default function Review() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [isEditing, setIsEditing] = useState(false)
-  const [editForm, setEditForm] = useState({ palabra: '', significado: '' })
-  const [isSaving, setIsSaving] = useState(false)
-  const editPalabraRef = useRef<HTMLInputElement>(null)
 
   const boxesParam = searchParams.get('boxes')
   const selectedBoxes = boxesParam
@@ -121,31 +118,6 @@ export default function Review() {
     setLastEntry({ question: word.palabra, input: userInput, correctAnswer: word.significado, wasCorrect: correct })
     setIsEditing(false)
     scheduleAdvance(() => handleSingleAnswer(capturedId, correct))
-  }
-
-  // ── Edit handlers ────────────────────────────────────────────────────────────
-  const openEdit = () => {
-    const word = currentWord()
-    if (!word) return
-    setEditForm({ palabra: word.palabra, significado: word.significado })
-    setIsEditing(true)
-    setTimeout(() => editPalabraRef.current?.focus(), 50)
-  }
-
-  const handleSaveEdit = async () => {
-    const word = currentWord()
-    if (!word) return
-    const p = editForm.palabra.trim()
-    const s = editForm.significado.trim()
-    if (!p || !s) return
-    setIsSaving(true)
-    try {
-      await wordsApi.update(word.word_id, { palabra: p, significado: s })
-      patchWord(word.user_word_id, { palabra: p, significado: s })
-      setIsEditing(false)
-    } finally {
-      setIsSaving(false)
-    }
   }
 
   // ── Loading / Finished ───────────────────────────────────────────────────────
@@ -253,7 +225,7 @@ export default function Review() {
             )}
             {!isPairMode && !pendingAdvance && (
               <button
-                onClick={isEditing ? () => setIsEditing(false) : openEdit}
+                onClick={() => setIsEditing((v) => !v)}
                 title={isEditing ? 'Cerrar edición' : 'Editar palabra'}
                 className={`px-1 transition-colors ${
                   isEditing ? 'text-blue-400' : 'text-slate-500 hover:text-slate-300'
@@ -289,37 +261,26 @@ export default function Review() {
 
       {/* ── Inline edit panel ── */}
       {isEditing && word && (
-        <div className="card mb-4 space-y-3 animate-slide-up border-blue-500/30">
-          <p className="text-xs font-medium text-slate-400 uppercase tracking-widest">
-            Editar palabra
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <input
-              ref={editPalabraRef}
-              className="input text-sm"
-              placeholder="Palabra"
-              value={editForm.palabra}
-              onChange={(e) => setEditForm((f) => ({ ...f, palabra: e.target.value }))}
-            />
-            <input
-              className="input text-sm"
-              placeholder="Significado"
-              value={editForm.significado}
-              onChange={(e) => setEditForm((f) => ({ ...f, significado: e.target.value }))}
-            />
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => setIsEditing(false)} className="btn-secondary flex-1 py-2 text-sm">
-              Cancelar
-            </button>
-            <button
-              onClick={handleSaveEdit}
-              disabled={isSaving || !editForm.palabra.trim() || !editForm.significado.trim()}
-              className="btn-primary flex-1 py-2 text-sm"
-            >
-              {isSaving ? 'Guardando…' : 'Guardar'}
-            </button>
-          </div>
+        <div className="mb-4">
+          <WordEditForm
+            word={{
+              word_id: word.word_id,
+              palabra: word.palabra,
+              significado: word.significado,
+              idioma_origen: word.idioma_origen,
+              idioma_destino: word.idioma_destino,
+              tema_id: word.tema_id,
+            }}
+            onSaved={({ tema, ...rest }) => {
+              patchWord(word.user_word_id, {
+                ...rest,
+                tema_nombre: tema?.nombre ?? null,
+                tema_color: tema?.color ?? null,
+              })
+              setIsEditing(false)
+            }}
+            onCancel={() => setIsEditing(false)}
+          />
         </div>
       )}
 

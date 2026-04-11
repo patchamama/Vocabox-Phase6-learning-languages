@@ -40,6 +40,7 @@ export interface ReviewWord {
   audio_url: string | null
   exercise_type: 'write' | 'multiple_choice'
   choices: string[] | null
+  tema_id: number | null
   tema_nombre: string | null
   tema_color: string | null
 }

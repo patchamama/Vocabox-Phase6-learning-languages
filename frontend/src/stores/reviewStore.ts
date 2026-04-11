@@ -254,7 +254,7 @@ interface ReviewState {
   handlePairMatchComplete: (incorrectWordIds: number[]) => void
   patchWord: (
     user_word_id: number,
-    patch: Partial<Pick<ReviewWord, 'palabra' | 'significado'>>
+    patch: Partial<Pick<ReviewWord, 'palabra' | 'significado' | 'idioma_origen' | 'idioma_destino' | 'tema_id' | 'tema_nombre' | 'tema_color'>>
   ) => void
   reset: () => void
 
