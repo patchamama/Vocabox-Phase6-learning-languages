@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { useEffect } from 'react'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Import from './pages/Import'
@@ -12,6 +13,12 @@ import UserProfile from './pages/UserProfile'
 import Words from './pages/Words'
 import { useAuthStore } from './stores/authStore'
 
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(() => { window.scrollTo(0, 0) }, [pathname])
+  return null
+}
+
 function PrivateRoute({ children }: { children: ReactNode }) {
   const { user } = useAuthStore()
   return user ? <>{children}</> : <Navigate to="/login" replace />
@@ -20,6 +27,7 @@ function PrivateRoute({ children }: { children: ReactNode }) {
 export default function App() {
   return (
     <BrowserRouter future={{ v7_startTransition: true }}>
+      <ScrollToTop />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />

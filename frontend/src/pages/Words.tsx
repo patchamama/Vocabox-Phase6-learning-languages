@@ -32,7 +32,7 @@ const SELECT_CLASS =
 export default function Words() {
   const { t } = useTranslation()
   const [searchParams] = useSearchParams()
-  const { autoPlayAudio, wordsOnly, pageSizeOptions } = useSettingsStore()
+  const { autoPlayAudio, wordsOnly, pageSizeOptions, selectedPageSize, setSelectedPageSize } = useSettingsStore()
 
   const speak = (palabra: string, idioma: string) => {
     speechSynthesis.cancel()
@@ -68,7 +68,8 @@ export default function Words() {
   const [revealed, setRevealed] = useState<Set<number>>(new Set())
 
   // ── Pagination ───────────────────────────────────────────────────────────────
-  const [pageSize, setPageSize] = useState(() => pageSizeOptions[1])
+  const pageSize = selectedPageSize
+  const setPageSize = setSelectedPageSize
   const [page, setPage] = useState(1)
 
   // ── Load ─────────────────────────────────────────────────────────────────────

@@ -26,6 +26,8 @@ interface SettingsState {
   leitnerDays: [number, number, number, number, number, number, number]
   /** Words per page options in the Words list [slot1, slot2, slot3] */
   pageSizeOptions: [number, number, number]
+  /** Currently selected page size in the Words list */
+  selectedPageSize: number
 
   setReviewMode: (mode: ReviewMode) => void
   setWordsPerSession: (n: number) => void
@@ -36,6 +38,7 @@ interface SettingsState {
   setWordsOnly: (v: boolean) => void
   setLeitnerDay: (box: number, days: number) => void
   setPageSizeOption: (slot: 0 | 1 | 2, value: number) => void
+  setSelectedPageSize: (n: number) => void
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -52,6 +55,7 @@ export const useSettingsStore = create<SettingsState>()(
       wordsOnly: false,
       leitnerDays: DEFAULT_LEITNER_DAYS,
       pageSizeOptions: [10, 30, 50],
+      selectedPageSize: 30,
 
       setReviewMode: (reviewMode) => set({ reviewMode }),
       setWordsPerSession: (wordsPerSession) => set({ wordsPerSession }),
@@ -72,6 +76,7 @@ export const useSettingsStore = create<SettingsState>()(
           next[slot] = value
           return { pageSizeOptions: next }
         }),
+      setSelectedPageSize: (selectedPageSize) => set({ selectedPageSize }),
     }),
     { name: 'vocabox-settings' }
   )
