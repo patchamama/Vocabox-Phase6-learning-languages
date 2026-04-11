@@ -33,7 +33,10 @@ export const useUserProfileStore = create<UserProfileState>()(
       },
       setNotificationsEmail: (notificationsEmail) => set({ notificationsEmail }),
       setNotificationsPush: (notificationsPush) => set({ notificationsPush }),
-      setDarkMode: (darkMode) => set({ darkMode }),
+      setDarkMode: (darkMode) => {
+        document.documentElement.classList.toggle('dark', darkMode)
+        set({ darkMode })
+      },
     }),
     { name: 'vocabox-user-profile' }
   )

@@ -14,13 +14,13 @@ function Toggle({ value, onChange, label, description }: {
   return (
     <button
       onClick={() => onChange(!value)}
-      className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-slate-600 bg-slate-700/40 hover:border-slate-500 transition-all text-left"
+      className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/40 hover:border-slate-400 dark:hover:border-slate-500 transition-all text-left"
     >
       <div>
-        <div className="font-medium text-white text-sm">{label}</div>
-        {description && <div className="text-xs text-slate-400 mt-0.5">{description}</div>}
+        <div className="font-medium text-slate-900 dark:text-white text-sm">{label}</div>
+        {description && <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{description}</div>}
       </div>
-      <div className={`w-11 h-6 rounded-full transition-colors shrink-0 ml-3 relative ${value ? 'bg-blue-500' : 'bg-slate-600'}`}>
+      <div className={`w-11 h-6 rounded-full transition-colors shrink-0 ml-3 relative ${value ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
         <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${value ? 'left-6' : 'left-1'}`} />
       </div>
     </button>
@@ -76,15 +76,15 @@ export default function UserProfile() {
           {(displayName || user?.username || '?')[0].toUpperCase()}
         </div>
         <div>
-          <div className="font-semibold text-white">{displayName || user?.username}</div>
-          <div className="text-xs text-slate-400">@{user?.username}</div>
-          <div className="text-xs text-slate-500">{user?.email}</div>
+          <div className="font-semibold text-slate-900 dark:text-white">{displayName || user?.username}</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">@{user?.username}</div>
+          <div className="text-xs text-slate-400 dark:text-slate-500">{user?.email}</div>
         </div>
       </div>
 
       {/* Personal data */}
       <div className="card space-y-4">
-        <h2 className="font-semibold text-slate-200">{t('profile.displayName')}</h2>
+        <h2 className="font-semibold text-slate-800 dark:text-slate-200">{t('profile.displayName')}</h2>
         <input
           type="text"
           value={localName}
@@ -93,7 +93,7 @@ export default function UserProfile() {
           className="input w-full"
         />
         <div>
-          <label className="text-xs text-slate-400 block mb-1">{t('profile.username')}</label>
+          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">{t('profile.username')}</label>
           <input
             type="text"
             value={user?.username ?? ''}
@@ -102,7 +102,7 @@ export default function UserProfile() {
           />
         </div>
         <div>
-          <label className="text-xs text-slate-400 block mb-1">{t('profile.email')}</label>
+          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">{t('profile.email')}</label>
           <input
             type="email"
             value={user?.email ?? ''}
@@ -114,7 +114,7 @@ export default function UserProfile() {
 
       {/* App language */}
       <div className="card space-y-3">
-        <h2 className="font-semibold text-slate-200">{t('profile.preferredLanguage')}</h2>
+        <h2 className="font-semibold text-slate-800 dark:text-slate-200">{t('profile.preferredLanguage')}</h2>
         <div className="grid grid-cols-5 gap-2">
           {SUPPORTED_LANGUAGES.map((lang) => (
             <button
@@ -123,7 +123,7 @@ export default function UserProfile() {
               className={`flex flex-col items-center gap-1 py-2 px-1 rounded-xl border-2 text-xs font-medium transition-all ${
                 uiLanguage === lang
                   ? 'border-blue-500 bg-blue-500/15 text-blue-300'
-                  : 'border-slate-600 bg-slate-700/40 text-slate-400 hover:border-slate-500'
+                  : 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 text-slate-500 dark:text-slate-400 hover:border-slate-400 dark:hover:border-slate-500'
               }`}
             >
               <span className="text-xl">{LANG_FLAGS[lang]}</span>
@@ -135,7 +135,7 @@ export default function UserProfile() {
 
       {/* Notifications */}
       <div className="card space-y-3">
-        <h2 className="font-semibold text-slate-200">{t('profile.notifications')}</h2>
+        <h2 className="font-semibold text-slate-800 dark:text-slate-200">{t('profile.notifications')}</h2>
         <Toggle
           value={notificationsEmail}
           onChange={setNotificationsEmail}
@@ -152,7 +152,7 @@ export default function UserProfile() {
 
       {/* Appearance */}
       <div className="card space-y-3">
-        <h2 className="font-semibold text-slate-200">{t('profile.theme')}</h2>
+        <h2 className="font-semibold text-slate-800 dark:text-slate-200">{t('profile.theme')}</h2>
         <Toggle
           value={darkMode}
           onChange={setDarkMode}

@@ -14,7 +14,7 @@ export default function NavBar() {
   ]
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-slate-800 border-t border-slate-700">
+    <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700">
       <div className="max-w-lg mx-auto flex">
         {TABS.map(({ to, label, icon }) => (
           <NavLink
@@ -23,7 +23,7 @@ export default function NavBar() {
             end={to === '/'}
             className={({ isActive }) =>
               `flex-1 flex flex-col items-center py-2 px-1 text-xs transition-colors ${
-                isActive ? 'text-blue-400' : 'text-slate-400 hover:text-slate-200'
+                isActive ? 'text-blue-500 dark:text-blue-400' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
               }`
             }
           >

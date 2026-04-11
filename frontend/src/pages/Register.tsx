@@ -26,11 +26,11 @@ export default function Register() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <h1 className="text-5xl font-bold text-blue-400 tracking-tight">Vocabox</h1>
-          <p className="text-slate-400 mt-2">{t('register.title')}</p>
+          <p className="text-slate-500 dark:text-slate-400 mt-2">{t('register.title')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="card space-y-4">
@@ -41,7 +41,7 @@ export default function Register() {
           )}
 
           <div>
-            <label className="text-sm text-slate-400 block mb-1">{t('register.name')}</label>
+            <label className="text-sm text-slate-500 dark:text-slate-400 block mb-1">{t('register.name')}</label>
             <input
               type="text"
               value={name}
@@ -52,7 +52,7 @@ export default function Register() {
           </div>
 
           <div>
-            <label className="text-sm text-slate-400 block mb-1">{t('register.username')}</label>
+            <label className="text-sm text-slate-500 dark:text-slate-400 block mb-1">{t('register.username')}</label>
             <input
               type="text"
               value={username}
@@ -64,7 +64,7 @@ export default function Register() {
           </div>
 
           <div>
-            <label className="text-sm text-slate-400 block mb-1">{t('register.email')}</label>
+            <label className="text-sm text-slate-500 dark:text-slate-400 block mb-1">{t('register.email')}</label>
             <input
               type="email"
               value={email}
@@ -76,7 +76,7 @@ export default function Register() {
           </div>
 
           <div>
-            <label className="text-sm text-slate-400 block mb-1">{t('register.password')}</label>
+            <label className="text-sm text-slate-500 dark:text-slate-400 block mb-1">{t('register.password')}</label>
             <input
               type="password"
               value={password}
@@ -92,7 +92,7 @@ export default function Register() {
             {isLoading ? t('common.loading') : t('register.register')}
           </button>
 
-          <p className="text-center text-slate-400 text-sm">
+          <p className="text-center text-slate-500 dark:text-slate-400 text-sm">
             {t('register.haveAccount')}{' '}
             <Link to="/login" className="text-blue-400 hover:text-blue-300">
               {t('register.login')}

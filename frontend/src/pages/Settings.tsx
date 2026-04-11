@@ -16,13 +16,13 @@ function Toggle({ value, onChange, label, description }: {
   return (
     <button
       onClick={() => onChange(!value)}
-      className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-slate-600 bg-slate-700/40 hover:border-slate-500 transition-all text-left"
+      className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/40 hover:border-slate-400 dark:hover:border-slate-500 transition-all text-left"
     >
       <div>
-        <div className="font-medium text-white text-sm">{label}</div>
-        {description && <div className="text-xs text-slate-400 mt-0.5">{description}</div>}
+        <div className="font-medium text-slate-900 dark:text-white text-sm">{label}</div>
+        {description && <div className="text-xs text-slate-400 dark:text-slate-500 dark:text-slate-400 mt-0.5">{description}</div>}
       </div>
-      <div className={`w-11 h-6 rounded-full transition-colors shrink-0 ml-3 relative ${value ? 'bg-blue-500' : 'bg-slate-600'}`}>
+      <div className={`w-11 h-6 rounded-full transition-colors shrink-0 ml-3 relative ${value ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
         <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${value ? 'left-6' : 'left-1'}`} />
       </div>
     </button>
@@ -43,7 +43,7 @@ function RoundSelector({ label, value, onChange }: {
   const { t } = useTranslation()
   return (
     <div className="space-y-1.5">
-      <p className="text-xs text-slate-400 font-medium">{label}</p>
+      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{label}</p>
       <div className="flex flex-wrap gap-1.5">
         {ROUND_EXERCISE_KEYS.map((key) => (
           <button
@@ -52,7 +52,7 @@ function RoundSelector({ label, value, onChange }: {
             className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
               value === key
                 ? 'border-blue-500 bg-blue-500/15 text-blue-300'
-                : 'border-slate-600 bg-slate-700/40 text-slate-400 hover:border-slate-500'
+                : 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 text-slate-500 dark:text-slate-400 hover:border-slate-400 dark:hover:border-slate-500'
             }`}
           >
             {t(`settings.exercises.${key}`)}
@@ -65,40 +65,53 @@ function RoundSelector({ label, value, onChange }: {
 
 // ─── Leitner Days Editor ──────────────────────────────────────────────────────
 
-const DAY_PRESETS = [0, 1, 2, 3, 4, 5, 7, 10, 14, 21, 30, 60]
+const BOX_COLORS = [
+  'text-red-400 border-red-500/40 bg-red-500/10',
+  'text-orange-400 border-orange-500/40 bg-orange-500/10',
+  'text-yellow-400 border-yellow-500/40 bg-yellow-500/10',
+  'text-lime-400 border-lime-500/40 bg-lime-500/10',
+  'text-cyan-400 border-cyan-500/40 bg-cyan-500/10',
+  'text-blue-400 border-blue-500/40 bg-blue-500/10',
+  'text-purple-400 border-purple-500/40 bg-purple-500/10',
+]
 
 function LeitnerEditor() {
   const { t } = useTranslation()
   const { leitnerDays, setLeitnerDay } = useSettingsStore()
 
+  const change = (box: number, delta: number) => {
+    const next = Math.min(360, Math.max(0, leitnerDays[box] + delta))
+    setLeitnerDay(box, next)
+  }
+
   return (
     <div className="card space-y-4">
       <div>
-        <h2 className="font-semibold text-slate-200">{t('settings.leitnerBoxDays')}</h2>
-        <p className="text-xs text-slate-500 mt-1">{t('settings.leitnerBoxDaysDesc')}</p>
+        <h2 className="font-semibold text-slate-800 dark:text-slate-200">{t('settings.leitnerBoxDays')}</h2>
+        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{t('settings.leitnerBoxDaysDesc')}</p>
       </div>
-      <div className="space-y-3">
+      <div className="grid grid-cols-7 gap-1.5">
         {leitnerDays.map((days, box) => (
-          <div key={box} className="flex items-center gap-3">
-            <span className="text-xs text-slate-400 w-14 shrink-0">{t('settings.box', { n: box })}</span>
-            <div className="flex gap-1.5 flex-wrap flex-1">
-              {DAY_PRESETS.map((preset) => (
-                <button
-                  key={preset}
-                  onClick={() => setLeitnerDay(box, preset)}
-                  className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition-all ${
-                    days === preset
-                      ? 'border-blue-500 bg-blue-500/15 text-blue-300'
-                      : 'border-slate-600 bg-slate-700/40 text-slate-400 hover:border-slate-500'
-                  }`}
-                >
-                  {preset === 0 ? '0' : t('settings.days', { count: preset })}
-                </button>
-              ))}
+          <div key={box} className={`flex flex-col items-center gap-1.5 p-2 rounded-xl border ${BOX_COLORS[box]}`}>
+            <span className="text-[10px] font-semibold opacity-70">{box}</span>
+            <span className="text-lg font-bold leading-none">{days}</span>
+            <span className="text-[9px] opacity-60">{t('settings.days', { count: days })}</span>
+            <div className="flex flex-col gap-0.5 w-full mt-0.5">
+              <button
+                onClick={() => change(box, 1)}
+                disabled={days >= 360}
+                className="w-full h-6 rounded-md bg-white/5 hover:bg-white/15 transition-colors text-xs font-bold disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                +
+              </button>
+              <button
+                onClick={() => change(box, -1)}
+                disabled={days <= 0}
+                className="w-full h-6 rounded-md bg-white/5 hover:bg-white/15 transition-colors text-xs font-bold disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                −
+              </button>
             </div>
-            <span className="text-xs text-slate-500 w-10 text-right shrink-0">
-              {t('settings.days', { count: days })}
-            </span>
           </div>
         ))}
       </div>
@@ -173,8 +186,8 @@ function ThemesManager() {
     <div className="card space-y-4">
       <div className="flex justify-between items-start">
         <div>
-          <h2 className="font-semibold text-slate-200">{t('settings.themes')}</h2>
-          <p className="text-xs text-slate-500 mt-1">{t('settings.themesDesc')}</p>
+          <h2 className="font-semibold text-slate-800 dark:text-slate-200">{t('settings.themes')}</h2>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{t('settings.themesDesc')}</p>
         </div>
         <button
           onClick={openAdd}
@@ -186,7 +199,7 @@ function ThemesManager() {
 
       {/* Add/Edit form */}
       {adding && (
-        <div className="p-3 rounded-xl border border-slate-600 bg-slate-700/40 space-y-3">
+        <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 space-y-3">
           <input
             type="text"
             value={formName}
@@ -216,7 +229,7 @@ function ThemesManager() {
             </button>
             <button
               onClick={() => setAdding(false)}
-              className="flex-1 py-2 rounded-xl border border-slate-600 text-slate-400 text-sm hover:border-slate-500 transition-colors"
+              className="flex-1 py-2 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 text-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
             >
               {t('settings.cancel')}
             </button>
@@ -226,24 +239,24 @@ function ThemesManager() {
 
       {/* List */}
       {loading ? (
-        <p className="text-xs text-slate-500">…</p>
+        <p className="text-xs text-slate-400 dark:text-slate-500">…</p>
       ) : temas.length === 0 ? (
-        <p className="text-xs text-slate-500">{t('settings.noThemes')}</p>
+        <p className="text-xs text-slate-400 dark:text-slate-500">{t('settings.noThemes')}</p>
       ) : (
         <div className="space-y-2">
           {temas.map((tema) => (
             <div
               key={tema.id}
-              className="flex items-center gap-3 p-3 rounded-xl border border-slate-600 bg-slate-700/40"
+              className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40"
             >
               <span
                 className="w-4 h-4 rounded-full shrink-0"
                 style={{ backgroundColor: tema.color }}
               />
-              <span className="flex-1 text-sm text-slate-200">{tema.nombre}</span>
+              <span className="flex-1 text-sm text-slate-800 dark:text-slate-200">{tema.nombre}</span>
               <button
                 onClick={() => openEdit(tema)}
-                className="text-xs text-slate-400 hover:text-slate-200 transition-colors px-2"
+                className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors px-2"
               >
                 {t('settings.edit')}
               </button>
@@ -281,36 +294,36 @@ export default function Settings() {
 
       {/* Review mode */}
       <div className="card space-y-3">
-        <h2 className="font-semibold text-slate-200">{t('settings.reviewMode')}</h2>
+        <h2 className="font-semibold text-slate-800 dark:text-slate-200">{t('settings.reviewMode')}</h2>
         <button
           onClick={() => setReviewMode('simple')}
           className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
             reviewMode === 'simple'
               ? 'border-blue-500 bg-blue-500/10'
-              : 'border-slate-600 bg-slate-700/40 hover:border-slate-500'
+              : 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 hover:border-slate-400 dark:hover:border-slate-500'
           }`}
         >
-          <div className="font-medium text-white">{t('settings.simpleMode')}</div>
-          <div className="text-sm text-slate-400 mt-0.5">{t('settings.simpleModeDesc')}</div>
+          <div className="font-medium text-slate-900 dark:text-white">{t('settings.simpleMode')}</div>
+          <div className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{t('settings.simpleModeDesc')}</div>
         </button>
         <button
           onClick={() => setReviewMode('safe')}
           className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
             reviewMode === 'safe'
               ? 'border-blue-500 bg-blue-500/10'
-              : 'border-slate-600 bg-slate-700/40 hover:border-slate-500'
+              : 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 hover:border-slate-400 dark:hover:border-slate-500'
           }`}
         >
-          <div className="font-medium text-white">{t('settings.safeMode')}</div>
-          <div className="text-sm text-slate-400 mt-0.5">{t('settings.safeModeDesc')}</div>
+          <div className="font-medium text-slate-900 dark:text-white">{t('settings.safeMode')}</div>
+          <div className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{t('settings.safeModeDesc')}</div>
         </button>
       </div>
 
       {/* Safe mode rounds */}
       {reviewMode === 'safe' && (
         <div className="card space-y-4">
-          <h2 className="font-semibold text-slate-200">{t('settings.exercisePerRound')}</h2>
-          <p className="text-xs text-slate-500">{t('settings.exercisePerRoundDesc')}</p>
+          <h2 className="font-semibold text-slate-800 dark:text-slate-200">{t('settings.exercisePerRound')}</h2>
+          <p className="text-xs text-slate-400 dark:text-slate-500">{t('settings.exercisePerRoundDesc')}</p>
           <RoundSelector label={t('settings.round', { n: 1 })} value={safeRound1} onChange={(v) => setSafeRound(1, v)} />
           <RoundSelector label={t('settings.round', { n: 2 })} value={safeRound2} onChange={(v) => setSafeRound(2, v)} />
           <RoundSelector label={t('settings.round', { n: 3 })} value={safeRound3} onChange={(v) => setSafeRound(3, v)} />
@@ -319,7 +332,7 @@ export default function Settings() {
 
       {/* Words per session */}
       <div className="card space-y-3">
-        <h2 className="font-semibold text-slate-200">{t('settings.wordsPerSession')}</h2>
+        <h2 className="font-semibold text-slate-800 dark:text-slate-200">{t('settings.wordsPerSession')}</h2>
         <div className="flex gap-2 flex-wrap">
           {WORDS_OPTIONS.map((n) => (
             <button
@@ -328,14 +341,14 @@ export default function Settings() {
               className={`px-5 py-2.5 rounded-xl border-2 font-medium transition-all ${
                 wordsPerSession === n
                   ? 'border-blue-500 bg-blue-500/10 text-white'
-                  : 'border-slate-600 bg-slate-700/40 text-slate-400 hover:border-slate-500'
+                  : 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 text-slate-500 dark:text-slate-400 hover:border-slate-400 dark:hover:border-slate-500'
               }`}
             >
               {n}
             </button>
           ))}
         </div>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-400 dark:text-slate-500">
           {reviewMode === 'safe'
             ? t('settings.wordsPerSessionSafe', { count: wordsPerSession * 3 })
             : t('settings.wordsPerSessionSimple', { count: wordsPerSession })}
@@ -344,7 +357,7 @@ export default function Settings() {
 
       {/* Audio */}
       <div className="card space-y-3">
-        <h2 className="font-semibold text-slate-200">{t('settings.audio')}</h2>
+        <h2 className="font-semibold text-slate-800 dark:text-slate-200">{t('settings.audio')}</h2>
         <Toggle
           value={autoPlayAudio}
           onChange={setAutoPlayAudio}
@@ -355,7 +368,7 @@ export default function Settings() {
 
       {/* Content */}
       <div className="card space-y-3">
-        <h2 className="font-semibold text-slate-200">{t('settings.content')}</h2>
+        <h2 className="font-semibold text-slate-800 dark:text-slate-200">{t('settings.content')}</h2>
         <Toggle
           value={wordsOnly}
           onChange={setWordsOnly}
@@ -366,14 +379,14 @@ export default function Settings() {
 
       {/* Transition */}
       <div className="card space-y-3">
-        <h2 className="font-semibold text-slate-200">{t('settings.transition')}</h2>
+        <h2 className="font-semibold text-slate-800 dark:text-slate-200">{t('settings.transition')}</h2>
         <div className="flex gap-2">
           <button
             onClick={() => setTransitionType('auto')}
             className={`flex-1 py-2.5 rounded-xl border-2 text-sm font-medium transition-all ${
               transitionType === 'auto'
                 ? 'border-blue-500 bg-blue-500/10 text-white'
-                : 'border-slate-600 bg-slate-700/40 text-slate-400 hover:border-slate-500'
+                : 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 text-slate-500 dark:text-slate-400 hover:border-slate-400 dark:hover:border-slate-500'
             }`}
           >
             {t('settings.auto')}
@@ -383,7 +396,7 @@ export default function Settings() {
             className={`flex-1 py-2.5 rounded-xl border-2 text-sm font-medium transition-all ${
               transitionType === 'button'
                 ? 'border-blue-500 bg-blue-500/10 text-white'
-                : 'border-slate-600 bg-slate-700/40 text-slate-400 hover:border-slate-500'
+                : 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 text-slate-500 dark:text-slate-400 hover:border-slate-400 dark:hover:border-slate-500'
             }`}
           >
             {t('settings.buttonContinue')}
@@ -400,7 +413,7 @@ export default function Settings() {
                   className={`flex-1 py-2 rounded-xl border-2 text-sm font-medium transition-all ${
                     transitionDelay === s
                       ? 'border-blue-500 bg-blue-500/10 text-white'
-                      : 'border-slate-600 bg-slate-700/40 text-slate-400 hover:border-slate-500'
+                      : 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 text-slate-500 dark:text-slate-400 hover:border-slate-400 dark:hover:border-slate-500'
                   }`}
                 >
                   {s}s
@@ -409,7 +422,7 @@ export default function Settings() {
             </div>
           </div>
         )}
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-400 dark:text-slate-500">
           {transitionType === 'button'
             ? t('settings.transitionButton')
             : t('settings.transitionAuto', { count: transitionDelay })}

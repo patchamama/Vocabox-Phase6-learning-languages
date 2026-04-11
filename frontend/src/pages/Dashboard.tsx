@@ -121,7 +121,7 @@ export default function Dashboard() {
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-2xl font-bold">{t('dashboard.greeting', { name: shownName })}</h1>
-          <p className="text-slate-400 text-sm">{t('dashboard.subtitle')}</p>
+          <p className="text-slate-500 dark:text-slate-400 text-sm">{t('dashboard.subtitle')}</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -133,7 +133,7 @@ export default function Dashboard() {
               <path fillRule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 0 1-.437-.695Z" clipRule="evenodd" />
             </svg>
           </button>
-          <button onClick={logout} className="text-slate-500 hover:text-slate-300 text-sm">
+          <button onClick={logout} className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 text-sm">
             {t('dashboard.logout')}
           </button>
         </div>
@@ -145,14 +145,14 @@ export default function Dashboard() {
           <div className="text-4xl font-bold text-blue-400">
             {stats ? pendingInSelected : '—'}
           </div>
-          <div className="text-slate-400 text-sm mt-1">{t('dashboard.pendingToday')}</div>
+          <div className="text-slate-500 dark:text-slate-400 text-sm mt-1">{t('dashboard.pendingToday')}</div>
           {stats && selectedBoxes.size < ALL_BOXES.length && (
-            <div className="text-xs text-slate-600 mt-1">({stats.pending_today} total)</div>
+            <div className="text-xs text-slate-400 dark:text-slate-600 mt-1">({stats.pending_today} total)</div>
           )}
         </div>
         <div className="card text-center">
           <div className="text-4xl font-bold text-green-400">{stats?.total_words ?? '—'}</div>
-          <div className="text-slate-400 text-sm mt-1">{t('dashboard.totalWords')}</div>
+          <div className="text-slate-500 dark:text-slate-400 text-sm mt-1">{t('dashboard.totalWords')}</div>
         </div>
       </div>
 
@@ -166,12 +166,12 @@ export default function Dashboard() {
       {stats && pendingInSelected === 0 && (
         <div className="card text-center py-8">
           <div className="text-5xl mb-2">🎉</div>
-          <p className="text-slate-300 font-medium">
+          <p className="text-slate-700 dark:text-slate-300 font-medium">
             {selectedBoxes.size < ALL_BOXES.length
               ? t('dashboard.noPendingSelected')
               : t('dashboard.allCaughtUp')}
           </p>
-          <p className="text-slate-500 text-sm mt-1">{t('dashboard.comeBackLater')}</p>
+          <p className="text-slate-400 dark:text-slate-500 text-sm mt-1">{t('dashboard.comeBackLater')}</p>
         </div>
       )}
 
@@ -179,11 +179,11 @@ export default function Dashboard() {
       {stats && (
         <div className="card">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="font-semibold text-slate-300">{t('dashboard.boxDistribution')}</h2>
+            <h2 className="font-semibold text-slate-700 dark:text-slate-300">{t('dashboard.boxDistribution')}</h2>
             <div className="flex gap-2 text-xs text-slate-500">
               <button
                 onClick={() => setSelectedBoxes(new Set(ALL_BOXES))}
-                className="hover:text-slate-300 transition-colors"
+                className="hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
               >
                 {t('dashboard.all')}
               </button>
@@ -194,7 +194,7 @@ export default function Dashboard() {
                     new Set(stats.boxes.filter((b) => b.pending_today > 0).map((b) => b.box))
                   )
                 }
-                className="hover:text-slate-300 transition-colors"
+                className="hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
               >
                 {t('dashboard.withPending')}
               </button>
@@ -216,14 +216,14 @@ export default function Dashboard() {
                     className="w-3.5 h-3.5 rounded accent-blue-500 shrink-0 cursor-pointer"
                   />
                   <span
-                    className="text-xs text-slate-500 w-10 shrink-0 cursor-pointer hover:text-slate-300 transition-colors"
+                    className="text-xs text-slate-500 w-10 shrink-0 cursor-pointer hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
                     onClick={() => navigate(`/words?box=${box}`)}
                     title={t('dashboard.box', { n: box })}
                   >
                     {t('dashboard.box', { n: box })}
                   </span>
                   <div
-                    className="flex-1 bg-slate-700 rounded-full h-3 overflow-hidden cursor-pointer"
+                    className="flex-1 bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden cursor-pointer"
                     onClick={() => navigate(`/words?box=${box}`)}
                   >
                     <div
@@ -232,7 +232,7 @@ export default function Dashboard() {
                     />
                   </div>
                   <div className="flex items-center gap-1 shrink-0 min-w-[52px] justify-end">
-                    <span className="text-xs text-slate-400">{count}</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">{count}</span>
                     {pending_today > 0 && (
                       <span className="text-xs text-blue-400 font-medium">+{pending_today}</span>
                     )}
@@ -242,20 +242,20 @@ export default function Dashboard() {
             })}
           </div>
 
-          <p className="text-xs text-slate-600 mt-3">{t('dashboard.boxHint')}</p>
+          <p className="text-xs text-slate-400 dark:text-slate-600 mt-3">{t('dashboard.boxHint')}</p>
         </div>
       )}
 
       {/* Words-only filter */}
       <button
         onClick={() => setWordsOnly(!wordsOnly)}
-        className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-slate-600 bg-slate-700/40 hover:border-slate-500 transition-all text-left"
+        className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/40 hover:border-slate-400 dark:hover:border-slate-500 transition-all text-left"
       >
         <div>
-          <div className="font-medium text-white text-sm">{t('dashboard.wordsOnly')}</div>
-          <div className="text-xs text-slate-400 mt-0.5">{t('dashboard.wordsOnlyDesc')}</div>
+          <div className="font-medium text-slate-900 dark:text-white text-sm">{t('dashboard.wordsOnly')}</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{t('dashboard.wordsOnlyDesc')}</div>
         </div>
-        <div className={`w-11 h-6 rounded-full transition-colors shrink-0 ml-3 relative ${wordsOnly ? 'bg-blue-500' : 'bg-slate-600'}`}>
+        <div className={`w-11 h-6 rounded-full transition-colors shrink-0 ml-3 relative ${wordsOnly ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
           <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${wordsOnly ? 'left-6' : 'left-1'}`} />
         </div>
       </button>
@@ -271,10 +271,10 @@ export default function Dashboard() {
           </div>
 
           <p className="text-xs text-slate-500 leading-relaxed">
-            <strong className="text-slate-400">{t('dashboard.simulateDay')}</strong>{' '}
+            <strong className="text-slate-600 dark:text-slate-400">{t('dashboard.simulateDay')}</strong>{' '}
             {t('dashboard.simulateDesc')}
             <br />
-            <strong className="text-slate-400">{t('dashboard.resetAll')}</strong>{' '}
+            <strong className="text-slate-600 dark:text-slate-400">{t('dashboard.resetAll')}</strong>{' '}
             {t('dashboard.resetDesc')}
           </p>
 
@@ -289,7 +289,7 @@ export default function Dashboard() {
             <button
               onClick={handleReset}
               disabled={isSimulating}
-              className="flex-1 py-2.5 px-3 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 py-2.5 px-3 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 text-sm rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSimulating ? '…' : t('dashboard.resetAll')}
             </button>
