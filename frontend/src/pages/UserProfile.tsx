@@ -28,7 +28,7 @@ function Toggle({ value, onChange, label, description }: {
 }
 
 const LANG_FLAGS: Record<SupportedLanguage, string> = {
-  es: '🇦🇷',
+  es: '🇪🇸',
   en: '🇺🇸',
   de: '🇩🇪',
   fr: '🇫🇷',

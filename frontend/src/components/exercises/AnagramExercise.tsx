@@ -11,6 +11,7 @@
  * – All printable keyboard characters are forwarded to pickTile.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ReviewWord } from '../../types'
 
 interface LetterTile {
@@ -54,6 +55,7 @@ function groupTiles(tiles: LetterTile[]): { char: string; available: LetterTile[
 }
 
 export default function AnagramExercise({ word, onAnswer }: Props) {
+  const { t } = useTranslation()
   const target = word.significado
 
   const initialTiles: LetterTile[] = useMemo(() => {
@@ -208,7 +210,7 @@ export default function AnagramExercise({ word, onAnswer }: Props) {
       {/* Answer slots */}
       <div className="card">
         <p className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-widest text-center mb-3">
-          Ordená las letras
+          {t('settings.exercises.anagramHint')}
         </p>
         <div className="flex flex-wrap gap-1.5 justify-center items-center">
           {answerDisplay}

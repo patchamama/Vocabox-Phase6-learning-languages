@@ -6,6 +6,7 @@
  * On error: flash red, reset.
  */
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ReviewWord } from '../../types'
 
 interface Props {
@@ -32,6 +33,7 @@ function buildLetterPool(initials: string[]): string[] {
 }
 
 export default function FirstLetterExercise({ word, onAnswer, autoAdvanceMs }: Props) {
+  const { t } = useTranslation()
   const target = word.significado
   const targetWords = useMemo(() => target.trim().split(/\s+/), [target])
   const initials = useMemo(() => getInitials(target), [target])
@@ -95,7 +97,7 @@ export default function FirstLetterExercise({ word, onAnswer, autoAdvanceMs }: P
       {/* Word slots */}
       <div className="card text-center space-y-3">
         <p className="text-xs text-slate-500 uppercase tracking-widest">
-          Letra inicial de cada palabra
+          {t('settings.exercises.first_letter')}
         </p>
         <div className="flex gap-4 justify-center flex-wrap">
           {targetWords.map((w, i) => {

@@ -82,7 +82,8 @@
       "anagram": "Anagramma",
       "write": "Scrivi",
       "multiple_choice": "Scelta multipla",
-      "random": "Casuale"
+      "random": "Casuale",
+      "anagramHint": "Disponi le lettere"
     }
   },
   "profile": {

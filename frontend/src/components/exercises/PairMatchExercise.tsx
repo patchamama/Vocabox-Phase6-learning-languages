@@ -9,6 +9,7 @@
  * The component receives a batch of ReviewWords (2-6 pairs work best).
  */
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ReviewWord } from '../../types'
 
 interface Tile {
@@ -33,6 +34,7 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 export default function PairMatchExercise({ words, onComplete }: Props) {
+  const { t } = useTranslation()
   const [tiles, setTiles] = useState<Tile[]>([])
   const [selected, setSelected] = useState<Tile | null>(null)
   const [errorId, setErrorId] = useState<string | null>(null)
@@ -100,7 +102,7 @@ export default function PairMatchExercise({ words, onComplete }: Props) {
   return (
     <div className="space-y-4 animate-slide-up">
       <p className="text-xs text-slate-500 text-center uppercase tracking-widest">
-        Pareo · seleccioná palabra y traducción
+        {t('settings.exercises.pair_match')}
       </p>
       <div className="flex flex-wrap gap-2 justify-center">
         {tiles.map((tile) => (

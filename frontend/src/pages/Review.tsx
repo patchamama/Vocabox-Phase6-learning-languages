@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { wordsApi } from '../api/client'
 import AnagramExercise from '../components/exercises/AnagramExercise'
 import FirstLetterExercise from '../components/exercises/FirstLetterExercise'
@@ -26,15 +27,8 @@ const BOX_BG = [
   'bg-purple-500',
 ]
 
-const EXERCISE_LABEL: Record<string, string> = {
-  multiple_choice: 'Opción múltiple',
-  write: 'Escribir',
-  pair_match: 'Pareo',
-  first_letter: 'Letra inicial',
-  anagram: 'Anagrama',
-}
-
 export default function Review() {
+  const { t } = useTranslation()
   const [searchParams] = useSearchParams()
   const {
     reviewMode, wordsPerSession, transitionDelay, transitionType,
@@ -233,7 +227,7 @@ export default function Review() {
             )}
             {inErrorPhase
               ? '🔁 Repaso de errores'
-              : exerciseType ? EXERCISE_LABEL[exerciseType] : ''}
+              : exerciseType ? t(`settings.exercises.${exerciseType}`) : ''}
           </span>
           <div className="flex items-center gap-2">
             {results.correct > 0 && (
