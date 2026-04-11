@@ -57,7 +57,12 @@ export default function MultipleChoiceExercise({ word, onAnswer, autoPlay = fals
           🔊
         </button>
         {word.tema_nombre && (
-          <p className="text-xs text-slate-600 mt-2">{word.tema_nombre}</p>
+          <span
+            className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full font-medium text-white"
+            style={{ backgroundColor: word.tema_color ?? '#64748b' }}
+          >
+            {word.tema_nombre}
+          </span>
         )}
       </div>
 

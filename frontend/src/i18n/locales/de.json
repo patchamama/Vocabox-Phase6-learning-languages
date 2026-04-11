@@ -229,6 +229,9 @@
     "edit": "Bearbeiten",
     "add": "Hinzufügen"
   },
+  "box": {
+    "prefix": "B"
+  },
   "languages": {
     "en": "Englisch",
     "es": "Spanisch",

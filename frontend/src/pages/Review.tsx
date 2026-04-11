@@ -212,7 +212,7 @@ export default function Review() {
               <span
                 className={`text-xs px-2 py-0.5 rounded-full font-bold text-slate-900 ${BOX_BG[word.box_level] ?? 'bg-slate-500'}`}
               >
-                C{word.box_level}
+                {t('box.prefix')}{word.box_level}
               </span>
             )}
             {!isPairMode && word?.tema_nombre && (

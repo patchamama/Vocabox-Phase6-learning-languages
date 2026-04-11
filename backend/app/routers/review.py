@@ -53,25 +53,29 @@ def get_review_words(
     # Randomize order so words aren't always reviewed in insertion order
     random.shuffle(due)
 
+    def is_phrase(text: str) -> bool:
+        """Phrase = more than 2 tokens. Matches the ≤2-word rule used app-wide."""
+        return len(text.split()) > 2
+
     # Build pools by type (word vs phrase) based on significado
     all_sigs = list(
         {w.significado for w in db.query(Word.significado).limit(200).all()}
     )
-    word_sigs = [s for s in all_sigs if " " not in s]
-    phrase_sigs = [s for s in all_sigs if " " in s]
+    word_sigs = [s for s in all_sigs if not is_phrase(s)]
+    phrase_sigs = [s for s in all_sigs if is_phrase(s)]
 
     result: List[ReviewWordOut] = []
     for uw in due:
-        is_phrase = " " in uw.word.palabra or " " in uw.word.significado
+        entry_is_phrase = is_phrase(uw.word.palabra) or is_phrase(uw.word.significado)
 
         # Phrases always use multiple_choice (typing phrases on mobile is too hard)
-        if is_phrase:
+        if entry_is_phrase:
             exercise_type = "multiple_choice"
         else:
             exercise_type = random.choice(["write", "multiple_choice"])
 
         # Build distractor pool matching the type of the correct significado
-        if " " in uw.word.significado:
+        if is_phrase(uw.word.significado):
             pool = [s for s in phrase_sigs if s != uw.word.significado]
             if len(pool) < 3:
                 pool = [s for s in all_sigs if s != uw.word.significado]

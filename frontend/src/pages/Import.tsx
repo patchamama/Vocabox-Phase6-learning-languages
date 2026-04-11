@@ -222,7 +222,7 @@ export default function Import() {
                   </div>
                   {row.box_level != null && !row.is_duplicate && (
                     <span className="text-xs bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded-full shrink-0">
-                      C{row.box_level}
+                      {t('box.prefix')}{row.box_level}
                     </span>
                   )}
                   {row.is_duplicate && (

@@ -137,13 +137,13 @@ export default function AnagramExercise({ word, onAnswer }: Props) {
     setFilledIds(newFilledIds)
   }
 
-  // Keyboard handler
+  // Keyboard handler — all logic via refs to avoid stale closures
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (flashRef.current) return
+
       if (e.key === 'Backspace') {
         e.preventDefault()
-        // inline removeLast using refs (avoids stale closure)
         const curFilled = filledRef.current
         const curFilledIds = filledIdsRef.current
         const lastFilled = [...curFilled].reverse().findIndex((f) => f !== null)
@@ -157,11 +157,42 @@ export default function AnagramExercise({ word, onAnswer }: Props) {
         setTiles((prev) => prev.map((t) => t.id === tileId ? { ...t, used: false } : t))
         return
       }
-      // Any printable single char → try to match an available tile
+
       if (e.key.length !== 1) return
       const ch = e.key.toLowerCase()
-      const tile = tilesRef.current.find((t) => !t.used && t.char.toLowerCase() === ch)
-      if (tile) pickTile(tile)
+      const curTiles = tilesRef.current
+      const curFilled = filledRef.current
+      const curFilledIds = filledIdsRef.current
+
+      const nextSlot = curFilled.findIndex((f) => f === null)
+      if (nextSlot === -1) return
+
+      const tile = curTiles.find((t) => !t.used && t.char.toLowerCase() === ch)
+      if (!tile) return
+
+      const newFilled = [...curFilled]
+      const newFilledIds = [...curFilledIds]
+      newFilled[nextSlot] = tile.char
+      newFilledIds[nextSlot] = tile.id
+
+      setTiles((prev) => prev.map((t) => t.id === tile.id ? { ...t, used: true } : t))
+      setFilled(newFilled)
+      setFilledIds(newFilledIds)
+
+      if (newFilled.every((f) => f !== null)) {
+        const answer = newFilled.join('')
+        const correct = answer.toLowerCase() === target.replace(/\s/g, '').toLowerCase()
+        setFlash(correct ? 'correct' : 'error')
+        setTimeout(() => {
+          onAnswer(correct)
+          if (!correct) {
+            setTiles(initialTiles)
+            setFilled(Array(newFilled.length).fill(null))
+            setFilledIds(Array(newFilledIds.length).fill(null))
+            setFlash(null)
+          }
+        }, 700)
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -206,6 +237,14 @@ export default function AnagramExercise({ word, onAnswer }: Props) {
           {langPair(word.idioma_origen, word.idioma_destino)}
         </p>
         <p className="text-4xl font-bold">{word.palabra}</p>
+        {word.tema_nombre && (
+          <span
+            className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full font-medium text-white"
+            style={{ backgroundColor: word.tema_color ?? '#64748b' }}
+          >
+            {word.tema_nombre}
+          </span>
+        )}
       </div>
 
       {/* Answer slots */}

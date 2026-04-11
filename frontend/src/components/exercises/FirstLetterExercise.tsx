@@ -93,6 +93,14 @@ export default function FirstLetterExercise({ word, onAnswer, autoAdvanceMs }: P
           {langPair(word.idioma_origen, word.idioma_destino)}
         </p>
         <p className="text-4xl font-bold">{word.palabra}</p>
+        {word.tema_nombre && (
+          <span
+            className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full font-medium text-white"
+            style={{ backgroundColor: word.tema_color ?? '#64748b' }}
+          >
+            {word.tema_nombre}
+          </span>
+        )}
       </div>
 
       {/* Word slots */}

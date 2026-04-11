@@ -22,8 +22,9 @@ export default function Stats() {
     )
   }
 
+  const boxPrefix = t('box.prefix')
   const chartData = stats.boxes.map((b, i) => ({
-    name: `C${b.box}`,
+    name: `${boxPrefix}${b.box}`,
     value: b.count,
     color: BOX_COLORS[i],
   }))

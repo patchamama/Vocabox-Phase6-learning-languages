@@ -482,7 +482,7 @@ export default function Words() {
                 <span
                   className={`text-xs px-2 py-0.5 rounded-full text-slate-900 font-bold shrink-0 ${BOX_COLORS[uw.box_level]}`}
                 >
-                  C{uw.box_level}
+                  {t('box.prefix')}{uw.box_level}
                 </span>
                 <button
                   onClick={() => speak(uw.word.palabra, uw.word.idioma_origen)}
