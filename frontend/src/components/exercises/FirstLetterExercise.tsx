@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ReviewWord } from '../../types'
+import { langPair } from '../../utils/langFlags'
 
 interface Props {
   word: ReviewWord
@@ -89,7 +90,7 @@ export default function FirstLetterExercise({ word, onAnswer, autoAdvanceMs }: P
       {/* Source word */}
       <div className="card text-center">
         <p className="text-xs text-slate-500 uppercase tracking-widest mb-2">
-          {word.idioma_origen} → {word.idioma_destino}
+          {langPair(word.idioma_origen, word.idioma_destino)}
         </p>
         <p className="text-4xl font-bold">{word.palabra}</p>
       </div>

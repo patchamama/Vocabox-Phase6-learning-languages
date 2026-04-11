@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ReviewWord } from '../../types'
+import { langPair } from '../../utils/langFlags'
 
 interface Props {
   word: ReviewWord
@@ -44,7 +45,7 @@ export default function MultipleChoiceExercise({ word, onAnswer, autoPlay = fals
     <div className="space-y-5 animate-slide-up">
       <div className="card text-center">
         <p className="text-xs text-slate-500 uppercase tracking-widest mb-2">
-          {word.idioma_origen} → {word.idioma_destino}
+          {langPair(word.idioma_origen, word.idioma_destino)}
         </p>
         <p className="font-bold mb-3 break-words hyphens-auto leading-tight
           text-4xl [word-break:break-word]">{word.palabra}</p>

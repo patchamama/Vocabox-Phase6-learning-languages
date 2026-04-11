@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import type { ReviewWord } from '../../types'
+import { langPair } from '../../utils/langFlags'
 
 interface Props {
   word: ReviewWord
@@ -67,7 +68,7 @@ export default function WriteExercise({ word, onAnswer, autoPlay = false }: Prop
     <div className="space-y-5 animate-slide-up">
       <div className="card text-center">
         <p className="text-xs text-slate-500 uppercase tracking-widest mb-2">
-          {word.idioma_origen} → {word.idioma_destino}
+          {langPair(word.idioma_origen, word.idioma_destino)}
         </p>
         <p className="font-bold mb-3 break-words hyphens-auto leading-tight
           text-4xl [word-break:break-word]">{word.palabra}</p>
@@ -114,7 +115,7 @@ export default function WriteExercise({ word, onAnswer, autoPlay = false }: Prop
             value={input}
             onChange={(e) => setInput(e.target.value)}
             className="input text-lg text-center"
-            placeholder={`Escribe en ${word.idioma_destino}`}
+            placeholder={`✍ ${langPair(word.idioma_origen, word.idioma_destino)}`}
             autoComplete="off"
             autoCorrect="off"
           />

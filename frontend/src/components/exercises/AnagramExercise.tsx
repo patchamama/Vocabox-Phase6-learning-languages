@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ReviewWord } from '../../types'
+import { langPair } from '../../utils/langFlags'
 
 interface LetterTile {
   id: string   // unique per physical letter: `${index}-${char}`
@@ -202,7 +203,7 @@ export default function AnagramExercise({ word, onAnswer }: Props) {
       {/* Source word */}
       <div className="card text-center">
         <p className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">
-          {word.idioma_origen} → {word.idioma_destino}
+          {langPair(word.idioma_origen, word.idioma_destino)}
         </p>
         <p className="text-4xl font-bold">{word.palabra}</p>
       </div>

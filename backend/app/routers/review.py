@@ -90,6 +90,7 @@ def get_review_words(
             # Not enough distractors — fall back to write
             exercise_type = "write"
 
+        tema_id = uw.word.tema_id if uw.word.tema_id else None
         tema_nombre = uw.word.tema.nombre if uw.word.tema else None
         tema_color = uw.word.tema.color if uw.word.tema else None
 
@@ -105,6 +106,7 @@ def get_review_words(
                 audio_url=uw.word.audio_url,
                 exercise_type=exercise_type,
                 choices=choices,
+                tema_id=tema_id,
                 tema_nombre=tema_nombre,
                 tema_color=tema_color,
             )
