@@ -32,4 +32,5 @@
 
 - [ ] Que cada usuario tenga un id único de la aplicación y que se pueda enviar a otros usuarios el id para seguirse ambos (sí se acepta) y así poder ver como otras personas progresan y motivarse. En "modo plan" interactuar con la IA para pensar en opciones de motivación entre usuarios.
 - [ ] Agregar opción de maestro, que permita crear automáticamente vocabularios que se integrarían en los alumnos, enviar a alumnos invitación, que el maestro pueda ver cómo va el progreso de cada alumno y los alumnos también para en modo competición tener lugares, qué los alumnos puedan escribir dudas al maestro. También que se puedan formar grupos de alumnos (aleatorio o que los mismos alumnos puedan elegir) y en el grupo vayan avanzando con los vocabularios. Ver esto con Albe con programa Quizlet.
-- [ ] Para apple store / google play, ver opción de que funcione con base de datos local y no con Rest API. 
+- [ ] Para apple store / google play, ver opción de que funcione con base de datos local y no con Rest API.
+- [x] Sí se listan en la sección de palabras, muchas palabras, filtrar y poner las primeras y un botón de siguiente y anterior, a elegir sí mostrar 10, 30, 50 palabras, con los botones de siguiente y anterior (tener en cuenta el idioma elegido por el usuario)
