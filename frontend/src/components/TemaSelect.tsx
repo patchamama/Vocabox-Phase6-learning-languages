@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { temasApi } from '../api/client'
 import type { Tema } from '../types'
 
@@ -15,6 +16,7 @@ export default function TemaSelect({
   onChange,
   onTemaCreated,
 }: TemaSelectProps) {
+  const { t } = useTranslation()
   const [isCreating, setIsCreating] = useState(false)
   const [newNombre, setNewNombre] = useState('')
   const [newColor, setNewColor] = useState('#3B82F6')
@@ -55,7 +57,7 @@ export default function TemaSelect({
         <div className="flex gap-2">
           <input
             className="input flex-1"
-            placeholder="Nombre del tema"
+            placeholder={t('temaSelect.themeName')}
             value={newNombre}
             onChange={(e) => setNewNombre(e.target.value)}
             autoFocus
@@ -73,7 +75,7 @@ export default function TemaSelect({
             onClick={handleCancel}
             className="btn-secondary flex-1 py-1.5 text-sm"
           >
-            Cancelar
+            {t('temaSelect.cancel')}
           </button>
           <button
             type="button"
@@ -81,7 +83,7 @@ export default function TemaSelect({
             disabled={!newNombre.trim() || isSaving}
             className="btn-primary flex-1 py-1.5 text-sm"
           >
-            {isSaving ? 'Creando...' : 'Crear tema'}
+            {isSaving ? t('temaSelect.creating') : t('temaSelect.create')}
           </button>
         </div>
       </div>
@@ -90,13 +92,13 @@ export default function TemaSelect({
 
   return (
     <select className="input" value={value} onChange={handleSelectChange}>
-      <option value="">Sin tema</option>
+      <option value="">{t('temaSelect.noTheme')}</option>
       {temas.map((t) => (
         <option key={t.id} value={t.id}>
           {t.nombre}
         </option>
       ))}
-      <option value="__new__">+ Crear nuevo tema...</option>
+      <option value="__new__">{t('temaSelect.createNew')}</option>
     </select>
   )
 }

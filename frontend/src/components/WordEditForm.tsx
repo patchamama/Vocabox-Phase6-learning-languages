@@ -3,6 +3,7 @@
  * Loads temas and languages on mount so it works as a self-contained widget.
  */
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { languagesApi, temasApi, wordsApi } from '../api/client'
 import type { Language, Tema } from '../types'
 import LanguageSelect from './LanguageSelect'
@@ -28,6 +29,7 @@ interface Props {
 }
 
 export default function WordEditForm({ word, onSaved, onCancel }: Props) {
+  const { t } = useTranslation()
   const [form, setForm] = useState({
     palabra: word.palabra,
     significado: word.significado,
@@ -81,13 +83,13 @@ export default function WordEditForm({ word, onSaved, onCancel }: Props) {
   return (
     <form onSubmit={handleSubmit} className="card space-y-3 animate-slide-up border-blue-500/30">
       <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-widest">
-        Editar palabra
+        {t('wordEdit.title')}
       </p>
 
       <div className="grid grid-cols-2 gap-2">
         <input
           className="input text-sm"
-          placeholder="Palabra (origen)"
+          placeholder={t('wordEdit.wordOrigin')}
           value={form.palabra}
           onChange={(e) => set('palabra')(e.target.value)}
           required
@@ -95,7 +97,7 @@ export default function WordEditForm({ word, onSaved, onCancel }: Props) {
         />
         <input
           className="input text-sm"
-          placeholder="Significado"
+          placeholder={t('wordEdit.meaning')}
           value={form.significado}
           onChange={(e) => set('significado')(e.target.value)}
           required
@@ -126,14 +128,14 @@ export default function WordEditForm({ word, onSaved, onCancel }: Props) {
 
       <div className="flex gap-2">
         <button type="button" onClick={onCancel} className="btn-secondary flex-1 py-2 text-sm">
-          Cancelar
+          {t('wordEdit.cancel')}
         </button>
         <button
           type="submit"
           disabled={isSaving || !form.palabra.trim() || !form.significado.trim()}
           className="btn-primary flex-1 py-2 text-sm"
         >
-          {isSaving ? 'Guardando…' : 'Guardar'}
+          {isSaving ? t('wordEdit.saving') : t('wordEdit.save')}
         </button>
       </div>
     </form>

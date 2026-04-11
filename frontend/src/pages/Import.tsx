@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { importApi, temasApi } from '../api/client'
 import TemaSelect from '../components/TemaSelect'
 import type { ImportPreview, ImportResult, Tema } from '../types'
@@ -8,6 +9,7 @@ type Step = 'upload' | 'preview' | 'result'
 const ACCEPTED = '.csv,.xlsx'
 
 export default function Import() {
+  const { t } = useTranslation()
   const [step, setStep] = useState<Step>('upload')
   const [isDragging, setIsDragging] = useState(false)
   const [file, setFile] = useState<File | null>(null)
@@ -28,7 +30,7 @@ export default function Import() {
   const handleFile = (f: File) => {
     const name = f.name.toLowerCase()
     if (!name.endsWith('.csv') && !name.endsWith('.xlsx')) {
-      setError('Solo se aceptan archivos .csv y .xlsx')
+      setError(t('import.onlyFormats'))
       return
     }
     setFile(f)
@@ -60,7 +62,7 @@ export default function Import() {
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-        ?? 'Error al analizar el archivo'
+        ?? t('import.errorAnalyze')
       setError(msg)
     } finally {
       setIsLoading(false)
@@ -81,7 +83,7 @@ export default function Import() {
       setResult(data)
       setStep('result')
     } catch {
-      setError('Error al importar las palabras')
+      setError(t('import.errorImport'))
     } finally {
       setIsLoading(false)
     }
@@ -101,16 +103,12 @@ export default function Import() {
 
   return (
     <div className="p-4 pt-8 space-y-5 animate-slide-up">
-      <h1 className="text-2xl font-bold">Importar vocabulario</h1>
+      <h1 className="text-2xl font-bold">{t('import.title')}</h1>
 
       {/* ── STEP 1: Upload ── */}
       {step === 'upload' && (
         <div className="space-y-4">
-          <p className="text-slate-400 text-sm">
-            Sube un archivo exportado desde Google Translate (.csv o .xlsx) o desde Vocabox.
-            Los archivos Vocabox restauran la caja y fecha de revisión de cada palabra.
-            Las palabras que ya tengas serán detectadas y omitidas.
-          </p>
+          <p className="text-slate-400 text-sm">{t('import.description')}</p>
 
           {/* Drop zone */}
           <div
@@ -126,12 +124,12 @@ export default function Import() {
           >
             <div className="text-4xl mb-3">📥</div>
             <p className="text-slate-300 font-medium">
-              {file ? file.name : 'Arrastra tu archivo aquí'}
+              {file ? file.name : t('import.dropZone')}
             </p>
             <p className="text-slate-500 text-sm mt-1">
               {file
-                ? `${(file.size / 1024).toFixed(1)} KB · haz clic para cambiar`
-                : 'o haz clic para seleccionar · .csv · .xlsx'}
+                ? `${(file.size / 1024).toFixed(1)} KB · ${t('import.dropZoneChange')}`
+                : t('import.dropZoneOr')}
             </p>
             <input
               ref={inputRef}
@@ -153,7 +151,7 @@ export default function Import() {
             disabled={!file || isLoading}
             className="btn-primary w-full"
           >
-            {isLoading ? 'Analizando...' : 'Analizar archivo'}
+            {isLoading ? t('import.analyzing') : t('import.analyze')}
           </button>
         </div>
       )}
@@ -177,21 +175,21 @@ export default function Import() {
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="bg-slate-700/50 rounded-xl p-2">
                 <div className="text-xl font-bold">{preview.total}</div>
-                <div className="text-xs text-slate-400">encontradas</div>
+                <div className="text-xs text-slate-400">{t('import.found')}</div>
               </div>
               <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-2">
                 <div className="text-xl font-bold text-green-400">{preview.new_count}</div>
-                <div className="text-xs text-slate-400">nuevas</div>
+                <div className="text-xs text-slate-400">{t('import.new')}</div>
               </div>
               <div className="bg-slate-700/30 rounded-xl p-2">
                 <div className="text-xl font-bold text-slate-500">{preview.duplicate_count}</div>
-                <div className="text-xs text-slate-400">duplicadas</div>
+                <div className="text-xs text-slate-400">{t('import.duplicates')}</div>
               </div>
             </div>
 
             {/* Optional tema */}
             <div>
-              <label className="text-xs text-slate-400 block mb-1">Asignar tema (opcional)</label>
+              <label className="text-xs text-slate-400 block mb-1">{t('import.assignTheme')}</label>
               <TemaSelect
                 temas={temas}
                 value={temaId}
@@ -204,7 +202,7 @@ export default function Import() {
           {/* Word list */}
           <div className="card p-0 overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-700 text-xs text-slate-400 uppercase tracking-wide">
-              Vista previa · {preview.rows.length} palabras
+              {t('import.preview')} · {preview.rows.length} {t('import.words')}
             </div>
             <div className="divide-y divide-slate-700/50 max-h-80 overflow-y-auto">
               {preview.rows.map((row, i) => (
@@ -228,7 +226,7 @@ export default function Import() {
                     </span>
                   )}
                   {row.is_duplicate && (
-                    <span className="text-xs text-slate-600 shrink-0">duplicada</span>
+                    <span className="text-xs text-slate-600 shrink-0">{t('import.duplicate')}</span>
                   )}
                 </div>
               ))}
@@ -243,7 +241,7 @@ export default function Import() {
 
           <div className="flex gap-3">
             <button onClick={reset} className="btn-secondary flex-1">
-              Cancelar
+              {t('import.cancel')}
             </button>
             <button
               onClick={confirmImport}
@@ -251,10 +249,10 @@ export default function Import() {
               className="btn-primary flex-1"
             >
               {isLoading
-                ? 'Importando...'
+                ? t('import.importing')
                 : preview.new_count === 0
-                ? 'Sin palabras nuevas'
-                : `Importar ${preview.new_count}`}
+                ? t('import.noNewWords')
+                : t('import.import', { count: preview.new_count })}
             </button>
           </div>
         </div>
@@ -264,29 +262,27 @@ export default function Import() {
       {step === 'result' && result && (
         <div className="card text-center space-y-4 animate-slide-up py-8">
           <div className="text-6xl">{result.imported > 0 ? '🎉' : '👌'}</div>
-          <h2 className="text-xl font-bold">Importación completada</h2>
+          <h2 className="text-xl font-bold">{t('import.successTitle')}</h2>
 
           <div className="flex justify-center gap-8">
             <div>
               <div className="text-3xl font-bold text-green-400">{result.imported}</div>
-              <div className="text-xs text-slate-400 mt-1">importadas</div>
+              <div className="text-xs text-slate-400 mt-1">{t('import.imported')}</div>
             </div>
             <div>
               <div className="text-3xl font-bold text-slate-500">{result.skipped}</div>
-              <div className="text-xs text-slate-400 mt-1">omitidas</div>
+              <div className="text-xs text-slate-400 mt-1">{t('import.skipped')}</div>
             </div>
           </div>
 
-          <p className="text-slate-400 text-sm">
-            Las palabras nuevas están en la caja 0 y listas para repasar.
-          </p>
+          <p className="text-slate-400 text-sm">{t('import.importedNote')}</p>
 
           <div className="flex gap-3 pt-2">
             <button onClick={reset} className="btn-secondary flex-1">
-              Importar más
+              {t('import.importMore')}
             </button>
             <a href="/review" className="btn-primary flex-1 text-center">
-              Ir a repasar
+              {t('import.goReview')}
             </a>
           </div>
         </div>

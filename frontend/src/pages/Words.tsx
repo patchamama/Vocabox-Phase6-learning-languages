@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { languagesApi, temasApi, wordsApi } from '../api/client'
 import LanguageSelect from '../components/LanguageSelect'
 import TemaSelect from '../components/TemaSelect'
@@ -29,6 +30,7 @@ const SELECT_CLASS =
   'bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all'
 
 export default function Words() {
+  const { t } = useTranslation()
   const [searchParams] = useSearchParams()
   const { autoPlayAudio, wordsOnly } = useSettingsStore()
 
@@ -175,13 +177,13 @@ export default function Words() {
 
       {/* Header */}
       <div className="flex justify-between items-center gap-2 flex-wrap">
-        <h1 className="text-2xl font-bold">Vocabulario</h1>
+        <h1 className="text-2xl font-bold">{t('words.title')}</h1>
         <div className="flex items-center gap-2 flex-wrap">
           {/* View mode toggle */}
           <div className="flex rounded-xl overflow-hidden border border-slate-600">
             <button
               onClick={() => switchViewMode('list')}
-              title="Vista lista"
+              title={t('words.listView')}
               className={`py-2 px-3 text-sm transition-colors ${
                 viewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
               }`}
@@ -190,7 +192,7 @@ export default function Words() {
             </button>
             <button
               onClick={() => switchViewMode('flashcard')}
-              title="Modo tarjeta"
+              title={t('words.cardView')}
               className={`py-2 px-3 text-sm transition-colors ${
                 viewMode === 'flashcard' ? 'bg-blue-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
               }`}
@@ -203,7 +205,7 @@ export default function Words() {
           </button>
           <button
             onClick={() => setShowDeleteAll(true)}
-            title="Borrar todo"
+            title={t('words.deleteAll')}
             className="btn-secondary py-2 px-3 text-sm text-red-400 hover:text-red-300"
           >
             🗑
@@ -212,7 +214,7 @@ export default function Words() {
             onClick={() => { setIsAdding((v) => !v); setEditId(null) }}
             className="btn-primary py-2 px-4 text-sm"
           >
-            {isAdding ? 'Cancelar' : '+ Añadir'}
+            {isAdding ? t('words.cancel') : t('words.addWord')}
           </button>
         </div>
       </div>
@@ -221,7 +223,7 @@ export default function Words() {
       <div className="flex gap-2 flex-wrap">
         <input
           type="search"
-          placeholder="Buscar palabra..."
+          placeholder={t('words.search')}
           value={filterSearch}
           onChange={(e) => setFilterSearch(e.target.value)}
           className="flex-1 min-w-[120px] bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
@@ -231,9 +233,9 @@ export default function Words() {
           onChange={(e) => setFilterBox(e.target.value !== '' ? Number(e.target.value) : null)}
           className={SELECT_CLASS}
         >
-          <option value="">Todas las cajas</option>
+          <option value="">{t('words.allBoxes')}</option>
           {[0, 1, 2, 3, 4, 5, 6].map((b) => (
-            <option key={b} value={b}>Caja {b}</option>
+            <option key={b} value={b}>{t('words.box', { n: b })}</option>
           ))}
         </select>
         {temas.length > 0 && (
@@ -242,7 +244,7 @@ export default function Words() {
             onChange={(e) => setFilterTema(e.target.value !== '' ? Number(e.target.value) : null)}
             className={SELECT_CLASS}
           >
-            <option value="">Todos los temas</option>
+            <option value="">{t('words.allThemes')}</option>
             {temas.map((t) => (
               <option key={t.id} value={t.id}>{t.nombre}</option>
             ))}
@@ -253,7 +255,7 @@ export default function Words() {
       {/* Flashcard side toggle */}
       {viewMode === 'flashcard' && !isLoading && filtered.length > 0 && (
         <div className="flex items-center gap-1 text-xs">
-          <span className="text-slate-500 mr-1">Mostrar:</span>
+          <span className="text-slate-500 mr-1">{t('words.show')}</span>
           <button
             onClick={() => { setFlashSide('palabra'); setRevealed(new Set()) }}
             className={`px-3 py-1 rounded-lg transition-colors ${
@@ -262,7 +264,7 @@ export default function Words() {
                 : 'text-slate-500 hover:text-slate-300'
             }`}
           >
-            Palabra
+            {t('words.showWord')}
           </button>
           <button
             onClick={() => { setFlashSide('significado'); setRevealed(new Set()) }}
@@ -272,7 +274,7 @@ export default function Words() {
                 : 'text-slate-500 hover:text-slate-300'
             }`}
           >
-            Traducción
+            {t('words.showTranslation')}
           </button>
         </div>
       )}
@@ -280,8 +282,8 @@ export default function Words() {
       {/* Result count */}
       {!isLoading && (
         <p className="text-xs text-slate-500">
-          {filtered.length} {filtered.length === 1 ? 'palabra' : 'palabras'}
-          {(filterBox !== null || filterSearch || filterTema !== null) && ' · filtrado'}
+          {t('words.word', { count: filtered.length })}
+          {(filterBox !== null || filterSearch || filterTema !== null) && ` · ${t('words.filtered')}`}
         </p>
       )}
 
@@ -289,19 +291,19 @@ export default function Words() {
       {showDeleteAll && (
         <div className="card border border-red-500/40 space-y-3 animate-slide-up">
           <p className="text-sm text-slate-300">
-            ¿Eliminar <strong className="text-white">todas las palabras</strong>?
-            Esta acción no se puede deshacer.
+            {t('words.deleteAllTitle')} <br />
+            <span className="text-xs text-slate-500">{t('words.deleteAllDesc')}</span>
           </p>
           <div className="flex gap-3">
             <button onClick={() => setShowDeleteAll(false)} className="btn-secondary flex-1">
-              Cancelar
+              {t('words.cancel')}
             </button>
             <button
               onClick={handleDeleteAll}
               disabled={isBusy}
               className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded-xl px-4 py-2.5 font-medium transition-colors"
             >
-              {isBusy ? 'Eliminando...' : 'Eliminar todo'}
+              {isBusy ? t('words.deleting') : t('words.deleteAll')}
             </button>
           </div>
         </div>
@@ -313,14 +315,14 @@ export default function Words() {
           <div className="grid grid-cols-2 gap-2">
             <input
               className="input"
-              placeholder="Palabra (origen)"
+              placeholder={t('words.wordOrigin')}
               value={form.palabra}
               onChange={(e) => setAddField('palabra')(e.target.value)}
               required
             />
             <input
               className="input"
-              placeholder="Significado"
+              placeholder={t('words.meaning')}
               value={form.significado}
               onChange={(e) => setAddField('significado')(e.target.value)}
               required
@@ -337,28 +339,26 @@ export default function Words() {
             onTemaCreated={(t) => setTemas((prev) => [...prev, t])}
           />
           <button type="submit" disabled={isBusy} className="btn-primary w-full">
-            {isBusy ? 'Guardando...' : 'Guardar'}
+            {isBusy ? t('words.saving') : t('words.save')}
           </button>
         </form>
       )}
 
       {/* Content */}
       {isLoading ? (
-        <div className="text-center text-slate-400 py-12">Cargando...</div>
+        <div className="text-center text-slate-400 py-12">{t('common.loading')}</div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-5xl mb-3">{userWords.length === 0 ? '📭' : '🔍'}</div>
           <p className="text-slate-400">
-            {userWords.length === 0
-              ? 'Sin palabras todavía. ¡Añade la primera!'
-              : 'Sin resultados para este filtro'}
+            {userWords.length === 0 ? t('words.noWords') : t('words.noResults')}
           </p>
           {userWords.length > 0 && (
             <button
               onClick={() => { setFilterSearch(''); setFilterBox(null); setFilterTema(null) }}
               className="mt-3 text-sm text-blue-400 hover:text-blue-300 transition-colors"
             >
-              Limpiar filtros
+              {t('words.clearFilters')}
             </button>
           )}
         </div>
@@ -462,14 +462,14 @@ export default function Words() {
                 <button
                   onClick={() => setEditId(uw.word.id)}
                   className="text-slate-500 hover:text-blue-400 transition-colors px-2 shrink-0"
-                  title="Editar"
+                  title={t('common.edit')}
                 >
                   ✎
                 </button>
                 <button
                   onClick={() => handleDelete(uw.word.id)}
                   className="text-slate-500 hover:text-red-400 transition-colors px-2 text-lg shrink-0"
-                  title="Eliminar"
+                  title={t('common.delete')}
                 >
                   ✕
                 </button>
