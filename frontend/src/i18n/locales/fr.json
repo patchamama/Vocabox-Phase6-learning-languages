@@ -76,6 +76,9 @@
     "delete": "Supprimer",
     "edit": "Modifier",
     "noThemes": "Aucun thème pour l'instant.",
+    "pagination": "Pagination des mots",
+    "paginationDesc": "Quantités disponibles lors de la pagination de la liste de mots. Doivent être distinctes et en ordre croissant.",
+    "paginationSlot": "Option {{n}}",
     "exercises": {
       "pair_match": "Association de paires",
       "first_letter": "Première lettre",
@@ -151,7 +154,11 @@
     "showWord": "Mot",
     "showTranslation": "Traduction",
     "show": "Afficher :",
-    "box": "Boîte {{n}}"
+    "box": "Boîte {{n}}",
+    "perPage": "Par page",
+    "page": "Page {{current}} sur {{total}}",
+    "prev": "Précédent",
+    "next": "Suivant"
   },
   "stats": {
     "title": "Statistiques",

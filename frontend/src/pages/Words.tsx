@@ -32,7 +32,7 @@ const SELECT_CLASS =
 export default function Words() {
   const { t } = useTranslation()
   const [searchParams] = useSearchParams()
-  const { autoPlayAudio, wordsOnly } = useSettingsStore()
+  const { autoPlayAudio, wordsOnly, pageSizeOptions } = useSettingsStore()
 
   const speak = (palabra: string, idioma: string) => {
     speechSynthesis.cancel()
@@ -66,6 +66,10 @@ export default function Words() {
   const [viewMode, setViewMode] = useState<'list' | 'flashcard'>('list')
   const [flashSide, setFlashSide] = useState<'palabra' | 'significado'>('palabra')
   const [revealed, setRevealed] = useState<Set<number>>(new Set())
+
+  // ── Pagination ───────────────────────────────────────────────────────────────
+  const [pageSize, setPageSize] = useState(() => pageSizeOptions[1])
+  const [page, setPage] = useState(1)
 
   // ── Load ─────────────────────────────────────────────────────────────────────
   const load = async () => {
@@ -104,6 +108,10 @@ export default function Words() {
     return true
   })
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const safePage = Math.min(page, totalPages)
+  const paginated = filtered.slice((safePage - 1) * pageSize, safePage * pageSize)
+
   const toggleReveal = (uw: UserWord) => {
     const isCurrentlyRevealed = revealed.has(uw.word.id)
     setRevealed((prev) => {
@@ -121,6 +129,9 @@ export default function Words() {
     setViewMode(mode)
     setRevealed(new Set())
   }
+
+  // Reset page when filters or pageSize change
+  const resetPage = () => setPage(1)
 
   // ── Add ──────────────────────────────────────────────────────────────────────
   const handleAdd = async (e: FormEvent) => {
@@ -225,12 +236,12 @@ export default function Words() {
           type="search"
           placeholder={t('words.search')}
           value={filterSearch}
-          onChange={(e) => setFilterSearch(e.target.value)}
+          onChange={(e) => { setFilterSearch(e.target.value); resetPage() }}
           className="flex-1 min-w-[120px] bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
         />
         <select
           value={filterBox ?? ''}
-          onChange={(e) => setFilterBox(e.target.value !== '' ? Number(e.target.value) : null)}
+          onChange={(e) => { setFilterBox(e.target.value !== '' ? Number(e.target.value) : null); resetPage() }}
           className={SELECT_CLASS}
         >
           <option value="">{t('words.allBoxes')}</option>
@@ -241,7 +252,7 @@ export default function Words() {
         {temas.length > 0 && (
           <select
             value={filterTema ?? ''}
-            onChange={(e) => setFilterTema(e.target.value !== '' ? Number(e.target.value) : null)}
+            onChange={(e) => { setFilterTema(e.target.value !== '' ? Number(e.target.value) : null); resetPage() }}
             className={SELECT_CLASS}
           >
             <option value="">{t('words.allThemes')}</option>
@@ -279,12 +290,32 @@ export default function Words() {
         </div>
       )}
 
-      {/* Result count */}
+      {/* Result count + page size selector */}
       {!isLoading && (
-        <p className="text-xs text-slate-500">
-          {t('words.word', { count: filtered.length })}
-          {(filterBox !== null || filterSearch || filterTema !== null) && ` · ${t('words.filtered')}`}
-        </p>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <p className="text-xs text-slate-500">
+            {t('words.word', { count: filtered.length })}
+            {(filterBox !== null || filterSearch || filterTema !== null) && ` · ${t('words.filtered')}`}
+          </p>
+          {filtered.length > pageSizeOptions[0] && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">{t('words.perPage')}</span>
+              {pageSizeOptions.map((n) => (
+                <button
+                  key={n}
+                  onClick={() => { setPageSize(n); resetPage() }}
+                  className={`text-xs px-2 py-0.5 rounded-lg transition-colors ${
+                    pageSize === n
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Delete-all confirmation */}
@@ -366,7 +397,7 @@ export default function Words() {
 
         /* ── Flashcard mode ─────────────────────────────────────────────────── */
         <div className="flex flex-wrap gap-2">
-          {filtered.map((uw) => {
+          {paginated.map((uw) => {
             const isRevealed = revealed.has(uw.word.id)
             return isRevealed ? (
               <button
@@ -412,7 +443,7 @@ export default function Words() {
 
         /* ── List mode ──────────────────────────────────────────────────────── */
         <div className="space-y-2">
-          {filtered.map((uw) =>
+          {paginated.map((uw) =>
             editId === uw.word.id ? (
               <WordEditForm
                 key={uw.word.id}
@@ -476,6 +507,29 @@ export default function Words() {
               </div>
             )
           )}
+        </div>
+      )}
+
+      {/* ── Pagination bar ── */}
+      {!isLoading && totalPages > 1 && (
+        <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-700/60">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={safePage === 1}
+            className="btn-secondary py-1.5 px-4 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            ← {t('words.prev')}
+          </button>
+          <span className="text-xs text-slate-500">
+            {t('words.page', { current: safePage, total: totalPages })}
+          </span>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={safePage === totalPages}
+            className="btn-secondary py-1.5 px-4 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {t('words.next')} →
+          </button>
         </div>
       )}
     </div>

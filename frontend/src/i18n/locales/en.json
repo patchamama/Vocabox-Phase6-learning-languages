@@ -76,6 +76,9 @@
     "delete": "Delete",
     "edit": "Edit",
     "noThemes": "No themes yet.",
+    "pagination": "Words pagination",
+    "paginationDesc": "Available quantities when paginating the word list. Must be distinct and in ascending order.",
+    "paginationSlot": "Option {{n}}",
     "exercises": {
       "pair_match": "Pair match",
       "first_letter": "First letter",
@@ -151,7 +154,11 @@
     "showWord": "Word",
     "showTranslation": "Translation",
     "show": "Show:",
-    "box": "Box {{n}}"
+    "box": "Box {{n}}",
+    "perPage": "Per page",
+    "page": "Page {{current}} of {{total}}",
+    "prev": "Previous",
+    "next": "Next"
   },
   "stats": {
     "title": "Statistics",

@@ -76,6 +76,9 @@
     "delete": "Löschen",
     "edit": "Bearbeiten",
     "noThemes": "Noch keine Themen.",
+    "pagination": "Wörter-Paginierung",
+    "paginationDesc": "Verfügbare Mengen beim Blättern durch die Wortliste. Müssen unterschiedlich und aufsteigend sein.",
+    "paginationSlot": "Option {{n}}",
     "exercises": {
       "pair_match": "Paare zuordnen",
       "first_letter": "Erster Buchstabe",
@@ -151,7 +154,11 @@
     "showWord": "Wort",
     "showTranslation": "Übersetzung",
     "show": "Anzeigen:",
-    "box": "Box {{n}}"
+    "box": "Box {{n}}",
+    "perPage": "Pro Seite",
+    "page": "Seite {{current}} von {{total}}",
+    "prev": "Zurück",
+    "next": "Weiter"
   },
   "stats": {
     "title": "Statistik",

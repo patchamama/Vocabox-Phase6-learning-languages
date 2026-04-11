@@ -76,6 +76,9 @@
     "delete": "Elimina",
     "edit": "Modifica",
     "noThemes": "Nessun tema ancora.",
+    "pagination": "Paginazione parole",
+    "paginationDesc": "Quantità disponibili nella paginazione della lista parole. Devono essere distinte e in ordine crescente.",
+    "paginationSlot": "Opzione {{n}}",
     "exercises": {
       "pair_match": "Abbinamento coppie",
       "first_letter": "Prima lettera",
@@ -151,7 +154,11 @@
     "showWord": "Parola",
     "showTranslation": "Traduzione",
     "show": "Mostra:",
-    "box": "Casella {{n}}"
+    "box": "Casella {{n}}",
+    "perPage": "Per pagina",
+    "page": "Pag. {{current}} di {{total}}",
+    "prev": "Precedente",
+    "next": "Successivo"
   },
   "stats": {
     "title": "Statistiche",

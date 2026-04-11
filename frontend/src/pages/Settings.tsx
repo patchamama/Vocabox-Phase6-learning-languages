@@ -274,6 +274,57 @@ function ThemesManager() {
   )
 }
 
+// ─── Pagination Editor ────────────────────────────────────────────────────────
+
+const PAGE_SIZE_PRESETS = [5, 10, 20, 25, 30, 50, 75, 100]
+
+function PaginationEditor() {
+  const { t } = useTranslation()
+  const { pageSizeOptions, setPageSizeOption } = useSettingsStore()
+
+  const change = (slot: 0 | 1 | 2, delta: number) => {
+    const current = pageSizeOptions[slot]
+    const idx = PAGE_SIZE_PRESETS.indexOf(current)
+    const nextIdx = Math.min(PAGE_SIZE_PRESETS.length - 1, Math.max(0, idx + delta))
+    setPageSizeOption(slot, PAGE_SIZE_PRESETS[nextIdx])
+  }
+
+  return (
+    <div className="card space-y-4">
+      <div>
+        <h2 className="font-semibold text-slate-800 dark:text-slate-200">{t('settings.pagination')}</h2>
+        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{t('settings.paginationDesc')}</p>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        {([0, 1, 2] as const).map((slot) => (
+          <div key={slot} className="flex flex-col items-center gap-2 p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40">
+            <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">
+              {t('settings.paginationSlot', { n: slot + 1 })}
+            </span>
+            <span className="text-2xl font-bold text-slate-800 dark:text-white">{pageSizeOptions[slot]}</span>
+            <div className="flex gap-1 w-full">
+              <button
+                onClick={() => change(slot, -1)}
+                disabled={PAGE_SIZE_PRESETS.indexOf(pageSizeOptions[slot]) === 0}
+                className="flex-1 h-7 rounded-lg bg-slate-200 dark:bg-white/5 hover:bg-slate-300 dark:hover:bg-white/15 transition-colors text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                −
+              </button>
+              <button
+                onClick={() => change(slot, 1)}
+                disabled={PAGE_SIZE_PRESETS.indexOf(pageSizeOptions[slot]) === PAGE_SIZE_PRESETS.length - 1}
+                className="flex-1 h-7 rounded-lg bg-slate-200 dark:bg-white/5 hover:bg-slate-300 dark:hover:bg-white/15 transition-colors text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                +
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Settings Page ───────────────────────────────────────────────────────
 
 const WORDS_OPTIONS = [5, 10, 15, 20, 30]
@@ -431,6 +482,9 @@ export default function Settings() {
 
       {/* Leitner box days */}
       <LeitnerEditor />
+
+      {/* Pagination options */}
+      <PaginationEditor />
 
       {/* Themes CRUD */}
       <ThemesManager />

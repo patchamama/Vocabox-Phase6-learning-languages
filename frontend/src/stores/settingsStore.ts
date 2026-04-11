@@ -24,6 +24,8 @@ interface SettingsState {
   wordsOnly: boolean
   /** Days to wait per box level before word is due again (Leitner spacing) */
   leitnerDays: [number, number, number, number, number, number, number]
+  /** Words per page options in the Words list [slot1, slot2, slot3] */
+  pageSizeOptions: [number, number, number]
 
   setReviewMode: (mode: ReviewMode) => void
   setWordsPerSession: (n: number) => void
@@ -33,6 +35,7 @@ interface SettingsState {
   setAutoPlayAudio: (v: boolean) => void
   setWordsOnly: (v: boolean) => void
   setLeitnerDay: (box: number, days: number) => void
+  setPageSizeOption: (slot: 0 | 1 | 2, value: number) => void
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -48,6 +51,7 @@ export const useSettingsStore = create<SettingsState>()(
       autoPlayAudio: false,
       wordsOnly: false,
       leitnerDays: DEFAULT_LEITNER_DAYS,
+      pageSizeOptions: [10, 30, 50],
 
       setReviewMode: (reviewMode) => set({ reviewMode }),
       setWordsPerSession: (wordsPerSession) => set({ wordsPerSession }),
@@ -61,6 +65,12 @@ export const useSettingsStore = create<SettingsState>()(
           const next = [...state.leitnerDays] as [number, number, number, number, number, number, number]
           next[box] = days
           return { leitnerDays: next }
+        }),
+      setPageSizeOption: (slot, value) =>
+        set((state) => {
+          const next = [...state.pageSizeOptions] as [number, number, number]
+          next[slot] = value
+          return { pageSizeOptions: next }
         }),
     }),
     { name: 'vocabox-settings' }
