@@ -78,6 +78,8 @@ export const statsApi = {
 export const temasApi = {
   list: () => api.get('/temas'),
   create: (nombre: string, color: string) => api.post('/temas', { nombre, color }),
+  update: (id: number, nombre: string, color: string) => api.put(`/temas/${id}`, { nombre, color }),
+  delete: (id: number) => api.delete(`/temas/${id}`),
 }
 
 export const testApi = {

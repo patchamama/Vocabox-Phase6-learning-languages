@@ -1,15 +1,18 @@
 import { NavLink } from 'react-router-dom'
-
-const TABS = [
-  { to: '/', label: 'Inicio', icon: '🏠' },
-  { to: '/review', label: 'Repasar', icon: '📚' },
-  { to: '/words', label: 'Palabras', icon: '📝' },
-  { to: '/import', label: 'Importar', icon: '📥' },
-  { to: '/stats', label: 'Stats', icon: '📊' },
-  { to: '/settings', label: 'Config', icon: '⚙️' },
-]
+import { useTranslation } from 'react-i18next'
 
 export default function NavBar() {
+  const { t } = useTranslation()
+
+  const TABS = [
+    { to: '/', label: t('nav.home'), icon: '🏠' },
+    { to: '/review', label: t('nav.review'), icon: '📚' },
+    { to: '/words', label: t('nav.words'), icon: '📝' },
+    { to: '/import', label: t('nav.import'), icon: '📥' },
+    { to: '/stats', label: t('nav.stats'), icon: '📊' },
+    { to: '/settings', label: t('nav.settings'), icon: '⚙️' },
+  ]
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-slate-800 border-t border-slate-700">
       <div className="max-w-lg mx-auto flex">

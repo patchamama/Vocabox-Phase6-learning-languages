@@ -5,6 +5,9 @@ export type ReviewMode = 'simple' | 'safe'
 export type TransitionType = 'auto' | 'button'
 export type RoundType = 'pair_match' | 'first_letter' | 'anagram' | 'write' | 'multiple_choice' | 'random'
 
+// Default Leitner spacing: box 0 = same day, box 1 = 1d, box 2 = 2d, box 3 = 4d, box 4 = 7d, box 5 = 14d, box 6 = 30d
+export const DEFAULT_LEITNER_DAYS: [number, number, number, number, number, number, number] = [0, 1, 2, 4, 7, 14, 30]
+
 interface SettingsState {
   reviewMode: ReviewMode
   wordsPerSession: number
@@ -19,6 +22,8 @@ interface SettingsState {
   autoPlayAudio: boolean
   /** Filter out phrases (>2 words) across the whole app */
   wordsOnly: boolean
+  /** Days to wait per box level before word is due again (Leitner spacing) */
+  leitnerDays: [number, number, number, number, number, number, number]
 
   setReviewMode: (mode: ReviewMode) => void
   setWordsPerSession: (n: number) => void
@@ -27,6 +32,7 @@ interface SettingsState {
   setSafeRound: (round: 1 | 2 | 3, type: RoundType) => void
   setAutoPlayAudio: (v: boolean) => void
   setWordsOnly: (v: boolean) => void
+  setLeitnerDay: (box: number, days: number) => void
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -41,6 +47,8 @@ export const useSettingsStore = create<SettingsState>()(
       safeRound3: 'random',
       autoPlayAudio: false,
       wordsOnly: false,
+      leitnerDays: DEFAULT_LEITNER_DAYS,
+
       setReviewMode: (reviewMode) => set({ reviewMode }),
       setWordsPerSession: (wordsPerSession) => set({ wordsPerSession }),
       setTransitionDelay: (transitionDelay) => set({ transitionDelay }),
@@ -48,6 +56,12 @@ export const useSettingsStore = create<SettingsState>()(
       setSafeRound: (round, type) => set({ [`safeRound${round}`]: type } as Pick<SettingsState, 'safeRound1' | 'safeRound2' | 'safeRound3'>),
       setAutoPlayAudio: (autoPlayAudio) => set({ autoPlayAudio }),
       setWordsOnly: (wordsOnly) => set({ wordsOnly }),
+      setLeitnerDay: (box, days) =>
+        set((state) => {
+          const next = [...state.leitnerDays] as [number, number, number, number, number, number, number]
+          next[box] = days
+          return { leitnerDays: next }
+        }),
     }),
     { name: 'vocabox-settings' }
   )

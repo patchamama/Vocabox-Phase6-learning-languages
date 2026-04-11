@@ -8,6 +8,7 @@ import Register from './pages/Register'
 import Review from './pages/Review'
 import Settings from './pages/Settings'
 import Stats from './pages/Stats'
+import UserProfile from './pages/UserProfile'
 import Words from './pages/Words'
 import { useAuthStore } from './stores/authStore'
 
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="import" element={<Import />} />
           <Route path="stats" element={<Stats />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="profile" element={<UserProfile />} />
         </Route>
       </Routes>
     </BrowserRouter>

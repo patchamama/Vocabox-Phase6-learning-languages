@@ -1,18 +1,24 @@
 import { FormEvent, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/authStore'
+import { useUserProfileStore } from '../stores/userProfileStore'
 
 export default function Register() {
+  const { t } = useTranslation()
+  const [name, setName] = useState('')
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const { register, isLoading, error, clearError } = useAuthStore()
+  const { setDisplayName } = useUserProfileStore()
   const navigate = useNavigate()
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     try {
       await register(username, email, password)
+      if (name.trim()) setDisplayName(name.trim())
       navigate('/')
     } catch {
       // error shown from store
@@ -24,7 +30,7 @@ export default function Register() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <h1 className="text-5xl font-bold text-blue-400 tracking-tight">Vocabox</h1>
-          <p className="text-slate-400 mt-2">Crea tu cuenta</p>
+          <p className="text-slate-400 mt-2">{t('register.title')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="card space-y-4">
@@ -35,7 +41,18 @@ export default function Register() {
           )}
 
           <div>
-            <label className="text-sm text-slate-400 block mb-1">Usuario</label>
+            <label className="text-sm text-slate-400 block mb-1">{t('register.name')}</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="input"
+              placeholder={t('register.namePlaceholder')}
+            />
+          </div>
+
+          <div>
+            <label className="text-sm text-slate-400 block mb-1">{t('register.username')}</label>
             <input
               type="text"
               value={username}
@@ -47,19 +64,19 @@ export default function Register() {
           </div>
 
           <div>
-            <label className="text-sm text-slate-400 block mb-1">Email</label>
+            <label className="text-sm text-slate-400 block mb-1">{t('register.email')}</label>
             <input
               type="email"
               value={email}
               onChange={(e) => { clearError(); setEmail(e.target.value) }}
               className="input"
-              placeholder="tu@email.com"
+              placeholder={t('profile.emailPlaceholder')}
               required
             />
           </div>
 
           <div>
-            <label className="text-sm text-slate-400 block mb-1">Contraseña</label>
+            <label className="text-sm text-slate-400 block mb-1">{t('register.password')}</label>
             <input
               type="password"
               value={password}
@@ -72,13 +89,13 @@ export default function Register() {
           </div>
 
           <button type="submit" className="btn-primary w-full" disabled={isLoading}>
-            {isLoading ? 'Creando cuenta...' : 'Crear cuenta'}
+            {isLoading ? t('common.loading') : t('register.register')}
           </button>
 
           <p className="text-center text-slate-400 text-sm">
-            ¿Ya tienes cuenta?{' '}
+            {t('register.haveAccount')}{' '}
             <Link to="/login" className="text-blue-400 hover:text-blue-300">
-              Inicia sesión
+              {t('register.login')}
             </Link>
           </p>
         </form>
