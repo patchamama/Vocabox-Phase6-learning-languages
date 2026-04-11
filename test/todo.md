@@ -29,3 +29,7 @@
 - [x] Generar en diferentes idiomas la app. Cuando alguien se registre, que pregunte por el idioma a usar en la interface. También poner modo claro/oscuro. 
 
 - [ ] Hacer un build del frontend en el backend, para preparar el deployment y para ello crea un script deploy.sh que permita hacer esto automáticamente, haciendo el npm build, copiando en el backend el build. Has esta integración. 	
+
+- [ ] Que cada usuario tenga un id único de la aplicación y que se pueda enviar a otros usuarios el id para seguirse ambos (sí se acepta) y así poder ver como otras personas progresan y motivarse. En "modo plan" interactuar con la IA para pensar en opciones de motivación entre usuarios.
+- [ ] Agregar opción de maestro, que permita crear automáticamente vocabularios que se integrarían en los alumnos, enviar a alumnos invitación, que el maestro pueda ver cómo va el progreso de cada alumno y los alumnos también para en modo competición tener lugares, qué los alumnos puedan escribir dudas al maestro. También que se puedan formar grupos de alumnos (aleatorio o que los mismos alumnos puedan elegir) y en el grupo vayan avanzando con los vocabularios. Ver esto con Albe con programa Quizlet.
+- [ ] Para apple store / google play, ver opción de que funcione con base de datos local y no con Rest API. 
