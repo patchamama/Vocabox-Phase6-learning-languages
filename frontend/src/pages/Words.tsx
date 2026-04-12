@@ -458,6 +458,7 @@ export default function Words() {
                 }}
                 onSaved={() => { setEditId(null); load() }}
                 onCancel={() => setEditId(null)}
+                onDeleted={() => { setEditId(null); load() }}
               />
             ) : (
               <div key={uw.word.id} className="card flex items-center gap-3 py-3">

@@ -218,7 +218,17 @@
     "meaning": "Significato",
     "save": "Salva",
     "saving": "Salvataggio…",
-    "cancel": "Annulla"
+    "cancel": "Annulla",
+    "advanced": "Avanzate",
+    "splitBtn": "Dividi",
+    "splitChar": "Separatore",
+    "splitCreating": "Creazione di {{count}} voci…",
+    "splitMismatch": "{{words}} parole e {{meanings}} significati — le quantità devono corrispondere.",
+    "splitSuccess": "{{count}} voci create.",
+    "splitSkipped": "({{count}} già esistenti, saltate.)",
+    "deleteBtn": "Elimina",
+    "deleteConfirm": "Confermare?",
+    "deleting": "Eliminazione…"
   },
   "temaSelect": {
     "noTheme": "Nessun tema",

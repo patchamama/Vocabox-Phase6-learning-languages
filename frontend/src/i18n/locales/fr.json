@@ -218,7 +218,17 @@
     "meaning": "Signification",
     "save": "Enregistrer",
     "saving": "Enregistrement…",
-    "cancel": "Annuler"
+    "cancel": "Annuler",
+    "advanced": "Avancé",
+    "splitBtn": "Diviser",
+    "splitChar": "Séparateur",
+    "splitCreating": "Création de {{count}} entrées…",
+    "splitMismatch": "{{words}} mots et {{meanings}} significations — les quantités doivent correspondre.",
+    "splitSuccess": "{{count}} entrées créées.",
+    "splitSkipped": "({{count}} existaient déjà, ignorées.)",
+    "deleteBtn": "Supprimer",
+    "deleteConfirm": "Confirmer ?",
+    "deleting": "Suppression…"
   },
   "temaSelect": {
     "noTheme": "Aucun thème",

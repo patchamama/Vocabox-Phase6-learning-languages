@@ -218,7 +218,17 @@
     "meaning": "Meaning",
     "save": "Save",
     "saving": "Saving…",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "advanced": "Advanced",
+    "splitBtn": "Split",
+    "splitChar": "Separator",
+    "splitCreating": "Creating {{count}} entries…",
+    "splitMismatch": "{{words}} words and {{meanings}} meanings — counts must match.",
+    "splitSuccess": "{{count}} entries created.",
+    "splitSkipped": "({{count}} already existed, skipped.)",
+    "deleteBtn": "Delete",
+    "deleteConfirm": "Confirm?",
+    "deleting": "Deleting…"
   },
   "temaSelect": {
     "noTheme": "No theme",

@@ -497,6 +497,7 @@ export default function Review() {
               setIsEditing(false)
             }}
             onCancel={() => setIsEditing(false)}
+            onDeleted={() => { setIsEditing(false); loadReview(selectedBoxes, wordsPerSession, reviewMode, [safeRound1, safeRound2, safeRound3], wordsOnly) }}
           />
         </div>
       )}

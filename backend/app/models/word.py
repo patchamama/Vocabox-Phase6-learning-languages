@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, Integer, String
+from sqlalchemy import Column, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from ..database import Base
@@ -6,6 +6,9 @@ from ..database import Base
 
 class Word(Base):
     __tablename__ = "words"
+    __table_args__ = (
+        UniqueConstraint("palabra", "significado", name="uq_word_palabra_significado"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     palabra = Column(String(200), nullable=False)

@@ -93,9 +93,27 @@ def create_word(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    word = Word(**data.model_dump())
-    db.add(word)
-    db.flush()
+    # Reuse existing word if palabra+significado already exist (case-insensitive trim)
+    palabra = data.palabra.strip()
+    significado = data.significado.strip()
+    word = (
+        db.query(Word)
+        .filter(Word.palabra == palabra, Word.significado == significado)
+        .first()
+    )
+    if not word:
+        word = Word(**{**data.model_dump(), "palabra": palabra, "significado": significado})
+        db.add(word)
+        db.flush()
+
+    # Only create UserWord if this user doesn't already have it
+    existing_uw = (
+        db.query(UserWord)
+        .filter(UserWord.user_id == current_user.id, UserWord.word_id == word.id)
+        .first()
+    )
+    if existing_uw:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Word already in your list")
 
     user_word = UserWord(
         user_id=current_user.id,
