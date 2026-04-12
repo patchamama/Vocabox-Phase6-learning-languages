@@ -66,6 +66,7 @@ export default function Words() {
   const [viewMode, setViewMode] = useState<'list' | 'flashcard'>('list')
   const [flashSide, setFlashSide] = useState<'palabra' | 'significado'>('palabra')
   const [revealed, setRevealed] = useState<Set<number>>(new Set())
+  const [seen, setSeen] = useState<Set<number>>(new Set())
 
   // ── Pagination ───────────────────────────────────────────────────────────────
   const pageSize = selectedPageSize
@@ -115,6 +116,7 @@ export default function Words() {
 
   const toggleReveal = (uw: UserWord) => {
     const isCurrentlyRevealed = revealed.has(uw.word.id)
+    if (isCurrentlyRevealed) setSeen((prev) => new Set(prev).add(uw.word.id))
     setRevealed((prev) => {
       const next = new Set(prev)
       if (isCurrentlyRevealed) next.delete(uw.word.id)
@@ -432,7 +434,11 @@ export default function Words() {
               <button
                 key={uw.word.id}
                 onClick={() => toggleReveal(uw)}
-                className="px-3 py-1.5 bg-slate-800 border border-slate-600 rounded-lg text-sm hover:bg-slate-700 hover:border-slate-500 transition-colors active:scale-95"
+                className={`px-3 py-1.5 bg-slate-800 border rounded-lg text-sm transition-colors active:scale-95 ${
+                  seen.has(uw.word.id)
+                    ? 'border-slate-700 text-slate-500 line-through hover:bg-slate-700 hover:border-slate-600'
+                    : 'border-slate-600 hover:bg-slate-700 hover:border-slate-500'
+                }`}
               >
                 {flashSide === 'palabra' ? uw.word.palabra : uw.word.significado}
               </button>

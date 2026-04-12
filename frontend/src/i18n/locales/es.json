@@ -266,7 +266,19 @@
     "errorPending_other": "{{count}} pendientes de repasar",
     "errorReview": "🔁 Repaso de errores",
     "continue": "Continuar →",
-    "continuingIn": "Continuando en {{seconds}}s…"
+    "continuingIn": "Continuando en {{seconds}}s…",
+    "motivational": [
+      "¡Übung macht den Meister! La práctica hace al maestro.",
+      "Ogni lingua è una visione del mondo — ¡ya tenés una más!",
+      "Wer rastet, der rostet. ¡No pares nunca!",
+      "C'est en forgeant qu'on devient forgeron. ¡Seguí así!",
+      "Chi va piano va sano e va lontano. Paso a paso llegás lejos.",
+      "¡Fantástico! El vocabulario se construye ladrillo a ladrillo.",
+      "A língua é a alma de um povo — ¡y vos ya hablás su idioma!",
+      "Vouloir c'est pouvoir. ¡Querés, podés y lo estás demostrando!",
+      "Repetitio est mater studiorum — la repetición es la madre del aprendizaje.",
+      "¡Ein Land, eine Sprache — und ya sabés más de una!"
+    ]
   },
   "languages": {
     "en": "Inglés",

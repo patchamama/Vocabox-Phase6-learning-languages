@@ -1,4 +1,5 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import confetti from 'canvas-confetti'
 import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import AnagramExercise from '../components/exercises/AnagramExercise'
@@ -28,6 +29,18 @@ const BOX_BG = [
   'bg-blue-500',
   'bg-purple-500',
 ]
+
+// ── Confetti burst ────────────────────────────────────────────────────────────
+function fireConfetti() {
+  const end = Date.now() + 2200
+  const colors = ['#60a5fa', '#34d399', '#fbbf24', '#f472b6', '#a78bfa']
+  const frame = () => {
+    confetti({ particleCount: 3, angle: 60, spread: 55, origin: { x: 0 }, colors })
+    confetti({ particleCount: 3, angle: 120, spread: 55, origin: { x: 1 }, colors })
+    if (Date.now() < end) requestAnimationFrame(frame)
+  }
+  frame()
+}
 
 // ── ProgressBar (isolated to prevent re-renders on tooltip hover) ─────────────
 const ProgressBar = memo(function ProgressBar({
@@ -129,6 +142,24 @@ export default function Review() {
   const [isEditing, setIsEditing] = useState(false)
   const [headerTooltip, setHeaderTooltip] = useState<{ lines: string[]; color: 'blue' | 'red' } | null>(null)
 
+  // Pick a random motivational phrase (stable per session-finish)
+  const motivationalPhrases = t('session.motivational', { returnObjects: true }) as string[]
+  const motivationalPhrase = useMemo(
+    () => Array.isArray(motivationalPhrases) ? motivationalPhrases[Math.floor(Math.random() * motivationalPhrases.length)] : '',
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isFinished]
+  )
+
+  // Fire confetti when finishing with ≥85%
+  useEffect(() => {
+    if (!isFinished) return
+    const totalW = allWords.length
+    const incorrectC = incorrectWordIds.length
+    const correctC = totalW - incorrectC
+    const pctC = totalW > 0 ? Math.round((correctC / totalW) * 100) : 0
+    if (pctC >= 85) fireConfetti()
+  }, [isFinished, allWords.length, incorrectWordIds.length])
+
   const boxesParam = searchParams.get('boxes')
   const selectedBoxes = boxesParam
     ? boxesParam.split(',').map(Number).filter((n) => !isNaN(n))
@@ -220,6 +251,7 @@ export default function Review() {
     const total = totalWords
     const pct = total > 0 ? Math.round((correctCount / total) * 100) : 0
     const boxPrefix = t('box.prefix')
+    const isGreat = pct >= 85 && total > 0
 
     // Build flow data: which boxes had movement
     // advanced[fromBox]      = count that moved UP
@@ -259,10 +291,15 @@ export default function Review() {
 
           {/* Header */}
           <div className="text-center">
-            <div className="text-6xl mb-3">{total === 0 ? '📭' : pct >= 70 ? '🎉' : '💪'}</div>
+            <div className="text-6xl mb-3">{total === 0 ? '📭' : pct >= 85 ? '🏆' : pct >= 70 ? '🎉' : '💪'}</div>
             <h2 className="text-2xl font-bold">
               {total === 0 ? t('session.noWords') : t('session.completed')}
             </h2>
+            {isGreat && motivationalPhrase && (
+              <p className="mt-3 text-sm text-blue-300 italic leading-snug px-2">
+                {motivationalPhrase}
+              </p>
+            )}
           </div>
 
           {/* Accuracy + totals */}
@@ -391,7 +428,10 @@ export default function Review() {
     : 0
 
   // Words lists for tooltips
-  const wordName = (id: number) => allWords.find((w) => w.user_word_id === id)?.palabra ?? String(id)
+  const wordName = (id: number) => {
+    const w = allWords.find((w) => w.user_word_id === id)
+    return w ? `${w.palabra} (${t('box.prefix')}${w.box_level})` : String(id)
+  }
   const correctWords = correctWordIds.map((id, i) => `${i + 1}. ${wordName(id)}`)
   const incorrectWords = incorrectWordIds.map((id, i) => `${i + 1}. ${wordName(id)}`)
 
@@ -559,6 +599,7 @@ export default function Review() {
           <FirstLetterExercise
             key={word.user_word_id}
             word={word}
+            autoPlay={autoPlayAudio}
             autoAdvanceMs={autoAdvanceMs}
             onAnswer={(correct) => onSingleAnswer(correct)}
           />

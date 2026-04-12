@@ -16,6 +16,7 @@ interface Props {
   onAnswer: (correct: boolean) => void
   /** ms to wait before calling onAnswer(true). 0 = caller handles timing */
   autoAdvanceMs?: number
+  autoPlay?: boolean
 }
 
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz'
@@ -34,7 +35,7 @@ function buildLetterPool(initials: string[]): string[] {
   return [...initials, ...extras].sort(() => Math.random() - 0.5)
 }
 
-export default function FirstLetterExercise({ word, onAnswer, autoAdvanceMs }: Props) {
+export default function FirstLetterExercise({ word, onAnswer, autoAdvanceMs, autoPlay = false }: Props) {
   const { t } = useTranslation()
   const target = word.significado
   const targetWords = useMemo(() => target.trim().split(/\s+/), [target])
@@ -44,10 +45,22 @@ export default function FirstLetterExercise({ word, onAnswer, autoAdvanceMs }: P
   const [chosen, setChosen] = useState<string[]>([])
   const [flash, setFlash] = useState<'error' | 'correct' | null>(null)
 
+  const speak = () => {
+    speechSynthesis.cancel()
+    const u = new SpeechSynthesisUtterance(word.palabra)
+    u.lang = word.idioma_origen
+    speechSynthesis.speak(u)
+  }
+
   useEffect(() => {
     setChosen([])
     setFlash(null)
-  }, [word.user_word_id])
+    if (!autoPlay) return
+    speechSynthesis.cancel()
+    const timer = setTimeout(() => speak(), 150)
+    return () => { clearTimeout(timer); speechSynthesis.cancel() }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [word.user_word_id, autoPlay])
 
   // Keyboard support
   useEffect(() => {
@@ -97,6 +110,13 @@ export default function FirstLetterExercise({ word, onAnswer, autoAdvanceMs }: P
           {langPair(word.idioma_origen, word.idioma_destino)}
         </p>
         <p className="text-4xl font-bold">{word.palabra}</p>
+        <button
+          onClick={speak}
+          className="text-2xl text-slate-400 hover:text-blue-400 transition-colors mt-2"
+          title="Escuchar"
+        >
+          🔊
+        </button>
         {word.tema_nombre && (
           <span
             className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full font-medium text-white"

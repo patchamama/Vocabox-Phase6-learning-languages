@@ -266,7 +266,19 @@
     "errorPending_other": "{{count}} ausstehend zum Wiederholen",
     "errorReview": "🔁 Fehlerwiederholung",
     "continue": "Weiter →",
-    "continuingIn": "Weiter in {{seconds}}s…"
+    "continuingIn": "Weiter in {{seconds}}s…",
+    "motivational": [
+      "Übung macht den Meister — du beweist es gerade!",
+      "Ogni lingua è una visione del mondo — deine Welt wird größer!",
+      "Wer rastet, der rostet. Weiter so — niemals aufhören!",
+      "C'est en forgeant qu'on devient forgeron. Du schmiedest deine Sprachkenntnisse!",
+      "Chi va piano va sano e va lontano. Schritt für Schritt ans Ziel.",
+      "Fantastisch! Vokabular entsteht Wort für Wort.",
+      "A língua é a alma de um povo — und du sprichst schon ihre Sprache!",
+      "Vouloir c'est pouvoir — Wollen ist Können. Du zeigst es!",
+      "Repetitio est mater studiorum — Wiederholung ist die Mutter des Lernens.",
+      "Eine Sprache ist nie genug — du bist auf dem richtigen Weg!"
+    ]
   },
   "languages": {
     "en": "Englisch",

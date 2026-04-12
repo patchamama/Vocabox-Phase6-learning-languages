@@ -266,7 +266,19 @@
     "errorPending_other": "{{count}} pending review",
     "errorReview": "🔁 Error review",
     "continue": "Continue →",
-    "continuingIn": "Continuing in {{seconds}}s…"
+    "continuingIn": "Continuing in {{seconds}}s…",
+    "motivational": [
+      "Übung macht den Meister — practice makes perfect!",
+      "Ogni lingua è una visione del mondo — and you're expanding yours!",
+      "Wer rastet, der rostet. Keep going — never stop!",
+      "C'est en forgeant qu'on devient forgeron. You're forging your fluency!",
+      "Chi va piano va sano e va lontano. Step by step, you'll get there.",
+      "Fantastic! Vocabulary is built one word at a time.",
+      "A língua é a alma de um povo — and you're speaking their language!",
+      "Vouloir c'est pouvoir. You're proving it right now!",
+      "Repetitio est mater studiorum — repetition is the mother of learning.",
+      "Ein Land, eine Sprache — and you're mastering more than one!"
+    ]
   },
   "languages": {
     "en": "English",
