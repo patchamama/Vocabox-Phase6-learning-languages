@@ -127,6 +127,7 @@ export default function Review() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [isEditing, setIsEditing] = useState(false)
+  const [headerTooltip, setHeaderTooltip] = useState<{ lines: string[]; color: 'blue' | 'red' } | null>(null)
 
   const boxesParam = searchParams.get('boxes')
   const selectedBoxes = boxesParam
@@ -232,7 +233,7 @@ export default function Review() {
 
     const wordLabel = (id: number) => {
       const w = allWords.find((w) => w.user_word_id === id)
-      return w ? w.word : String(id)
+      return w ? w.palabra : String(id)
     }
 
     for (const m of boxMoves) {
@@ -413,13 +414,21 @@ export default function Review() {
               : exerciseType ? t(`settings.exercises.${exerciseType}`) : ''}
           </span>
           <div className="flex items-center gap-2">
-            {results.correct > 0 && (
-              <span className="text-green-400 font-medium">✓ {results.correct}</span>
+            {correctWordIds.length > 0 && (
+              <span
+                className="text-green-400 font-medium cursor-default"
+                onMouseEnter={() => correctWords.length > 0 && setHeaderTooltip({ lines: correctWords, color: 'blue' })}
+                onMouseLeave={() => setHeaderTooltip(null)}
+              >✓ {correctWordIds.length}</span>
             )}
-            {results.incorrect > 0 && (
-              <span className="text-red-400 font-medium">✗ {results.incorrect}</span>
+            {incorrectWordIds.length > 0 && (
+              <span
+                className="text-red-400 font-medium cursor-default"
+                onMouseEnter={() => incorrectWords.length > 0 && setHeaderTooltip({ lines: incorrectWords, color: 'red' })}
+                onMouseLeave={() => setHeaderTooltip(null)}
+              >✗ {incorrectWordIds.length}</span>
             )}
-            <span className="text-slate-500">{totalWords - results.correct - results.incorrect}</span>
+            <span className="text-slate-500">{totalWords - correctWordIds.length - incorrectWordIds.length}</span>
             {!isPairMode && word && (
               <span
                 className={`text-xs px-2 py-0.5 rounded-full font-bold text-slate-900 ${BOX_BG[word.box_level] ?? 'bg-slate-500'}`}
@@ -458,6 +467,13 @@ export default function Review() {
           incorrectWords={incorrectWords}
           t={t as (key: string, opts?: Record<string, unknown>) => string}
         />
+
+        {headerTooltip && (
+          <div className={`absolute top-full mt-1 left-0 z-50 max-w-xs rounded-lg px-3 py-2 text-xs shadow-xl pointer-events-none
+            ${headerTooltip.color === 'blue' ? 'bg-blue-900/95 text-blue-100 border border-blue-700' : 'bg-red-900/95 text-red-100 border border-red-700'}`}>
+            {headerTooltip.lines.map((line, i) => <div key={i}>{line}</div>)}
+          </div>
+        )}
       </div>
 
       {/* ── Inline edit panel ── */}
