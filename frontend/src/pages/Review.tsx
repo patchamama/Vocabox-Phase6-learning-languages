@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import confetti from 'canvas-confetti'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import AnagramExercise from '../components/exercises/AnagramExercise'
 import FirstLetterExercise from '../components/exercises/FirstLetterExercise'
@@ -56,7 +56,7 @@ const ProgressBar = memo(function ProgressBar({
     <div className="relative">
       <div className="bg-slate-700 rounded-full h-2 flex overflow-hidden">
         <div className="bg-blue-500 h-2 transition-all duration-500" style={{ width: `${greenPct}%` }} />
-        {errSize > 0 && (
+        {redPct > 0 && (
           <div className="bg-red-500/70 h-2 transition-all duration-500" style={{ width: `${redPct}%` }} />
         )}
       </div>
@@ -71,7 +71,7 @@ const ProgressBar = memo(function ProgressBar({
             onMouseLeave={() => setTooltip(null)}
           />
         )}
-        {errSize > 0 && redPct > 0 && (
+        {redPct > 0 && (
           <div
             className="h-full cursor-default"
             style={{ width: `${redPct}%` }}
@@ -101,17 +101,22 @@ const ProgressBar = memo(function ProgressBar({
   )
 })
 
+const LAST_ERRORS_KEY = 'vocabox:lastErrors'
+
+export function getLastErrors(): number[] {
+  try { return JSON.parse(localStorage.getItem(LAST_ERRORS_KEY) ?? '[]') } catch { return [] }
+}
+
 export default function Review() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const {
     reviewMode, wordsPerSession, transitionDelay, transitionType,
-    safeRound1, safeRound2, safeRound3, autoPlayAudio, wordsOnly,
+    safeRound1, safeRound2, safeRound3, autoPlayAudio, autoPlayAudioReversed, wordsOnly, reviewDirection,
   } = useSettingsStore()
 
   const {
-    results,
-    boxMoves,
     isLoading,
     isFinished,
     inErrorPhase,
@@ -121,6 +126,7 @@ export default function Review() {
     allWords,
     correctWordIds,
     incorrectWordIds,
+    results,
     loadReview,
     handleSingleAnswer,
     handlePairMatchComplete,
@@ -129,11 +135,11 @@ export default function Review() {
     currentWord,
     currentExerciseType,
     currentPairWords,
-    progressPct,
     errorQueueSize,
     errorResolvedCount,
     totalIterations,
     doneIterations,
+    sessionConfig,
   } = useReviewStore()
 
   const [lastEntry, setLastEntry] = useState<LastEntry | null>(null)
@@ -143,6 +149,13 @@ export default function Review() {
 
   const [isEditing, setIsEditing] = useState(false)
   const [headerTooltip, setHeaderTooltip] = useState<{ lines: string[]; color: 'blue' | 'red' } | null>(null)
+  // Derived: show banner when active session was loaded with different config
+  const settingsChangedBanner = !isFinished && allWords.length > 0 && sessionConfig !== null && (
+    sessionConfig.reviewDirection !== reviewDirection ||
+    sessionConfig.reviewMode !== reviewMode ||
+    sessionConfig.wordsPerSession !== wordsPerSession ||
+    sessionConfig.wordsOnly !== wordsOnly
+  )
 
   // Pick a motivational phrase matching session languages (stable per session-finish)
   const motivationalPhrase = useMemo(() => {
@@ -170,7 +183,7 @@ export default function Review() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isFinished])
 
-  // Fire confetti when finishing with ≥85%
+  // On session finish: confetti + persist last errors
   useEffect(() => {
     if (!isFinished) return
     const totalW = allWords.length
@@ -178,7 +191,14 @@ export default function Review() {
     const correctC = totalW - incorrectC
     const pctC = totalW > 0 ? Math.round((correctC / totalW) * 100) : 0
     if (pctC >= 85) fireConfetti()
-  }, [isFinished, allWords.length, incorrectWordIds.length])
+    // Extra confetti for mastered words (in C6, correct, and NOT in incorrectWordIds)
+    const hasMastered = correctWordIds
+      .filter((id) => !incorrectWordIds.includes(id))
+      .some((id) => allWords.find((w) => w.user_word_id === id)?.box_level === 6)
+    if (hasMastered) setTimeout(fireConfetti, 1200)
+    // Persist incorrect word ids for "last errors" filter in Words page
+    localStorage.setItem(LAST_ERRORS_KEY, JSON.stringify(incorrectWordIds))
+  }, [isFinished, allWords.length, incorrectWordIds.length, correctWordIds, allWords])
 
   const boxesParam = searchParams.get('boxes')
   const selectedBoxes = boxesParam
@@ -189,13 +209,14 @@ export default function Review() {
     // Only load if not already in an active session
     const state = useReviewStore.getState()
     if (!state.isFinished && state.allWords.length === 0) {
-      loadReview(selectedBoxes, wordsPerSession, reviewMode, [safeRound1, safeRound2, safeRound3], wordsOnly)
+      loadReview(selectedBoxes, wordsPerSession, reviewMode, [safeRound1, safeRound2, safeRound3], wordsOnly, reviewDirection)
     }
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
 
   // ── Transition logic ─────────────────────────────────────────────────────────
   /**
@@ -263,47 +284,85 @@ export default function Review() {
   }
 
   if (isFinished) {
+    // ── Integrity checks ─────────────────────────────────────────────────────
+    // 1. Any ID in both lists? Remove from correct (incorrect is authoritative).
+    const crossIds = correctWordIds.filter((id) => incorrectWordIds.includes(id))
+    if (crossIds.length > 0) {
+      console.error(
+        '[Review] INTEGRITY: IDs found in both correctWordIds and incorrectWordIds — removing from correct.',
+        crossIds.map((id) => {
+          const w = allWords.find((w) => w.user_word_id === id)
+          return `id=${id} palabra="${w?.palabra ?? '?'}"`
+        })
+      )
+    }
+    const safeCorrectIds = correctWordIds.filter((id) => !incorrectWordIds.includes(id))
+
+    // 2. sum check: correct + incorrect must equal total words in session
+    const expectedTotal = allWords.length
+    const actualSum = safeCorrectIds.length + incorrectWordIds.length
+    if (actualSum !== expectedTotal) {
+      console.error(
+        `[Review] INTEGRITY: correct(${safeCorrectIds.length}) + incorrect(${incorrectWordIds.length}) = ${actualSum} ≠ totalWords(${expectedTotal}).`,
+        'Missing IDs:',
+        allWords
+          .filter((w) => !safeCorrectIds.includes(w.user_word_id) && !incorrectWordIds.includes(w.user_word_id))
+          .map((w) => `id=${w.user_word_id} palabra="${w.palabra}"`)
+      )
+    }
+
     // Word-level summary: a word is "incorrect" if it failed at least once,
-    // "correct" only if it never failed. Avoids inflating counts in safe mode (3 rounds).
+    // "correct" only if it never failed.
     const totalWords = allWords.length
     const incorrectCount = incorrectWordIds.length
-    const correctCount = totalWords - incorrectCount
+    const correctCount = safeCorrectIds.length
     const total = totalWords
     const pct = total > 0 ? Math.round((correctCount / total) * 100) : 0
     const boxPrefix = t('box.prefix')
-    const isGreat = pct >= 85 && total > 0
 
-    // Build flow data: which boxes had movement
-    // advanced[fromBox]      = count that moved UP
-    // dropped[fromBox]       = count that fell to 0
-    // advancedWords[fromBox] = word labels that moved UP
-    // droppedWords[fromBox]  = word labels that fell to 0
+    // Build flow diagram from correctWordIds / incorrectWordIds — deterministic, no async deps.
+    // Correct words (never failed) → advanced one box (or stayed at 6 = mastered).
+    // Incorrect words (failed at least once) → dropped to box 0.
     const advanced: Record<number, number> = {}
     const dropped: Record<number, number> = {}
     const advancedWords: Record<number, string[]> = {}
     const droppedWords: Record<number, string[]> = {}
+    const masteredWords: string[] = []
 
-    const wordLabel = (id: number) => {
+    for (const id of safeCorrectIds) {
       const w = allWords.find((w) => w.user_word_id === id)
-      return w ? w.palabra : String(id)
-    }
-
-    for (const m of boxMoves) {
-      const label = wordLabel(m.userWordId)
-      if (m.toBox === 0 && m.fromBox > 0) {
-        dropped[m.fromBox] = (dropped[m.fromBox] ?? 0) + 1
-        droppedWords[m.fromBox] = [...(droppedWords[m.fromBox] ?? []), label]
-      } else if (m.toBox === 0 && m.fromBox === 0) {
-        // failed while in C0 — show on the C0→C1 arrow as red
-        dropped[0] = (dropped[0] ?? 0) + 1
-        droppedWords[0] = [...(droppedWords[0] ?? []), label]
-      } else if (m.toBox > m.fromBox) {
-        advanced[m.fromBox] = (advanced[m.fromBox] ?? 0) + 1
-        advancedWords[m.fromBox] = [...(advancedWords[m.fromBox] ?? []), label]
+      if (!w) continue
+      const fromBox = w.box_level
+      const label = w.palabra
+      if (fromBox === 6) {
+        masteredWords.push(label)
+      } else {
+        advanced[fromBox] = (advanced[fromBox] ?? 0) + 1
+        advancedWords[fromBox] = [...(advancedWords[fromBox] ?? []), label]
       }
     }
-    // Boxes that had any activity
-    const activeBoxes = [...new Set(boxMoves.map((m) => m.fromBox))].sort((a, b) => a - b)
+
+    for (const id of incorrectWordIds) {
+      const w = allWords.find((w) => w.user_word_id === id)
+      if (!w) continue
+      const fromBox = w.box_level
+      const label = w.palabra
+      if (fromBox === 0) {
+        // Was already in C0, failed → stays in C0. Skip (no movement to show).
+        // Still appears in "Errors by box" section below.
+        void label
+      } else {
+        dropped[fromBox] = (dropped[fromBox] ?? 0) + 1
+        droppedWords[fromBox] = [...(droppedWords[fromBox] ?? []), label]
+      }
+    }
+
+    const activeBoxes = [
+      ...new Set([
+        ...safeCorrectIds.map((id) => allWords.find((w) => w.user_word_id === id)?.box_level ?? -1),
+        ...incorrectWordIds.map((id) => allWords.find((w) => w.user_word_id === id)?.box_level ?? -1),
+      ].filter((b) => b >= 0)),
+    ].sort((a, b) => a - b)
 
     return (
       <div className="p-4 pt-8 min-h-screen flex flex-col items-center">
@@ -315,12 +374,21 @@ export default function Review() {
             <h2 className="text-2xl font-bold">
               {total === 0 ? t('session.noWords') : t('session.completed')}
             </h2>
-            {isGreat && motivationalPhrase && (
+            {motivationalPhrase && (
               <p className="mt-3 text-sm text-blue-300 italic leading-snug px-2">
                 {motivationalPhrase}
               </p>
             )}
           </div>
+
+          {/* Mastered words (C6 → stayed at C6) */}
+          {masteredWords.length > 0 && (
+            <div className="card text-center space-y-2 border border-yellow-500/40 bg-yellow-500/5">
+              <div className="text-3xl">🌟</div>
+              <h3 className="text-sm font-bold text-yellow-300">{t('session.mastered', { count: masteredWords.length })}</h3>
+              <p className="text-[11px] text-yellow-200/70 leading-snug">{masteredWords.join(' · ')}</p>
+            </div>
+          )}
 
           {/* Accuracy + totals */}
           {total > 0 && (
@@ -343,18 +411,6 @@ export default function Review() {
           {activeBoxes.length > 0 && (
             <div className="card space-y-3">
               <h3 className="text-[10px] font-medium text-slate-500 uppercase tracking-widest">{t('session.boxFlow')}</h3>
-
-              {/* Stuck-at-C0 warning — words that failed while in C0 */}
-              {(dropped[0] ?? 0) > 0 && (
-                <div className="rounded-lg bg-red-900/30 border border-red-700/40 px-2 py-1.5">
-                  <p className="text-[10px] text-red-400 font-semibold mb-1">
-                    {boxPrefix}0 ⇄ {boxPrefix}0 · {dropped[0]}
-                  </p>
-                  <p className="text-[10px] text-red-300/80 leading-snug">
-                    {(droppedWords[0] ?? []).join(' · ')}
-                  </p>
-                </div>
-              )}
 
               <div className="overflow-x-auto">
                 {/* Row 1: C0 pill + down-arrow toward C1 row (only if words advanced from C0) */}
@@ -421,8 +477,41 @@ export default function Review() {
             </div>
           )}
 
+          {/* Errors by box */}
+          {incorrectWordIds.length > 0 && (() => {
+            // Group incorrect words by their original box (box_level from allWords, captured at load time)
+            const byBox: Record<number, string[]> = {}
+            for (const id of incorrectWordIds) {
+              const w = allWords.find((w) => w.user_word_id === id)
+              if (!w) continue
+              byBox[w.box_level] = [...(byBox[w.box_level] ?? []), w.palabra]
+            }
+            const sortedBoxes = Object.keys(byBox).map(Number).sort((a, b) => a - b)
+            return (
+              <div className="card space-y-3">
+                <h3 className="text-[10px] font-medium text-slate-500 uppercase tracking-widest">{t('session.errorsByBox')}</h3>
+                {sortedBoxes.map((box) => (
+                  <div key={box} className="space-y-1">
+                    <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded ${BOX_BG[box] ?? 'bg-slate-600'} text-slate-900`}>
+                      {boxPrefix}{box}
+                    </span>
+                    <p className="text-[11px] text-red-300/80 leading-snug">
+                      {byBox[box].join(' · ')}
+                    </p>
+                  </div>
+                ))}
+                <button
+                  onClick={() => navigate('/words?filter=lastErrors')}
+                  className="w-full text-xs text-blue-400 hover:text-blue-300 border border-blue-500/30 hover:border-blue-400/50 rounded-xl py-2 px-3 transition-colors bg-blue-500/5 hover:bg-blue-500/10"
+                >
+                  🔍 {t('session.reviewErrors')}
+                </button>
+              </div>
+            )
+          })()}
+
           <button
-            onClick={() => loadReview(selectedBoxes, wordsPerSession, reviewMode, [safeRound1, safeRound2, safeRound3], wordsOnly)}
+            onClick={() => loadReview(selectedBoxes, wordsPerSession, reviewMode, [safeRound1, safeRound2, safeRound3], wordsOnly, reviewDirection)}
             className="btn-primary w-full"
           >
             {total === 0 ? t('session.refresh') : t('session.newSession')}
@@ -436,18 +525,21 @@ export default function Review() {
   const exerciseType = currentExerciseType()
   const pairWords = currentPairWords()
   const isPairMode = exerciseType === 'pair_match'
+  // Auto-play: suppress when reversed unless explicitly enabled
+  const shouldAutoPlay = autoPlayAudio && (word?.reversed ? autoPlayAudioReversed : true)
 
   if (!isPairMode && !word) return null
   if (isPairMode && pairWords.length < 2) return null
 
-  // ── Progress ─────────────────────────────────────────────────────────────────
-  const greenPct = progressPct()
-  const totalWords = allWords.length
+  // ── Progress — iteration-based (not word-based) ──────────────────────────────
+  // greenPct = correct iterations / total iterations
+  // redPct   = incorrect iterations / total iterations
+  // Both grow independently, never shrink.
+  const totalIter = totalIterations()
+  const greenPct = totalIter > 0 ? (results.correct / totalIter) * 100 : 0
+  const redPct   = totalIter > 0 ? (results.incorrect / totalIter) * 100 : 0
   const errSize = errorQueueSize()
   const errResolved = errorResolvedCount()
-  const redPct = errSize > 0
-    ? ((errSize - errResolved) / Math.max(totalWords + errSize, 1)) * 100
-    : 0
 
   // Words lists for tooltips
   const wordName = (id: number) => {
@@ -461,6 +553,21 @@ export default function Review() {
 
   return (
     <div className="p-4 pt-8 min-h-screen flex flex-col">
+
+      {/* ── Settings changed banner ── */}
+      {settingsChangedBanner && (
+        <div className="mb-3 flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-300 text-sm animate-slide-up">
+          <span>⚙ {t('session.settingsChanged')}</span>
+          <button
+            onClick={() => {
+              loadReview(selectedBoxes, wordsPerSession, reviewMode, [safeRound1, safeRound2, safeRound3], wordsOnly, reviewDirection)
+            }}
+            className="text-xs font-semibold bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded-lg px-3 py-1 transition-colors shrink-0"
+          >
+            {t('session.newSession')}
+          </button>
+        </div>
+      )}
 
       {/* ── Progress bar ── */}
       <div className="mb-4 relative">
@@ -559,7 +666,7 @@ export default function Review() {
               setIsEditing(false)
             }}
             onCancel={() => setIsEditing(false)}
-            onDeleted={() => { setIsEditing(false); loadReview(selectedBoxes, wordsPerSession, reviewMode, [safeRound1, safeRound2, safeRound3], wordsOnly) }}
+            onDeleted={() => { setIsEditing(false); loadReview(selectedBoxes, wordsPerSession, reviewMode, [safeRound1, safeRound2, safeRound3], wordsOnly, reviewDirection) }}
           />
         </div>
       )}
@@ -607,21 +714,21 @@ export default function Review() {
           <WriteExercise
             key={word.user_word_id}
             word={word}
-            autoPlay={autoPlayAudio}
+            autoPlay={shouldAutoPlay}
             onAnswer={(correct, input) => onSingleAnswer(correct, input)}
           />
         ) : word && exerciseType === 'multiple_choice' ? (
           <MultipleChoiceExercise
             key={word.user_word_id}
             word={word}
-            autoPlay={autoPlayAudio}
+            autoPlay={shouldAutoPlay}
             onAnswer={(correct, input) => onSingleAnswer(correct, input)}
           />
         ) : word && exerciseType === 'first_letter' ? (
           <FirstLetterExercise
             key={word.user_word_id}
             word={word}
-            autoPlay={autoPlayAudio}
+            autoPlay={shouldAutoPlay}
             autoAdvanceMs={autoAdvanceMs}
             onAnswer={(correct) => onSingleAnswer(correct)}
           />

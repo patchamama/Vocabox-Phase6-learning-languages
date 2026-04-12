@@ -65,6 +65,7 @@ export default function FirstLetterExercise({ word, onAnswer, autoAdvanceMs, aut
   // Keyboard support
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onAnswer(false); return }
       const ch = e.key.toLowerCase()
       if (ch.length !== 1 || !/[a-záéíóúüàèìòùñäëïöüß]/.test(ch)) return
       pick(ch)
@@ -193,6 +194,16 @@ export default function FirstLetterExercise({ word, onAnswer, autoAdvanceMs, aut
           </button>
         ))}
       </div>
+
+      {/* Don't know button */}
+      <button
+        type="button"
+        onClick={() => onAnswer(false)}
+        className="w-full text-xs text-slate-500 hover:text-slate-300 transition-colors pt-1"
+      >
+        <kbd className="inline-flex items-center px-1 py-0.5 rounded border border-slate-600 text-[9px] font-mono text-slate-500 mr-1">Esc</kbd>
+        {t('settings.exercises.dontKnow')}
+      </button>
     </div>
   )
 }

@@ -334,9 +334,9 @@ export default function Settings() {
   const { t } = useTranslation()
   const {
     reviewMode, wordsPerSession, transitionDelay, transitionType,
-    safeRound1, safeRound2, safeRound3, autoPlayAudio, wordsOnly,
+    safeRound1, safeRound2, safeRound3, autoPlayAudio, autoPlayAudioReversed, wordsOnly, reviewDirection,
     setReviewMode, setWordsPerSession, setTransitionDelay, setTransitionType,
-    setSafeRound, setAutoPlayAudio, setWordsOnly,
+    setSafeRound, setAutoPlayAudio, setAutoPlayAudioReversed, setWordsOnly, setReviewDirection,
   } = useSettingsStore()
 
   return (
@@ -381,6 +381,26 @@ export default function Settings() {
         </div>
       )}
 
+      {/* Review direction */}
+      <div className="card space-y-3">
+        <h2 className="font-semibold text-slate-800 dark:text-slate-200">{t('settings.reviewDirection')}</h2>
+        <p className="text-xs text-slate-400 dark:text-slate-500">{t('settings.reviewDirectionDesc')}</p>
+        {(['forward', 'reverse', 'both'] as const).map((dir) => (
+          <button
+            key={dir}
+            onClick={() => setReviewDirection(dir)}
+            className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+              reviewDirection === dir
+                ? 'border-blue-500 bg-blue-500/10'
+                : 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 hover:border-slate-400 dark:hover:border-slate-500'
+            }`}
+          >
+            <div className="font-medium text-slate-900 dark:text-white">{t(`settings.direction_${dir}`)}</div>
+            <div className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{t(`settings.direction_${dir}Desc`)}</div>
+          </button>
+        ))}
+      </div>
+
       {/* Words per session */}
       <div className="card space-y-3">
         <h2 className="font-semibold text-slate-800 dark:text-slate-200">{t('settings.wordsPerSession')}</h2>
@@ -414,6 +434,12 @@ export default function Settings() {
           onChange={setAutoPlayAudio}
           label={t('settings.autoPlayAudio')}
           description={t('settings.autoPlayAudioDesc')}
+        />
+        <Toggle
+          value={autoPlayAudioReversed}
+          onChange={setAutoPlayAudioReversed}
+          label={t('settings.autoPlayAudioReversed')}
+          description={t('settings.autoPlayAudioReversedDesc')}
         />
       </div>
 

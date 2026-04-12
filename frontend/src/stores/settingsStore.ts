@@ -4,6 +4,7 @@ import { persist } from 'zustand/middleware'
 export type ReviewMode = 'simple' | 'safe'
 export type TransitionType = 'auto' | 'button'
 export type RoundType = 'pair_match' | 'first_letter' | 'anagram' | 'write' | 'multiple_choice' | 'random'
+export type ReviewDirection = 'forward' | 'reverse' | 'both'
 
 // Default Leitner spacing: box 0 = same day, box 1 = 1d, box 2 = 2d, box 3 = 4d, box 4 = 7d, box 5 = 14d, box 6 = 30d
 export const DEFAULT_LEITNER_DAYS: [number, number, number, number, number, number, number] = [0, 1, 2, 4, 7, 14, 30]
@@ -20,6 +21,8 @@ interface SettingsState {
   safeRound3: RoundType
   /** Auto-play word pronunciation when an exercise loads */
   autoPlayAudio: boolean
+  /** Also auto-play when the exercise is reversed (meaning → word). Default false. */
+  autoPlayAudioReversed: boolean
   /** Filter out phrases (>2 words) across the whole app */
   wordsOnly: boolean
   /** Days to wait per box level before word is due again (Leitner spacing) */
@@ -28,6 +31,8 @@ interface SettingsState {
   pageSizeOptions: [number, number, number]
   /** Currently selected page size in the Words list */
   selectedPageSize: number
+  /** Direction of review: forward (word→meaning), reverse (meaning→word), both (random) */
+  reviewDirection: ReviewDirection
 
   setReviewMode: (mode: ReviewMode) => void
   setWordsPerSession: (n: number) => void
@@ -35,10 +40,12 @@ interface SettingsState {
   setTransitionType: (t: TransitionType) => void
   setSafeRound: (round: 1 | 2 | 3, type: RoundType) => void
   setAutoPlayAudio: (v: boolean) => void
+  setAutoPlayAudioReversed: (v: boolean) => void
   setWordsOnly: (v: boolean) => void
   setLeitnerDay: (box: number, days: number) => void
   setPageSizeOption: (slot: 0 | 1 | 2, value: number) => void
   setSelectedPageSize: (n: number) => void
+  setReviewDirection: (d: ReviewDirection) => void
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -52,10 +59,12 @@ export const useSettingsStore = create<SettingsState>()(
       safeRound2: 'first_letter',
       safeRound3: 'random',
       autoPlayAudio: false,
+      autoPlayAudioReversed: false,
       wordsOnly: false,
       leitnerDays: DEFAULT_LEITNER_DAYS,
       pageSizeOptions: [10, 30, 50],
       selectedPageSize: 30,
+      reviewDirection: 'forward',
 
       setReviewMode: (reviewMode) => set({ reviewMode }),
       setWordsPerSession: (wordsPerSession) => set({ wordsPerSession }),
@@ -63,6 +72,7 @@ export const useSettingsStore = create<SettingsState>()(
       setTransitionType: (transitionType) => set({ transitionType }),
       setSafeRound: (round, type) => set({ [`safeRound${round}`]: type } as Pick<SettingsState, 'safeRound1' | 'safeRound2' | 'safeRound3'>),
       setAutoPlayAudio: (autoPlayAudio) => set({ autoPlayAudio }),
+      setAutoPlayAudioReversed: (autoPlayAudioReversed) => set({ autoPlayAudioReversed }),
       setWordsOnly: (wordsOnly) => set({ wordsOnly }),
       setLeitnerDay: (box, days) =>
         set((state) => {
@@ -77,6 +87,7 @@ export const useSettingsStore = create<SettingsState>()(
           return { pageSizeOptions: next }
         }),
       setSelectedPageSize: (selectedPageSize) => set({ selectedPageSize }),
+      setReviewDirection: (reviewDirection) => set({ reviewDirection }),
     }),
     { name: 'vocabox-settings' }
   )

@@ -96,6 +96,11 @@ export default function WriteExercise({ word, onAnswer, autoPlay = false }: Prop
   // Alt+key shortcuts — work even when input has focus
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !revealedRef.current && !showOptionsRef.current) {
+        setIsCorrect(false)
+        setRevealed(true)
+        return
+      }
       if (e.key.length !== 1) return
       const key = stripAccent(e.key.toLowerCase())
 

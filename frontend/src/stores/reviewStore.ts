@@ -17,7 +17,7 @@
 import { create } from 'zustand'
 import { reviewApi } from '../api/client'
 import type { ReviewWord } from '../types'
-import type { RoundType } from './settingsStore'
+import type { ReviewDirection, RoundType } from './settingsStore'
 
 export type ExerciseType =
   | 'multiple_choice'
@@ -92,6 +92,73 @@ function shuffleNoConsecutive(items: QueueItem[]): QueueItem[] {
     }
   }
   return arr
+}
+
+// ── Direction: forward / reverse / both ──────────────────────────────────────
+
+/**
+ * Build choices for a reversed word.
+ * `correctAnswer` = palabra_original (what the user must type/select).
+ * Distractors come from other words' `palabra` field (original pool, pre-swap).
+ * The stimulus (significado_original) must NOT appear in choices.
+ */
+function buildChoicesForReversed(
+  correctAnswer: string,
+  stimulus: string,
+  wordId: number,
+  allWords: ReviewWord[],
+  count = 3
+): string[] {
+  const pool = allWords
+    .filter((w) =>
+      w.user_word_id !== wordId &&
+      w.palabra !== correctAnswer &&
+      w.palabra !== stimulus         // don't include the stimulus as a distractor
+    )
+    .map((w) => w.palabra)
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+  }
+  const distractors = pool.slice(0, count)
+  return [correctAnswer, ...distractors].sort(() => Math.random() - 0.5)
+}
+
+/**
+ * Swap palabra ↔ significado and idiomas so exercises always see:
+ *   palabra  = stimulus (shown to user)
+ *   significado = expected answer
+ */
+function reverseWord(word: ReviewWord, allWords: ReviewWord[]): ReviewWord {
+  return {
+    ...word,
+    reversed: true,
+    palabra: word.significado,          // stimulus = original meaning
+    significado: word.palabra,          // answer   = original word
+    idioma_origen: word.idioma_destino,
+    idioma_destino: word.idioma_origen,
+    choices: buildChoicesForReversed(
+      word.palabra,       // correctAnswer = palabra original
+      word.significado,   // stimulus      = significado original (must not appear in choices)
+      word.user_word_id,
+      allWords
+    ),
+  }
+}
+
+/**
+ * Apply the review direction to a word list.
+ * forward: unchanged
+ * reverse: all words swapped
+ * both: each word randomly swapped or not
+ */
+function applyDirection(words: ReviewWord[], direction: ReviewDirection): ReviewWord[] {
+  if (direction === 'forward') return words
+  return words.map((w) => {
+    const shouldReverse =
+      direction === 'reverse' ? true : Math.random() < 0.5
+    return shouldReverse ? reverseWord(w, words) : w
+  })
 }
 
 // ── Queue building ────────────────────────────────────────────────────────────
@@ -253,13 +320,16 @@ interface ReviewState {
   isLoading: boolean
   isFinished: boolean
   mode: 'simple' | 'safe'
+  /** Config snapshot used when the current session was loaded */
+  sessionConfig: { reviewMode: string; wordsPerSession: number; reviewDirection: string; wordsOnly: boolean } | null
 
   loadReview: (
     boxes?: number[],
     limit?: number,
     mode?: 'simple' | 'safe',
     rounds?: [RoundType, RoundType, RoundType],
-    wordsOnly?: boolean
+    wordsOnly?: boolean,
+    direction?: ReviewDirection
   ) => Promise<void>
   handleSingleAnswer: (userWordId: number, correct: boolean) => void
   handlePairMatchComplete: (incorrectWordIds: number[]) => void
@@ -300,6 +370,7 @@ const INITIAL_DATA = {
   isLoading: false,
   isFinished: false,
   mode: 'simple' as 'simple' | 'safe',
+  sessionConfig: null as { reviewMode: string; wordsPerSession: number; reviewDirection: string; wordsOnly: boolean } | null,
 }
 
 // ── Advance logic ─────────────────────────────────────────────────────────────
@@ -493,13 +564,20 @@ function findFirstItemOfRound(round: number, items: QueueItem[], totalRounds: nu
 export const useReviewStore = create<ReviewState>((set, get) => ({
   ...INITIAL_DATA,
 
-  loadReview: async (boxes, limit = 20, mode = 'simple', rounds = ['pair_match', 'first_letter', 'random'], wordsOnly = false) => {
-    log('loadReview: limit=', limit, 'mode=', mode, 'wordsOnly=', wordsOnly)
-    set({ ...INITIAL_DATA, isLoading: true, mode })
+  loadReview: async (boxes, limit = 20, mode = 'simple', rounds = ['pair_match', 'first_letter', 'random'], wordsOnly = false, direction = 'forward') => {
+    log('loadReview: limit=', limit, 'mode=', mode, 'wordsOnly=', wordsOnly, 'direction=', direction)
+    // Clear last-errors so Words page filter resets
+    localStorage.removeItem('vocabox:lastErrors')
+    set({
+      ...INITIAL_DATA,
+      isLoading: true,
+      mode,
+      sessionConfig: { reviewMode: mode, wordsPerSession: limit, reviewDirection: direction, wordsOnly },
+    })
 
     try {
       const { data } = await reviewApi.getReview(limit, boxes, wordsOnly)
-      const words: ReviewWord[] = data
+      const words: ReviewWord[] = applyDirection(data, direction)
       log('loadReview: received', words.length, 'words')
       if (words.length !== limit) console.warn(`[review] requested ${limit} words but received ${words.length}`)
 
@@ -537,7 +615,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   },
 
   handleSingleAnswer: (userWordId, correct) => {
-    const { wordState, currentRound, errorQueue, results, correctWordIds, incorrectWordIds, mode } = get()
+    const { wordState, currentRound, errorQueue, results, mode } = get()
     const ws = wordState[userWordId]
     if (!ws) return
 
@@ -559,23 +637,38 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       if (allRoundsDone && !ws.errorSubmitted) {
         log('  word fully done, submitting to backend')
         const fromBox = get().allWords.find((w) => w.user_word_id === userWordId)?.box_level ?? 0
+        const estimatedToBox = fromBox < 6 ? fromBox + 1 : 6
+        // Register move immediately so finish screen always shows full diagram
+        set((s) => ({ boxMoves: [...s.boxMoves, { fromBox, toBox: estimatedToBox, userWordId }] }))
         reviewApi.submitAnswer(userWordId, true).then((res) => {
           const toBox = res.data.new_box_level
-          set((s) => ({ boxMoves: [...s.boxMoves, { fromBox, toBox, userWordId }] }))
+          if (toBox !== estimatedToBox) {
+            set((s) => ({
+              boxMoves: s.boxMoves.map((m) =>
+                m.userWordId === userWordId && m.fromBox === fromBox && m.toBox === estimatedToBox
+                  ? { ...m, toBox }
+                  : m
+              ),
+            }))
+          }
         }).catch(() => {})
       }
 
-      const newCorrectIds = correctWordIds.includes(userWordId)
-        ? correctWordIds
-        : [...correctWordIds, userWordId]
-
-      set({
-        results: updatedResults,
-        correctWordIds: newCorrectIds,
-        wordState: {
-          ...wordState,
-          [userWordId]: { ...ws, roundDone: newRoundDone },
-        },
+      // Always read fresh state — previous set() calls (boxMoves) may have mutated store
+      set((s) => {
+        const freshCorrect = s.correctWordIds
+        const freshIncorrect = s.incorrectWordIds
+        const newCorrectIds = freshCorrect.includes(userWordId) || freshIncorrect.includes(userWordId)
+          ? freshCorrect
+          : [...freshCorrect, userWordId]
+        if (freshCorrect === newCorrectIds && freshIncorrect.includes(userWordId)) {
+          log('  SKIP add to correctIds — already in incorrectIds, id=', userWordId)
+        }
+        return {
+          results: updatedResults,
+          correctWordIds: newCorrectIds,
+          wordState: { ...s.wordState, [userWordId]: { ...s.wordState[userWordId]!, roundDone: newRoundDone } },
+        }
       })
       advance(get, set)
     } else {
@@ -591,23 +684,23 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
         }).catch(() => {})
       }
 
-      const newIncorrectIds = incorrectWordIds.includes(userWordId)
-        ? incorrectWordIds
-        : [...incorrectWordIds, userWordId]
-      // Re-read correctWordIds from state to avoid any stale closure
-      const freshCorrectIds = get().correctWordIds
-      const newCorrectIdsOnError = freshCorrectIds.filter((id) => id !== userWordId)
-      log('  removing from correctWordIds: id=', userWordId, 'before=', freshCorrectIds, 'after=', newCorrectIdsOnError)
-
-      set({
-        results: updatedResults,
-        incorrectWordIds: newIncorrectIds,
-        correctWordIds: newCorrectIdsOnError,
-        errorQueue: newErrorQueue,
-        wordState: {
-          ...wordState,
-          [userWordId]: { ...ws, inErrorQueue: true, errorSubmitted: isFirstError ? true : ws.errorSubmitted },
-        },
+      set((s) => {
+        const freshIncorrect = s.incorrectWordIds
+        const newIncorrectIds = freshIncorrect.includes(userWordId)
+          ? freshIncorrect
+          : [...freshIncorrect, userWordId]
+        // Word failed — must not be in correctWordIds regardless of previous rounds
+        const newCorrectIds = s.correctWordIds.filter((id) => id !== userWordId)
+        return {
+          results: updatedResults,
+          incorrectWordIds: newIncorrectIds,
+          correctWordIds: newCorrectIds,
+          errorQueue: newErrorQueue,
+          wordState: {
+            ...s.wordState,
+            [userWordId]: { ...s.wordState[userWordId]!, inErrorQueue: true, errorSubmitted: isFirstError ? true : ws.errorSubmitted },
+          },
+        }
       })
       advance(get, set)
     }
@@ -621,7 +714,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       return
     }
 
-    const { wordState, errorQueue, results, correctWordIds, incorrectWordIds, currentRound, mode } = state
+    const { wordState, errorQueue, results, currentRound, mode } = state
     const activeIds = item.userWordIds.filter((id) => {
       const ws = wordState[id]
       return ws && !ws.roundDone[currentRound] && !ws.inErrorQueue
@@ -645,6 +738,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       if (hadError) {
         addIncorrect++
         if (!newIncorrectWordIds.includes(id)) newIncorrectWordIds = [...newIncorrectWordIds, id]
+        // Remove from correct — failed words must never be in correctWordIds
         newCorrectWordIds = newCorrectWordIds.filter((cid) => cid !== id)
         if (!ws.inErrorQueue) {
           newErrorQueue = [...newErrorQueue, id]
@@ -666,22 +760,39 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
           : newRoundDone[0] && newRoundDone[1] && newRoundDone[2]
         if (allDone && !ws.errorSubmitted) {
           const fromBox = get().allWords.find((w) => w.user_word_id === id)?.box_level ?? 0
+          const estimatedToBox = fromBox < 6 ? fromBox + 1 : 6
+          set((s) => ({ boxMoves: [...s.boxMoves, { fromBox, toBox: estimatedToBox, userWordId: id }] }))
           reviewApi.submitAnswer(id, true).then((res) => {
             const toBox = res.data.new_box_level
-            set((s) => ({ boxMoves: [...s.boxMoves, { fromBox, toBox, userWordId: id }] }))
+            if (toBox !== estimatedToBox) {
+              set((s) => ({
+                boxMoves: s.boxMoves.map((m) =>
+                  m.userWordId === id && m.fromBox === fromBox && m.toBox === estimatedToBox
+                    ? { ...m, toBox }
+                    : m
+                ),
+              }))
+            }
           }).catch(() => {})
         }
         newWordState[id] = { ...ws, roundDone: newRoundDone }
       }
     }
 
-    set({
+    // Validate cross-contamination before committing
+    const crossInPair = newCorrectWordIds.filter((id) => newIncorrectWordIds.includes(id))
+    if (crossInPair.length > 0) {
+      console.error('[ReviewStore] handlePairMatchComplete INTEGRITY: IDs in both lists, removing from correct:', crossInPair)
+    }
+    const safeCorrectPair = newCorrectWordIds.filter((id) => !newIncorrectWordIds.includes(id))
+
+    set((s) => ({
       results: { correct: results.correct + addCorrect, incorrect: results.incorrect + addIncorrect },
-      correctWordIds: newCorrectWordIds,
+      correctWordIds: safeCorrectPair,
       incorrectWordIds: newIncorrectWordIds,
       errorQueue: newErrorQueue,
-      wordState: newWordState,
-    })
+      wordState: { ...s.wordState, ...newWordState },
+    }))
     advance(get, set)
   },
 
@@ -716,14 +827,13 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   },
 
   currentExerciseType: () => {
-    const { inErrorPhase, currentRound, roundWordTypes, wordState, errorQueue, errorQueuePos } = get()
+    const { inErrorPhase, currentRound, roundWordTypes, errorQueue, errorQueuePos } = get()
     const item = get().currentItem()
     if (!item) return null
     if (item.kind === 'pair') return 'pair_match'
 
     if (inErrorPhase) {
       const id = errorQueue[errorQueuePos]
-      const ws = wordState[id]
       const word = get().allWords.find((w) => w.user_word_id === id)
       if (!word) return 'multiple_choice'
       if (isPhrase(word)) return 'multiple_choice'
@@ -742,19 +852,10 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   },
 
   progressPct: () => {
-    const { allWords, wordState, mode, currentRound, totalRounds } = get()
-    if (allWords.length === 0) return 0
-
-    if (mode === 'simple') {
-      const done = allWords.filter((w) => wordState[w.user_word_id]?.roundDone[0]).length
-      return (done / allWords.length) * 100
-    }
-
-    // Safe mode: progress within current round
-    const done = allWords.filter((w) => wordState[w.user_word_id]?.roundDone[currentRound]).length
-    const roundBase = currentRound / totalRounds
-    const roundProgress = done / allWords.length / totalRounds
-    return (roundBase + roundProgress) * 100
+    const { results, allWords, totalRounds } = get()
+    const total = allWords.length * totalRounds
+    if (total === 0) return 0
+    return (results.correct / total) * 100
   },
 
   errorQueueSize: () => get().errorQueue.length,

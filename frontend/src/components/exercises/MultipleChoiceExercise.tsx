@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ReviewWord } from '../../types'
 import { langPair } from '../../utils/langFlags'
 import { stripAccent } from '../../utils/normalize'
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export default function MultipleChoiceExercise({ word, onAnswer, autoPlay = false }: Props) {
+  const { t } = useTranslation()
   const [selected, setSelected] = useState<string | null>(null)
   const choices = word.choices ?? [word.significado]
   const shortcuts = assignShortcuts(choices)
@@ -39,6 +41,7 @@ export default function MultipleChoiceExercise({ word, onAnswer, autoPlay = fals
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { if (!selectedRef.current) onAnswer(false, ''); return }
       if (e.altKey) return  // let browser handle Alt combos
       if (selectedRef.current) return
       if (e.key.length !== 1) return
@@ -100,6 +103,18 @@ export default function MultipleChoiceExercise({ word, onAnswer, autoPlay = fals
           </button>
         ))}
       </div>
+
+      {/* Don't know button */}
+      {!selected && (
+        <button
+          type="button"
+          onClick={() => onAnswer(false, '')}
+          className="w-full text-xs text-slate-500 hover:text-slate-300 transition-colors pt-1"
+        >
+          <kbd className="inline-flex items-center px-1 py-0.5 rounded border border-slate-600 text-[9px] font-mono text-slate-500 mr-1">Esc</kbd>
+          {t('settings.exercises.dontKnow')}
+        </button>
+      )}
     </div>
   )
 }

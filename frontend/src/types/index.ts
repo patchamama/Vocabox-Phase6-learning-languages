@@ -46,6 +46,8 @@ export interface ReviewWord {
   tema_id: number | null
   tema_nombre: string | null
   tema_color: string | null
+  /** True when the word was swapped (significado→palabra direction) */
+  reversed?: boolean
 }
 
 export interface ImportRowPreview {

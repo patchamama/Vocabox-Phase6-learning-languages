@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { getLastErrors } from './Review'
 import { useTranslation } from 'react-i18next'
 import { languagesApi, temasApi, wordsApi } from '../api/client'
 import LanguageSelect from '../components/LanguageSelect'
@@ -185,6 +186,7 @@ function sortUserWords(words: UserWord[], field: SortField, dir: SortDir): UserW
 
 export default function Words() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { autoPlayAudio, wordsOnly, pageSizeOptions, selectedPageSize, setSelectedPageSize } = useSettingsStore()
 
@@ -215,6 +217,10 @@ export default function Words() {
     return p !== null ? parseInt(p) : null
   })
   const [filterTema, setFilterTema] = useState<number | null>(null)
+  const [filterLastErrors, setFilterLastErrors] = useState(() =>
+    searchParams.get('filter') === 'lastErrors'
+  )
+  const lastErrorIds = getLastErrors()
 
   // ── Sort (persistent) ────────────────────────────────────────────────────────
   const [sortField, setSortField] = useLocalStorage<SortField>('words:sortField', 'added')
@@ -263,6 +269,7 @@ export default function Words() {
   // ── Derived ──────────────────────────────────────────────────────────────────
   const filtered = userWords.filter((uw) => {
     if (wordsOnly && (uw.word.palabra.split(' ').length > 2 || uw.word.significado.split(' ').length > 2)) return false
+    if (filterLastErrors) return lastErrorIds.includes(uw.id)
     if (filterBox !== null && uw.box_level !== filterBox) return false
     if (filterTema !== null && uw.word.tema_id !== filterTema) return false
     if (filterSearch) {
@@ -448,6 +455,19 @@ export default function Words() {
             ))}
           </select>
         )}
+        {/* Last errors chip */}
+        {lastErrorIds.length > 0 && (
+          <button
+            onClick={() => { setFilterLastErrors((v) => !v); setFilterBox(null); setFilterTema(null); setFilterSearch(''); resetPage() }}
+            className={`flex items-center gap-1.5 py-2 px-3 text-sm rounded-xl border transition-colors ${
+              filterLastErrors
+                ? 'border-red-500 bg-red-500/15 text-red-300'
+                : 'border-slate-600 bg-slate-700 text-slate-400 hover:border-slate-500'
+            }`}
+          >
+            ✗ {t('words.lastErrors')}
+          </button>
+        )}
         {/* More options toggle */}
         <button
           onClick={() => setShowAdvanced((v) => !v)}
@@ -627,7 +647,7 @@ export default function Words() {
           </p>
           {userWords.length > 0 && (
             <button
-              onClick={() => { setFilterSearch(''); setFilterBox(null); setFilterTema(null) }}
+              onClick={() => { setFilterSearch(''); setFilterBox(null); setFilterTema(null); setFilterLastErrors(false) }}
               className="mt-3 text-sm text-blue-400 hover:text-blue-300 transition-colors"
             >
               {t('words.clearFilters')}
