@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 set -e
 
-VENV_DIR=".venv"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV_DIR="$SCRIPT_DIR/.venv"
 
 echo "=== Vocabox Backend ==="
 
 # ── Read PORT from .env (fallback to 9009) ────────────────────────────────────
 PORT=9009
-if [ -f ".env" ]; then
-    _PORT=$(grep -E "^PORT=[0-9]+" .env | cut -d'=' -f2 | tr -d '[:space:]')
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    _PORT=$(grep -E "^PORT=[0-9]+" "$SCRIPT_DIR/.env" | cut -d'=' -f2 | tr -d '[:space:]')
     [ -n "$_PORT" ] && PORT="$_PORT"
 fi
 
@@ -48,11 +49,11 @@ source "$VENV_DIR/bin/activate"
 # ── Dependencies ──────────────────────────────────────────────────────────────
 echo "[2/3] Installing / updating dependencies..."
 pip install --quiet --upgrade pip
-pip install --quiet -r requirements.txt
+pip install --quiet -r "$SCRIPT_DIR/requirements.txt"
 echo "      Done."
 
 # ── Run ───────────────────────────────────────────────────────────────────────
 echo "[3/3] Starting server on port $PORT..."
-echo "      Docs → http://localhost:${PORT}/docs"
+echo "      Docs → https://backend.patchamama.com:${PORT}/docs"
 echo ""
-python run.py
+cd "$SCRIPT_DIR" && python run.py

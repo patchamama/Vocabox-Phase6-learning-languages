@@ -1,0 +1,24 @@
+{
+    "name": "Vocabox",
+    "title": "Vocabox",
+    "description": "Aplicación de aprendizaje de vocabulario con sistema de repetición espaciada (método Leitner). React SPA + FastAPI.",
+    "image": null,
+    "startScript": "backend/start.sh",
+    "startLabel": "Iniciar Vocabox",
+    "scriptType": "bash",
+    "port": 9009,
+    "processPattern": "run.py",
+    "type": "fullstack",
+    "technology": "React + Vite + FastAPI + Python + SQLite",
+    "url": "http://backend.patchamama.com:9009/",
+    "webApp": true,
+    "requiresSudo": false,
+    "ports": "9009 (FastAPI API + React SPA)",
+    "extraActions": [
+        {
+            "label": "Deploy",
+            "script": "deploy.sh",
+            "type": "bash"
+        }
+    ]
+}

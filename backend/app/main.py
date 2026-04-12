@@ -65,20 +65,25 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://backend.patchamama.com:9009",
+        "http://backend.patchamama.com",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(auth.router)
-app.include_router(words.router)
-app.include_router(review.router)
-app.include_router(stats.router)
-app.include_router(temas.router)
-app.include_router(import_router.router)
-app.include_router(languages.router)
-app.include_router(test_mode.router)
+app.include_router(auth.router,          prefix="/api")
+app.include_router(words.router,         prefix="/api")
+app.include_router(review.router,        prefix="/api")
+app.include_router(stats.router,         prefix="/api")
+app.include_router(temas.router,         prefix="/api")
+app.include_router(import_router.router, prefix="/api")
+app.include_router(languages.router,     prefix="/api")
+app.include_router(test_mode.router,     prefix="/api")
 
 # ── Static frontend (served from app/static after deploy) ─────────────────────
 _STATIC_DIR = Path(__file__).parent / "static"
@@ -105,6 +110,9 @@ if _STATIC_DIR.is_dir():
     # SPA fallback — every non-API, non-static route returns index.html
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa_fallback(full_path: str):
+        if full_path.startswith("api/"):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404)
         return FileResponse(str(_STATIC_DIR / "index.html"))
 else:
     @app.get("/", tags=["root"])
