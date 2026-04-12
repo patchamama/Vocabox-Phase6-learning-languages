@@ -1,5 +1,10 @@
+import os
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from .database import Base, SessionLocal, engine
 
@@ -75,7 +80,33 @@ app.include_router(import_router.router)
 app.include_router(languages.router)
 app.include_router(test_mode.router)
 
+# ── Static frontend (served from app/static after deploy) ─────────────────────
+_STATIC_DIR = Path(__file__).parent / "static"
 
-@app.get("/", tags=["root"])
-def root():
-    return {"message": "Vocabox API", "docs": "/docs"}
+if _STATIC_DIR.is_dir():
+    # Mount /assets (JS/CSS chunks)
+    app.mount("/assets", StaticFiles(directory=str(_STATIC_DIR / "assets")), name="assets")
+
+    # Serve all known static root files explicitly (icons, manifest, SW, etc.)
+    _STATIC_ROOT_FILES = [
+        f for f in os.listdir(_STATIC_DIR)
+        if os.path.isfile(_STATIC_DIR / f) and f != "index.html"
+    ]
+
+    for _fname in _STATIC_ROOT_FILES:
+        _fpath = str(_STATIC_DIR / _fname)
+        # closure to capture correct path per iteration
+        def _make_handler(path: str):
+            def _handler():
+                return FileResponse(path)
+            return _handler
+        app.get(f"/{_fname}", include_in_schema=False)(_make_handler(_fpath))
+
+    # SPA fallback — every non-API, non-static route returns index.html
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa_fallback(full_path: str):
+        return FileResponse(str(_STATIC_DIR / "index.html"))
+else:
+    @app.get("/", tags=["root"])
+    def root():
+        return {"message": "Vocabox API — run deploy to serve the frontend", "docs": "/docs"}

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { getLastErrors } from './Review'
 import { useTranslation } from 'react-i18next'
 import { languagesApi, temasApi, wordsApi } from '../api/client'
@@ -186,7 +186,6 @@ function sortUserWords(words: UserWord[], field: SortField, dir: SortDir): UserW
 
 export default function Words() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { autoPlayAudio, wordsOnly, pageSizeOptions, selectedPageSize, setSelectedPageSize } = useSettingsStore()
 
@@ -341,11 +340,6 @@ export default function Words() {
   }
 
   // ── Delete ───────────────────────────────────────────────────────────────────
-  const handleDelete = async (wordId: number) => {
-    await wordsApi.delete(wordId)
-    setUserWords((prev) => prev.filter((uw) => uw.word.id !== wordId))
-  }
-
   const handleDeleteAll = async () => {
     setIsBusy(true)
     try {

@@ -178,7 +178,7 @@ const PAIR_INTERVAL = 5 // insert a pair batch after every N singles in simple m
 function buildRoundQueue(
   words: ReviewWord[],
   roundType: RoundType,
-  roundTypes: RoundType[] // for recording per-word exercise types
+  _roundTypes: RoundType[] // for recording per-word exercise types (unused, kept for future use)
 ): { items: QueueItem[]; wordExerciseType: Record<number, ExerciseType> } {
   const wordExerciseType: Record<number, ExerciseType> = {}
   const items: QueueItem[] = []
