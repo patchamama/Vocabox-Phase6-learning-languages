@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ReviewWord } from '../../types'
+import { accentInsensitiveMatch } from '../../utils/normalize'
 import { langPair } from '../../utils/langFlags'
 
 interface Props {
@@ -63,8 +64,11 @@ export default function FirstLetterExercise({ word, onAnswer, autoAdvanceMs }: P
   const pick = (letter: string) => {
     if (flash) return
     const nextIndex = chosen.length
-    if (letter.toLowerCase() === initials[nextIndex]) {
-      const next = [...chosen, letter.toLowerCase()]
+    const expected = initials[nextIndex]
+    const matched = letter.toLowerCase() === expected ||
+      accentInsensitiveMatch(letter, expected)
+    if (matched) {
+      const next = [...chosen, expected]
       setChosen(next)
       if (next.length === initials.length) {
         setFlash('correct')

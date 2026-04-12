@@ -86,7 +86,16 @@
       "write": "Write",
       "multiple_choice": "Multiple choice",
       "random": "Random",
-      "anagramHint": "Arrange the letters"
+      "anagramHint": "Arrange the letters",
+      "dontKnow": "I don't know",
+      "check": "Check",
+      "showOptions": "Show options",
+      "writeAnswer": "Write answer",
+      "markWrong": "Mark wrong",
+      "markRight": "Mark right",
+      "yourAnswer": "Your answer",
+      "correct": "✓ Correct",
+      "incorrect": "✗ Incorrect"
     }
   },
   "profile": {
@@ -231,6 +240,23 @@
   },
   "box": {
     "prefix": "B"
+  },
+  "session": {
+    "completed": "Session completed",
+    "noWords": "No pending words",
+    "accuracy": "Accuracy",
+    "correct": "Correct",
+    "incorrect": "Incorrect",
+    "newSession": "New session",
+    "refresh": "Refresh",
+    "boxFlow": "Box movement",
+    "advanced": "advanced",
+    "droppedToZero": "dropped to {{prefix}}0",
+    "errorPending": "{{count}} pending review",
+    "errorPending_other": "{{count}} pending review",
+    "errorReview": "🔁 Error review",
+    "continue": "Continue →",
+    "continuingIn": "Continuing in {{seconds}}s…"
   },
   "languages": {
     "en": "English",

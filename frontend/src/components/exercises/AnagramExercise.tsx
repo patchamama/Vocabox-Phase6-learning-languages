@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ReviewWord } from '../../types'
 import { langPair } from '../../utils/langFlags'
+import { stripAccent } from '../../utils/normalize'
 
 interface LetterTile {
   id: string   // unique per physical letter: `${index}-${char}`
@@ -142,6 +143,11 @@ export default function AnagramExercise({ word, onAnswer }: Props) {
     const handler = (e: KeyboardEvent) => {
       if (flashRef.current) return
 
+      if (e.key === 'Escape') {
+        onAnswer(false)
+        return
+      }
+
       if (e.key === 'Backspace') {
         e.preventDefault()
         const curFilled = filledRef.current
@@ -167,7 +173,9 @@ export default function AnagramExercise({ word, onAnswer }: Props) {
       const nextSlot = curFilled.findIndex((f) => f === null)
       if (nextSlot === -1) return
 
+      // Exact match first; fallback to accent-insensitive if no exact tile available
       const tile = curTiles.find((t) => !t.used && t.char.toLowerCase() === ch)
+        ?? curTiles.find((t) => !t.used && stripAccent(t.char.toLowerCase()) === stripAccent(ch))
       if (!tile) return
 
       const newFilled = [...curFilled]
@@ -283,6 +291,16 @@ export default function AnagramExercise({ word, onAnswer }: Props) {
           </button>
         ))}
       </div>
+
+      {/* Don't know button */}
+      <button
+        type="button"
+        onClick={() => onAnswer(false)}
+        className="w-full text-xs text-slate-500 hover:text-slate-300 transition-colors pt-1"
+      >
+        <kbd className="inline-flex items-center px-1 py-0.5 rounded border border-slate-600 text-[9px] font-mono text-slate-500 mr-1">Esc</kbd>
+        {t('settings.exercises.dontKnow')}
+      </button>
     </div>
   )
 }

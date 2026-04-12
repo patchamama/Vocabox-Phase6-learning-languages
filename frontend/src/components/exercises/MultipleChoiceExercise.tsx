@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReviewWord } from '../../types'
 import { langPair } from '../../utils/langFlags'
+import { stripAccent } from '../../utils/normalize'
+import { assignShortcuts, ShortcutLabel } from '../../utils/shortcutLabel'
 
 interface Props {
   word: ReviewWord
@@ -11,6 +13,13 @@ interface Props {
 export default function MultipleChoiceExercise({ word, onAnswer, autoPlay = false }: Props) {
   const [selected, setSelected] = useState<string | null>(null)
   const choices = word.choices ?? [word.significado]
+  const shortcuts = assignShortcuts(choices)
+  // Reverse map: shortcut char → choice text
+  const shortcutToChoice = new Map<string, string>()
+  shortcuts.forEach((sc, choice) => { if (sc) shortcutToChoice.set(sc, choice) })
+
+  const selectedRef = useRef(selected)
+  selectedRef.current = selected
 
   const speak = () => {
     speechSynthesis.cancel()
@@ -27,6 +36,20 @@ export default function MultipleChoiceExercise({ word, onAnswer, autoPlay = fals
     return () => { clearTimeout(t); speechSynthesis.cancel() }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [word.user_word_id, autoPlay])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.altKey) return  // let browser handle Alt combos
+      if (selectedRef.current) return
+      if (e.key.length !== 1) return
+      const key = stripAccent(e.key.toLowerCase())
+      const choice = shortcutToChoice.get(key)
+      if (choice) pick(choice)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [word.user_word_id, choices.join('|')])
 
   const pick = (choice: string) => {
     if (selected) return
@@ -73,7 +96,7 @@ export default function MultipleChoiceExercise({ word, onAnswer, autoPlay = fals
             onClick={() => pick(choice)}
             className={`px-4 py-2 rounded-xl border-2 font-medium text-sm transition-all duration-200 ${choiceClass(choice)}`}
           >
-            {choice}
+            <ShortcutLabel text={choice} shortcut={shortcuts.get(choice) ?? ''} />
           </button>
         ))}
       </div>

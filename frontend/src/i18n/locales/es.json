@@ -86,7 +86,16 @@
       "write": "Escribir",
       "multiple_choice": "Opción múltiple",
       "random": "Aleatorio",
-      "anagramHint": "Ordená las letras"
+      "anagramHint": "Ordená las letras",
+      "dontKnow": "No sé",
+      "check": "Comprobar",
+      "showOptions": "Ver opciones",
+      "writeAnswer": "Escribir respuesta",
+      "markWrong": "Marcar mal",
+      "markRight": "Marcar bien",
+      "yourAnswer": "Tu respuesta",
+      "correct": "✓ Correcto",
+      "incorrect": "✗ Incorrecto"
     }
   },
   "profile": {
@@ -231,6 +240,23 @@
   },
   "box": {
     "prefix": "C"
+  },
+  "session": {
+    "completed": "Sesión completada",
+    "noWords": "Sin palabras pendientes",
+    "accuracy": "Precisión",
+    "correct": "Correctas",
+    "incorrect": "Incorrectas",
+    "newSession": "Nueva sesión",
+    "refresh": "Actualizar",
+    "boxFlow": "Movimiento entre cajas",
+    "advanced": "avanzaron",
+    "droppedToZero": "cayeron a {{prefix}}0",
+    "errorPending": "{{count}} pendiente de repasar",
+    "errorPending_other": "{{count}} pendientes de repasar",
+    "errorReview": "🔁 Repaso de errores",
+    "continue": "Continuar →",
+    "continuingIn": "Continuando en {{seconds}}s…"
   },
   "languages": {
     "en": "Inglés",

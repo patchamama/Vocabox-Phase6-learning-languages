@@ -222,6 +222,13 @@ export interface WordRoundState {
   /** Whether the word has passed the current round's exercise */
   roundDone: boolean[]  // length 3 (or 1 for simple)
   inErrorQueue: boolean
+  errorSubmitted: boolean  // true when submitAnswer(false) was already sent
+}
+
+export interface BoxMove {
+  fromBox: number
+  toBox: number
+  userWordId: number
 }
 
 interface ReviewState {
@@ -239,6 +246,10 @@ interface ReviewState {
   errorQueuePos: number
   inErrorPhase: boolean
   results: { correct: number; incorrect: number }
+  correctWordIds: number[]
+  incorrectWordIds: number[]
+  /** Box movements recorded during this session */
+  boxMoves: BoxMove[]
   isLoading: boolean
   isFinished: boolean
   mode: 'simple' | 'safe'
@@ -279,6 +290,9 @@ const INITIAL_DATA = {
   errorQueuePos: 0,
   inErrorPhase: false,
   results: { correct: 0, incorrect: 0 },
+  correctWordIds: [] as number[],
+  incorrectWordIds: [] as number[],
+  boxMoves: [] as BoxMove[],
   isLoading: false,
   isFinished: false,
   mode: 'simple' as 'simple' | 'safe',
@@ -383,8 +397,9 @@ function advanceError(get: () => ReviewState, set: (s: Partial<ReviewState>) => 
   while (next < errorQueue.length) {
     const ws = wordState[errorQueue[next]]
     if (!ws || !ws.roundDone[currentRound]) break
-    // resolved
-    reviewApi.submitAnswer(errorQueue[next], true).catch(() => {})
+    // resolved after error — skip submit (already submitted as incorrect on first error)
+    const errId = errorQueue[next]
+    void errId // used only for position tracking
     next++
   }
 
@@ -439,6 +454,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       const { data } = await reviewApi.getReview(limit, boxes, wordsOnly)
       const words: ReviewWord[] = data
       log('loadReview: received', words.length, 'words')
+      if (words.length !== limit) console.warn(`[review] requested ${limit} words but received ${words.length}`)
 
       const totalRounds = mode === 'safe' ? 3 : 1
       const { items, roundWordTypes } = buildSessionQueue(words, mode, rounds)
@@ -451,6 +467,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
           currentRound: 0,
           roundDone: [false, false, false],
           inErrorQueue: false,
+          errorSubmitted: false,
         }
       })
 
@@ -473,7 +490,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   },
 
   handleSingleAnswer: (userWordId, correct) => {
-    const { wordState, currentRound, errorQueue, results, mode } = get()
+    const { wordState, currentRound, errorQueue, results, correctWordIds, incorrectWordIds, mode } = get()
     const ws = wordState[userWordId]
     if (!ws) return
 
@@ -492,13 +509,22 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
         ? newRoundDone[0]
         : newRoundDone[0] && newRoundDone[1] && newRoundDone[2]
 
-      if (allRoundsDone) {
+      if (allRoundsDone && !ws.errorSubmitted) {
         log('  word fully done, submitting to backend')
-        reviewApi.submitAnswer(userWordId, true).catch(() => {})
+        const fromBox = get().allWords.find((w) => w.user_word_id === userWordId)?.box_level ?? 0
+        reviewApi.submitAnswer(userWordId, true).then((res) => {
+          const toBox = res.data.new_box_level
+          set((s) => ({ boxMoves: [...s.boxMoves, { fromBox, toBox, userWordId }] }))
+        }).catch(() => {})
       }
+
+      const newCorrectIds = correctWordIds.includes(userWordId)
+        ? correctWordIds
+        : [...correctWordIds, userWordId]
 
       set({
         results: updatedResults,
+        correctWordIds: newCorrectIds,
         wordState: {
           ...wordState,
           [userWordId]: { ...ws, roundDone: newRoundDone },
@@ -506,21 +532,38 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       })
       advance(get, set)
     } else {
-      const newErrorQueue = ws.inErrorQueue ? errorQueue : [...errorQueue, userWordId]
+      const isFirstError = !ws.inErrorQueue
+      const newErrorQueue = isFirstError ? [...errorQueue, userWordId] : errorQueue
       log('  incorrect: adding to errorQueue')
+      if (isFirstError) {
+        // Submit incorrect to backend so the box drops to 0
+        const fromBox = get().allWords.find((w) => w.user_word_id === userWordId)?.box_level ?? 0
+        reviewApi.submitAnswer(userWordId, false).then((res) => {
+          const toBox = res.data.new_box_level
+          set((s) => ({ boxMoves: [...s.boxMoves, { fromBox, toBox, userWordId }] }))
+        }).catch(() => {})
+      }
+
+      const newIncorrectIds = incorrectWordIds.includes(userWordId)
+        ? incorrectWordIds
+        : [...incorrectWordIds, userWordId]
+      const newCorrectIdsOnError = correctWordIds.filter((id) => id !== userWordId)
+
       set({
         results: updatedResults,
+        incorrectWordIds: newIncorrectIds,
+        correctWordIds: newCorrectIdsOnError,
         errorQueue: newErrorQueue,
         wordState: {
           ...wordState,
-          [userWordId]: { ...ws, inErrorQueue: true },
+          [userWordId]: { ...ws, inErrorQueue: true, errorSubmitted: isFirstError ? true : ws.errorSubmitted },
         },
       })
       advance(get, set)
     }
   },
 
-  handlePairMatchComplete: (incorrectWordIds) => {
+  handlePairMatchComplete: (pairIncorrectIds) => {
     const state = get()
     const item = state.items[state.itemPos]
     if (!item || item.kind !== 'pair') {
@@ -528,42 +571,63 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       return
     }
 
-    const { wordState, errorQueue, results, currentRound, mode } = state
+    const { wordState, errorQueue, results, correctWordIds, incorrectWordIds, currentRound, mode } = state
     const activeIds = item.userWordIds.filter((id) => {
       const ws = wordState[id]
       return ws && !ws.roundDone[currentRound] && !ws.inErrorQueue
     })
 
-    log('handlePairMatchComplete: activeIds=', activeIds, 'incorrect=', incorrectWordIds)
+    log('handlePairMatchComplete: activeIds=', activeIds, 'incorrect=', pairIncorrectIds)
 
     const newWordState = { ...wordState }
     let newErrorQueue = [...errorQueue]
+    let newCorrectWordIds = [...correctWordIds]
+    let newIncorrectWordIds = [...incorrectWordIds]
     let addCorrect = 0
     let addIncorrect = 0
 
     for (const id of activeIds) {
       const ws = newWordState[id]
       if (!ws) continue
-      const hadError = incorrectWordIds.includes(id)
+      const hadError = pairIncorrectIds.includes(id)
 
       if (hadError) {
         addIncorrect++
-        if (!ws.inErrorQueue) newErrorQueue = [...newErrorQueue, id]
-        newWordState[id] = { ...ws, inErrorQueue: true }
+        if (!newIncorrectWordIds.includes(id)) newIncorrectWordIds = [...newIncorrectWordIds, id]
+        newCorrectWordIds = newCorrectWordIds.filter((cid) => cid !== id)
+        if (!ws.inErrorQueue) {
+          newErrorQueue = [...newErrorQueue, id]
+          // Submit incorrect to backend so box drops to 0
+          const fromBox = get().allWords.find((w) => w.user_word_id === id)?.box_level ?? 0
+          reviewApi.submitAnswer(id, false).then((res) => {
+            const toBox = res.data.new_box_level
+            set((s) => ({ boxMoves: [...s.boxMoves, { fromBox, toBox, userWordId: id }] }))
+          }).catch(() => {})
+        }
+        newWordState[id] = { ...ws, inErrorQueue: true, errorSubmitted: !ws.inErrorQueue ? true : ws.errorSubmitted }
       } else {
         addCorrect++
+        if (!newCorrectWordIds.includes(id)) newCorrectWordIds = [...newCorrectWordIds, id]
         const newRoundDone = [...ws.roundDone] as [boolean, boolean, boolean]
         newRoundDone[currentRound] = true
         const allDone = mode === 'simple'
           ? newRoundDone[0]
           : newRoundDone[0] && newRoundDone[1] && newRoundDone[2]
-        if (allDone) reviewApi.submitAnswer(id, true).catch(() => {})
+        if (allDone && !ws.errorSubmitted) {
+          const fromBox = get().allWords.find((w) => w.user_word_id === id)?.box_level ?? 0
+          reviewApi.submitAnswer(id, true).then((res) => {
+            const toBox = res.data.new_box_level
+            set((s) => ({ boxMoves: [...s.boxMoves, { fromBox, toBox, userWordId: id }] }))
+          }).catch(() => {})
+        }
         newWordState[id] = { ...ws, roundDone: newRoundDone }
       }
     }
 
     set({
       results: { correct: results.correct + addCorrect, incorrect: results.incorrect + addIncorrect },
+      correctWordIds: newCorrectWordIds,
+      incorrectWordIds: newIncorrectWordIds,
       errorQueue: newErrorQueue,
       wordState: newWordState,
     })
