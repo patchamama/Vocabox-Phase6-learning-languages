@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { languagesApi, temasApi, wordsApi } from '../api/client'
@@ -7,6 +7,120 @@ import TemaSelect from '../components/TemaSelect'
 import WordEditForm from '../components/WordEditForm'
 import { useSettingsStore } from '../stores/settingsStore'
 import type { Language, Tema, UserWord } from '../types'
+
+// ── WordCard ──────────────────────────────────────────────────────────────────
+// Shared between list mode and flashcard revealed state.
+// onCollapse: only passed in flashcard mode — shows ✕ to collapse instead of delete.
+interface WordCardProps {
+  uw: UserWord
+  showStats: boolean
+  t: (key: string, opts?: Record<string, unknown>) => string
+  onEdit: () => void
+  onCollapse?: () => void     // flashcard mode only
+  onSpeak: () => void
+  onToggleExpand: () => void
+  isExpanded: boolean
+  boxPrefix: string
+  // editor
+  isEditing: boolean
+  onSaved: () => void
+  onCancelEdit: () => void
+  onDeleted: () => void
+}
+
+function WordCard({
+  uw, showStats, t, onEdit, onCollapse, onSpeak,
+  onToggleExpand, isExpanded,
+  boxPrefix, isEditing, onSaved, onCancelEdit, onDeleted,
+}: WordCardProps) {
+  if (isEditing) {
+    return (
+      <WordEditForm
+        word={{
+          word_id: uw.word.id,
+          palabra: uw.word.palabra,
+          significado: uw.word.significado,
+          idioma_origen: uw.word.idioma_origen,
+          idioma_destino: uw.word.idioma_destino,
+          tema_id: uw.word.tema_id,
+        }}
+        onSaved={onSaved}
+        onCancel={onCancelEdit}
+        onDeleted={onDeleted}
+      />
+    )
+  }
+
+  return (
+    <div
+      className={`card flex gap-3 py-3 cursor-pointer transition-all ${
+        isExpanded ? 'items-start !border-blue-500 !bg-slate-900/60' : 'items-center'
+      } ${onCollapse ? '!border-blue-500/30 animate-slide-up' : ''}`}
+      onClick={onToggleExpand}
+    >
+      {uw.word.tema && (
+        <div
+          className={`w-1.5 rounded-full shrink-0 ${isExpanded ? 'min-h-[2.5rem] self-stretch' : 'h-10'}`}
+          style={{ backgroundColor: uw.word.tema.color }}
+        />
+      )}
+      <div className="flex-1 min-w-0">
+        <p className={`font-semibold ${isExpanded ? 'whitespace-normal break-words' : 'truncate'}`}>
+          {uw.word.palabra}
+        </p>
+        <p className={`text-slate-400 text-sm ${isExpanded ? 'whitespace-normal break-words mt-0.5' : 'truncate'}`}>
+          {uw.word.significado}
+        </p>
+        {uw.word.tema && (
+          <span
+            className="inline-block text-xs px-2 py-0.5 rounded-full font-medium text-white mt-0.5"
+            style={{ backgroundColor: uw.word.tema.color ?? '#64748b' }}
+          >
+            {uw.word.tema.nombre}
+          </span>
+        )}
+        {showStats && uw.times_reviewed > 0 && (
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-[10px] text-slate-500">{t('words.statsReviewed', { n: uw.times_reviewed })}</span>
+            <span className="text-[10px] text-green-500">✓{uw.times_correct}</span>
+            {uw.times_incorrect > 0 && <span className="text-[10px] text-red-400">✗{uw.times_incorrect}</span>}
+          </div>
+        )}
+        {showStats && uw.times_reviewed === 0 && (
+          <span className="text-[10px] text-slate-600 mt-0.5 block">{t('words.statsNever')}</span>
+        )}
+      </div>
+      <div className={`flex shrink-0 gap-1 ${isExpanded ? 'items-start' : 'items-center'}`}>
+        <span className={`text-xs px-2 py-0.5 rounded-full text-slate-900 font-bold ${BOX_COLORS[uw.box_level]}`}>
+          {boxPrefix}{uw.box_level}
+        </span>
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleExpand(); onSpeak() }}
+          className="text-slate-500 hover:text-blue-400 transition-colors px-1 text-base"
+          title="Reproducir"
+        >
+          🔊
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onEdit() }}
+          className="text-slate-500 hover:text-blue-400 transition-colors px-2"
+          title={t('common.edit')}
+        >
+          ✎
+        </button>
+        {onCollapse && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onCollapse() }}
+            className="text-slate-500 hover:text-slate-300 transition-colors px-2"
+            title={t('words.collapse')}
+          >
+            ✕
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
 
 const BOX_COLORS = [
   'bg-red-500',
@@ -18,6 +132,24 @@ const BOX_COLORS = [
   'bg-purple-500',
 ] as const
 
+// ── Persistent state via localStorage ────────────────────────────────────────
+function useLocalStorage<T>(key: string, initial: T): [T, (v: T | ((prev: T) => T)) => void] {
+  const [state, setState] = useState<T>(() => {
+    try {
+      const raw = localStorage.getItem(key)
+      return raw !== null ? (JSON.parse(raw) as T) : initial
+    } catch {
+      return initial
+    }
+  })
+  const isFirstRender = useRef(true)
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return }
+    localStorage.setItem(key, JSON.stringify(state))
+  }, [key, state])
+  return [state, setState]
+}
+
 const EMPTY_FORM = {
   palabra: '',
   significado: '',
@@ -28,6 +160,28 @@ const EMPTY_FORM = {
 
 const SELECT_CLASS =
   'bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all'
+
+type SortField = 'palabra' | 'significado' | 'box_level' | 'added' | 'tema' | 'times_incorrect' | 'times_reviewed'
+type SortDir = 'asc' | 'desc'
+
+function sortUserWords(words: UserWord[], field: SortField, dir: SortDir): UserWord[] {
+  const sorted = [...words].sort((a, b) => {
+    let va: string | number, vb: string | number
+    switch (field) {
+      case 'palabra':    va = a.word.palabra.toLowerCase();    vb = b.word.palabra.toLowerCase();    break
+      case 'significado': va = a.word.significado.toLowerCase(); vb = b.word.significado.toLowerCase(); break
+      case 'box_level':  va = a.box_level;                     vb = b.box_level;                     break
+      case 'added':      va = a.id;                            vb = b.id;                            break
+      case 'tema':       va = a.word.tema?.nombre.toLowerCase() ?? ''; vb = b.word.tema?.nombre.toLowerCase() ?? ''; break
+      case 'times_incorrect': va = a.times_incorrect;          vb = b.times_incorrect;               break
+      case 'times_reviewed':  va = a.times_reviewed;           vb = b.times_reviewed;                break
+    }
+    if (va < vb) return dir === 'asc' ? -1 : 1
+    if (va > vb) return dir === 'asc' ? 1 : -1
+    return 0
+  })
+  return sorted
+}
 
 export default function Words() {
   const { t } = useTranslation()
@@ -62,11 +216,23 @@ export default function Words() {
   })
   const [filterTema, setFilterTema] = useState<number | null>(null)
 
+  // ── Sort (persistent) ────────────────────────────────────────────────────────
+  const [sortField, setSortField] = useLocalStorage<SortField>('words:sortField', 'added')
+  const [sortDir, setSortDir] = useLocalStorage<SortDir>('words:sortDir', 'desc')
+
+  // ── Advanced panel (persistent) ──────────────────────────────────────────────
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [showStats, setShowStats] = useLocalStorage<boolean>('words:showStats', false)
+  const [expandAll, setExpandAll] = useLocalStorage<boolean>('words:expandAll', false)
+
   // ── View ─────────────────────────────────────────────────────────────────────
   const [viewMode, setViewMode] = useState<'list' | 'flashcard'>('list')
   const [flashSide, setFlashSide] = useState<'palabra' | 'significado'>('palabra')
   const [revealed, setRevealed] = useState<Set<number>>(new Set())
   const [seen, setSeen] = useState<Set<number>>(new Set())
+  const [expandedId, setExpandedId] = useState<number | null>(null)
+
+  const toggleExpand = (id: number) => setExpandedId((prev) => prev === id ? null : id)
 
   // ── Pagination ───────────────────────────────────────────────────────────────
   const pageSize = selectedPageSize
@@ -89,7 +255,6 @@ export default function Words() {
 
   useEffect(() => { load() }, [])
 
-  // Sync box filter when navigating from Dashboard with ?box=N
   useEffect(() => {
     const p = searchParams.get('box')
     if (p !== null) setFilterBox(parseInt(p))
@@ -110,13 +275,19 @@ export default function Words() {
     return true
   })
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const sorted = sortUserWords(filtered, sortField, sortDir)
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
   const safePage = Math.min(page, totalPages)
-  const paginated = filtered.slice((safePage - 1) * pageSize, safePage * pageSize)
+  const paginated = sorted.slice((safePage - 1) * pageSize, safePage * pageSize)
 
   const toggleReveal = (uw: UserWord) => {
     const isCurrentlyRevealed = revealed.has(uw.word.id)
-    if (isCurrentlyRevealed) setSeen((prev) => new Set(prev).add(uw.word.id))
+    if (isCurrentlyRevealed) {
+      setSeen((prev) => new Set(prev).add(uw.word.id))
+      setExpandedId((prev) => prev === uw.word.id ? null : prev)
+    } else {
+      setExpandedId(uw.word.id)
+    }
     setRevealed((prev) => {
       const next = new Set(prev)
       if (isCurrentlyRevealed) next.delete(uw.word.id)
@@ -133,8 +304,17 @@ export default function Words() {
     setRevealed(new Set())
   }
 
-  // Reset page when filters or pageSize change
   const resetPage = () => setPage(1)
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir((d) => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDir(field === 'times_incorrect' || field === 'times_reviewed' ? 'desc' : 'asc')
+    }
+    resetPage()
+  }
 
   // ── Add ──────────────────────────────────────────────────────────────────────
   const handleAdd = async (e: FormEvent) => {
@@ -181,9 +361,14 @@ export default function Words() {
     URL.revokeObjectURL(url)
   }
 
-  // ── Field helpers ─────────────────────────────────────────────────────────────
   const setAddField = (field: keyof typeof EMPTY_FORM) => (value: string) =>
     setForm((f) => ({ ...f, [field]: value }))
+
+  // ── Sort indicator ────────────────────────────────────────────────────────────
+  const sortIndicator = (field: SortField) => {
+    if (sortField !== field) return <span className="text-slate-600 ml-0.5">↕</span>
+    return <span className="text-blue-400 ml-0.5">{sortDir === 'asc' ? '↑' : '↓'}</span>
+  }
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
@@ -193,7 +378,6 @@ export default function Words() {
       <div className="flex justify-between items-center gap-2 flex-wrap">
         <h1 className="text-2xl font-bold">{t('words.title')}</h1>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* View mode toggle */}
           <div className="flex rounded-xl overflow-hidden border border-slate-600">
             <button
               onClick={() => switchViewMode('list')}
@@ -259,12 +443,72 @@ export default function Words() {
             className={SELECT_CLASS}
           >
             <option value="">{t('words.allThemes')}</option>
-            {temas.map((t) => (
-              <option key={t.id} value={t.id}>{t.nombre}</option>
+            {temas.map((tm) => (
+              <option key={tm.id} value={tm.id}>{tm.nombre}</option>
             ))}
           </select>
         )}
+        {/* More options toggle */}
+        <button
+          onClick={() => setShowAdvanced((v) => !v)}
+          className={`btn-secondary py-2 px-3 text-sm flex items-center gap-1 ${showAdvanced ? 'border-blue-500 text-blue-300' : ''}`}
+        >
+          ⚙ {showAdvanced ? '▴' : '▾'}
+        </button>
       </div>
+
+      {/* Advanced options panel */}
+      {showAdvanced && (
+        <div className="card space-y-3 animate-slide-up">
+          {/* Sort controls */}
+          <p className="text-xs text-slate-500 uppercase tracking-widest">{t('words.sortBy')}</p>
+          <div className="flex flex-wrap gap-2">
+            {([
+              ['palabra',        t('words.wordOrigin')],
+              ['significado',    t('words.meaning')],
+              ['box_level',      t('words.sortBox')],
+              ['tema',           t('words.sortTema')],
+              ['added',          t('words.sortAdded')],
+              ['times_reviewed', t('words.sortReviewed')],
+              ['times_incorrect',t('words.sortErrors')],
+            ] as [SortField, string][]).map(([field, label]) => (
+              <button
+                key={field}
+                onClick={() => handleSort(field)}
+                className={`text-xs px-3 py-1.5 rounded-lg border transition-colors flex items-center gap-0.5 ${
+                  sortField === field
+                    ? 'border-blue-500 bg-blue-600/20 text-blue-300'
+                    : 'border-slate-600 bg-slate-700 text-slate-400 hover:border-slate-500'
+                }`}
+              >
+                {label}{sortIndicator(field)}
+              </button>
+            ))}
+          </div>
+
+          {/* Toggles row */}
+          <div className="flex items-center gap-5 pt-1 border-t border-slate-700/60 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400">{t('words.showStats')}</span>
+              <button
+                onClick={() => setShowStats((v) => !v)}
+                className={`relative w-10 h-5 rounded-full transition-colors ${showStats ? 'bg-blue-600' : 'bg-slate-600'}`}
+              >
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${showStats ? 'left-5' : 'left-0.5'}`} />
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400">{t('words.expandAll')}</span>
+              <button
+                onClick={() => setExpandAll((v) => !v)}
+                className={`relative w-10 h-5 rounded-full transition-colors ${expandAll ? 'bg-blue-600' : 'bg-slate-600'}`}
+              >
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${expandAll ? 'left-5' : 'left-0.5'}`} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Flashcard side toggle */}
       {viewMode === 'flashcard' && !isLoading && filtered.length > 0 && (
@@ -273,9 +517,7 @@ export default function Words() {
           <button
             onClick={() => { setFlashSide('palabra'); setRevealed(new Set()) }}
             className={`px-3 py-1 rounded-lg transition-colors ${
-              flashSide === 'palabra'
-                ? 'bg-slate-600 text-white'
-                : 'text-slate-500 hover:text-slate-300'
+              flashSide === 'palabra' ? 'bg-slate-600 text-white' : 'text-slate-500 hover:text-slate-300'
             }`}
           >
             {t('words.showWord')}
@@ -283,9 +525,7 @@ export default function Words() {
           <button
             onClick={() => { setFlashSide('significado'); setRevealed(new Set()) }}
             className={`px-3 py-1 rounded-lg transition-colors ${
-              flashSide === 'significado'
-                ? 'bg-slate-600 text-white'
-                : 'text-slate-500 hover:text-slate-300'
+              flashSide === 'significado' ? 'bg-slate-600 text-white' : 'text-slate-500 hover:text-slate-300'
             }`}
           >
             {t('words.showTranslation')}
@@ -293,7 +533,7 @@ export default function Words() {
         </div>
       )}
 
-      {/* Result count + page size selector */}
+      {/* Result count + page size */}
       {!isLoading && (
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <p className="text-xs text-slate-500">
@@ -308,9 +548,7 @@ export default function Words() {
                   key={n}
                   onClick={() => { setPageSize(n); resetPage() }}
                   className={`text-xs px-2 py-0.5 rounded-lg transition-colors ${
-                    pageSize === n
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                    pageSize === n ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
                   }`}
                 >
                   {n}
@@ -370,7 +608,7 @@ export default function Words() {
             temas={temas}
             value={form.tema_id}
             onChange={setAddField('tema_id')}
-            onTemaCreated={(t) => setTemas((prev) => [...prev, t])}
+            onTemaCreated={(tm) => setTemas((prev) => [...prev, tm])}
           />
           <button type="submit" disabled={isBusy} className="btn-primary w-full">
             {isBusy ? t('words.saving') : t('words.save')}
@@ -403,33 +641,23 @@ export default function Words() {
           {paginated.map((uw) => {
             const isRevealed = revealed.has(uw.word.id)
             return isRevealed ? (
-              <button
-                key={uw.word.id}
-                onClick={() => toggleReveal(uw)}
-                className="w-full text-left bg-slate-800 border border-blue-500/40 rounded-2xl px-4 py-3 space-y-1 transition-all active:scale-[0.99]"
-              >
-                <div className="flex items-baseline gap-3 flex-wrap">
-                  <span className="font-semibold">{uw.word.palabra}</span>
-                  <span className="text-slate-300 text-sm">→ {uw.word.significado}</span>
-                </div>
-                <div className="flex items-center gap-2 mt-1">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); speak(uw.word.palabra, uw.word.idioma_origen) }}
-                    className="text-slate-400 hover:text-blue-400 transition-colors text-base leading-none"
-                    title="Reproducir"
-                  >
-                    🔊
-                  </button>
-                  {uw.word.tema && (
-                    <span
-                      className="text-xs px-2 py-0.5 rounded-full font-medium text-white"
-                      style={{ backgroundColor: uw.word.tema.color ?? '#64748b' }}
-                    >
-                      {uw.word.tema.nombre}
-                    </span>
-                  )}
-                </div>
-              </button>
+              <div key={uw.word.id} className="w-full">
+                <WordCard
+                  uw={uw}
+                  showStats={showStats}
+                  t={t as (key: string, opts?: Record<string, unknown>) => string}
+                  boxPrefix={t('box.prefix')}
+                  onSpeak={() => speak(uw.word.palabra, uw.word.idioma_origen)}
+                  onEdit={() => setEditId(uw.word.id)}
+                  onCollapse={() => toggleReveal(uw)}
+                  onToggleExpand={() => toggleExpand(uw.word.id)}
+                  isExpanded={expandAll || expandedId === uw.word.id}
+                  isEditing={editId === uw.word.id}
+                  onSaved={() => { setEditId(null); load() }}
+                  onCancelEdit={() => setEditId(null)}
+                  onDeleted={() => { setEditId(null); load() }}
+                />
+              </div>
             ) : (
               <button
                 key={uw.word.id}
@@ -450,71 +678,23 @@ export default function Words() {
 
         /* ── List mode ──────────────────────────────────────────────────────── */
         <div className="space-y-2">
-          {paginated.map((uw) =>
-            editId === uw.word.id ? (
-              <WordEditForm
-                key={uw.word.id}
-                word={{
-                  word_id: uw.word.id,
-                  palabra: uw.word.palabra,
-                  significado: uw.word.significado,
-                  idioma_origen: uw.word.idioma_origen,
-                  idioma_destino: uw.word.idioma_destino,
-                  tema_id: uw.word.tema_id,
-                }}
-                onSaved={() => { setEditId(null); load() }}
-                onCancel={() => setEditId(null)}
-                onDeleted={() => { setEditId(null); load() }}
-              />
-            ) : (
-              <div key={uw.word.id} className="card flex items-center gap-3 py-3">
-                {uw.word.tema && (
-                  <div
-                    className="w-1.5 h-10 rounded-full shrink-0"
-                    style={{ backgroundColor: uw.word.tema.color }}
-                  />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold truncate">{uw.word.palabra}</p>
-                  <p className="text-slate-400 text-sm truncate">{uw.word.significado}</p>
-                  {uw.word.tema && (
-                    <span
-                      className="inline-block text-xs px-2 py-0.5 rounded-full font-medium text-white mt-0.5"
-                      style={{ backgroundColor: uw.word.tema.color ?? '#64748b' }}
-                    >
-                      {uw.word.tema.nombre}
-                    </span>
-                  )}
-                </div>
-                <span
-                  className={`text-xs px-2 py-0.5 rounded-full text-slate-900 font-bold shrink-0 ${BOX_COLORS[uw.box_level]}`}
-                >
-                  {t('box.prefix')}{uw.box_level}
-                </span>
-                <button
-                  onClick={() => speak(uw.word.palabra, uw.word.idioma_origen)}
-                  className="text-slate-500 hover:text-blue-400 transition-colors px-1 shrink-0 text-base"
-                  title="Reproducir"
-                >
-                  🔊
-                </button>
-                <button
-                  onClick={() => setEditId(uw.word.id)}
-                  className="text-slate-500 hover:text-blue-400 transition-colors px-2 shrink-0"
-                  title={t('common.edit')}
-                >
-                  ✎
-                </button>
-                <button
-                  onClick={() => handleDelete(uw.word.id)}
-                  className="text-slate-500 hover:text-red-400 transition-colors px-2 text-lg shrink-0"
-                  title={t('common.delete')}
-                >
-                  ✕
-                </button>
-              </div>
-            )
-          )}
+          {paginated.map((uw) => (
+            <WordCard
+              key={uw.word.id}
+              uw={uw}
+              showStats={showStats}
+              t={t as (key: string, opts?: Record<string, unknown>) => string}
+              boxPrefix={t('box.prefix')}
+              onSpeak={() => speak(uw.word.palabra, uw.word.idioma_origen)}
+              onEdit={() => setEditId(uw.word.id)}
+              onToggleExpand={() => toggleExpand(uw.word.id)}
+              isExpanded={expandAll || expandedId === uw.word.id}
+              isEditing={editId === uw.word.id}
+              onSaved={() => { setEditId(null); load() }}
+              onCancelEdit={() => setEditId(null)}
+              onDeleted={() => { setEditId(null); load() }}
+            />
+          ))}
         </div>
       )}
 

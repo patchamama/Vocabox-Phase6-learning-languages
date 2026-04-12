@@ -20,6 +20,9 @@ class UserWord(Base):
     box_level = Column(Integer, default=0)
     next_review_date = Column(DateTime, default=datetime.utcnow)
     last_reviewed = Column(DateTime, nullable=True)
+    times_reviewed = Column(Integer, default=0, nullable=False)
+    times_correct = Column(Integer, default=0, nullable=False)
+    times_incorrect = Column(Integer, default=0, nullable=False)
 
     user = relationship("User", back_populates="user_words")
     word = relationship("Word", back_populates="user_words")

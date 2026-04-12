@@ -276,6 +276,10 @@ interface ReviewState {
   progressPct: () => number
   errorQueueSize: () => number
   errorResolvedCount: () => number
+  /** Total iterations in session (words × rounds in safe mode) */
+  totalIterations: () => number
+  /** Iterations already resolved (answered, not pending) */
+  doneIterations: () => number
 }
 
 const INITIAL_DATA = {
@@ -333,6 +337,23 @@ function getActivePairWords(
     .filter(Boolean)
 }
 
+/** Returns the userWordId of whatever item is at position pos in items (or error queue). */
+function getIdOfItem(item: QueueItem): number {
+  return item.kind === 'single' ? item.userWordId : item.userWordIds[0]
+}
+
+/**
+ * Reorder errorQueue so its first entry doesn't match lastId.
+ * Mutates and returns the array.
+ */
+function avoidConsecutiveInErrorQueue(queue: number[], lastId: number): number[] {
+  if (queue.length <= 1 || queue[0] !== lastId) return queue
+  const swapIdx = queue.findIndex((id) => id !== lastId)
+  if (swapIdx === -1) return queue
+  ;[queue[0], queue[swapIdx]] = [queue[swapIdx], queue[0]]
+  return queue
+}
+
 function advance(get: () => ReviewState, set: (s: Partial<ReviewState>) => void) {
   const { items, itemPos, errorQueue, inErrorPhase, wordState, currentRound, totalRounds, mode } = get()
 
@@ -342,6 +363,10 @@ function advance(get: () => ReviewState, set: (s: Partial<ReviewState>) => void)
     advanceError(get, set)
     return
   }
+
+  // Track the id of the word we just answered (to avoid consecutive repetition)
+  const currentItem = items[itemPos]
+  const currentId = currentItem ? getIdOfItem(currentItem) : -1
 
   // Find next item in current round that isn't done
   let next = itemPos + 1
@@ -371,7 +396,9 @@ function advance(get: () => ReviewState, set: (s: Partial<ReviewState>) => void)
   // Current round exhausted — check error queue
   if (errorQueue.length > 0) {
     log('advance → entering error phase for round', currentRound)
-    set({ inErrorPhase: true, errorQueuePos: 0 })
+    // Avoid showing the same word we just answered at the start of error phase
+    const reorderedQueue = avoidConsecutiveInErrorQueue([...errorQueue], currentId)
+    set({ inErrorPhase: true, errorQueuePos: 0, errorQueue: reorderedQueue })
     advanceError(get, set)
     return
   }
@@ -380,9 +407,19 @@ function advance(get: () => ReviewState, set: (s: Partial<ReviewState>) => void)
   const nextRoundNum = currentRound + 1
   if (mode === 'safe' && nextRoundNum < totalRounds) {
     log('advance → starting round', nextRoundNum)
-    // Find first item of next round
     const firstOfNextRound = findFirstItemOfRound(nextRoundNum, items, totalRounds, get().allWords.length)
-    set({ currentRound: nextRoundNum, itemPos: firstOfNextRound, errorQueue: [], inErrorPhase: false })
+    // Avoid consecutive across round boundary (no error phase)
+    const firstItem = items[firstOfNextRound]
+    let adjustedFirst = firstOfNextRound
+    if (firstItem && getIdOfItem(firstItem) === currentId && firstOfNextRound + 1 < items.length) {
+      // swap with next item in the new round
+      const candidate = firstOfNextRound + 1
+      if (getItemRound(candidate, items, totalRounds, get().allWords.length) === nextRoundNum) {
+        ;[items[firstOfNextRound], items[candidate]] = [items[candidate], items[firstOfNextRound]]
+        set({ items: [...items] })
+      }
+    }
+    set({ currentRound: nextRoundNum, itemPos: adjustedFirst, errorQueue: [], inErrorPhase: false })
     return
   }
 
@@ -410,12 +447,22 @@ function advanceError(get: () => ReviewState, set: (s: Partial<ReviewState>) => 
   }
 
   // Error phase done — move to next round if safe mode
-  const { currentRound: round, totalRounds, mode, items, allWords } = get()
+  const { currentRound: round, totalRounds, mode, items, allWords, errorQueue: eq, errorQueuePos: eqPos } = get()
   const nextRound = round + 1
 
   if (mode === 'safe' && nextRound < totalRounds) {
     log('advanceError → next round', nextRound)
+    // Avoid showing the same word at round boundary: last error queue item → first of next round
+    const lastErrorId = eq[eqPos - 1] ?? eq[eq.length - 1] ?? -1
     const firstOfNextRound = findFirstItemOfRound(nextRound, items, totalRounds, allWords.length)
+    const firstItem = items[firstOfNextRound]
+    if (firstItem && getIdOfItem(firstItem) === lastErrorId && firstOfNextRound + 1 < items.length) {
+      const candidate = firstOfNextRound + 1
+      if (getItemRound(candidate, items, totalRounds, allWords.length) === nextRound) {
+        ;[items[firstOfNextRound], items[candidate]] = [items[candidate], items[firstOfNextRound]]
+        set({ items: [...items] })
+      }
+    }
     set({ currentRound: nextRound, itemPos: firstOfNextRound, errorQueue: [], inErrorPhase: false, errorQueuePos: 0 })
     return
   }
@@ -547,7 +594,10 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       const newIncorrectIds = incorrectWordIds.includes(userWordId)
         ? incorrectWordIds
         : [...incorrectWordIds, userWordId]
-      const newCorrectIdsOnError = correctWordIds.filter((id) => id !== userWordId)
+      // Re-read correctWordIds from state to avoid any stale closure
+      const freshCorrectIds = get().correctWordIds
+      const newCorrectIdsOnError = freshCorrectIds.filter((id) => id !== userWordId)
+      log('  removing from correctWordIds: id=', userWordId, 'before=', freshCorrectIds, 'after=', newCorrectIdsOnError)
 
       set({
         results: updatedResults,
@@ -581,8 +631,9 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
 
     const newWordState = { ...wordState }
     let newErrorQueue = [...errorQueue]
-    let newCorrectWordIds = [...correctWordIds]
-    let newIncorrectWordIds = [...incorrectWordIds]
+    // Re-read from state to avoid stale closure
+    let newCorrectWordIds = [...get().correctWordIds]
+    let newIncorrectWordIds = [...get().incorrectWordIds]
     let addCorrect = 0
     let addIncorrect = 0
 
@@ -711,5 +762,23 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   errorResolvedCount: () => {
     const { errorQueue, wordState, currentRound } = get()
     return errorQueue.filter((id) => wordState[id]?.roundDone[currentRound]).length
+  },
+
+  totalIterations: () => {
+    const { allWords, totalRounds } = get()
+    return allWords.length * totalRounds
+  },
+
+  doneIterations: () => {
+    const { allWords, wordState, totalRounds } = get()
+    let done = 0
+    for (const w of allWords) {
+      const ws = wordState[w.user_word_id]
+      if (!ws) continue
+      for (let r = 0; r < totalRounds; r++) {
+        if (ws.roundDone[r]) done++
+      }
+    }
+    return done
   },
 }))

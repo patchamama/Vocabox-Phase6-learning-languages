@@ -27,6 +27,9 @@ export interface UserWord {
   box_level: number
   next_review_date: string
   last_reviewed: string | null
+  times_reviewed: number
+  times_correct: number
+  times_incorrect: number
 }
 
 export interface ReviewWord {

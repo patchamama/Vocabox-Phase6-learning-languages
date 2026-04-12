@@ -167,7 +167,18 @@
     "perPage": "Per pagina",
     "page": "Pag. {{current}} di {{total}}",
     "prev": "Precedente",
-    "next": "Successivo"
+    "next": "Successivo",
+    "sortBy": "Ordina per",
+    "sortBox": "Casella",
+    "sortTema": "Tema",
+    "sortAdded": "Data aggiunta",
+    "sortReviewed": "Volte ripetuta",
+    "sortErrors": "Errori",
+    "showStats": "Mostra statistiche",
+    "expandAll": "Espandi tutto",
+    "statsReviewed": "{{n}} ripasso",
+    "statsNever": "Mai ripetuta",
+    "collapse": "Comprimi"
   },
   "stats": {
     "title": "Statistiche",
@@ -268,16 +279,17 @@
     "continue": "Continua →",
     "continuingIn": "Continuando tra {{seconds}}s…",
     "motivational": [
-      "Ogni lingua è una visione del mondo — la tua si sta ampliando!",
-      "Übung macht den Meister — l'esercizio rende perfetti!",
-      "C'est en forgeant qu'on devient forgeron — forgi la tua fluidità!",
-      "Chi va piano va sano e va lontano. Passo dopo passo si arriva lontano.",
-      "Wer rastet, der rostet. Non fermarti mai!",
-      "Fantastico! Il vocabolario si costruisce parola per parola.",
-      "A língua é a alma de um povo — e tu parli già la loro lingua!",
-      "Vouloir c'est pouvoir — volere è potere. Lo stai dimostrando!",
-      "Repetitio est mater studiorum — la ripetizione è la madre dell'apprendimento.",
-      "Le lingue aprono porte che altrimenti resterebbero chiuse!"
+      { "text": "Ogni lingua è una visione del mondo — la tua si sta ampliando!", "langs": ["it"] },
+      { "text": "Chi va piano va sano e va lontano. Passo dopo passo si arriva lontano.", "langs": ["it"] },
+      { "text": "Übung macht den Meister — l'esercizio rende perfetti!", "langs": ["de"] },
+      { "text": "Wer rastet, der rostet. Non fermarti mai!", "langs": ["de"] },
+      { "text": "C'est en forgeant qu'on devient forgeron — forgi la tua fluidità!", "langs": ["fr"] },
+      { "text": "Vouloir c'est pouvoir — volere è potere. Lo stai dimostrando!", "langs": ["fr"] },
+      { "text": "A língua é a alma de um povo — e tu parli già la loro lingua!", "langs": ["pt"] },
+      { "text": "Every word learned opens a new door. Keep going!", "langs": ["en"] },
+      { "text": "Practice makes perfect — e tu lo stai dimostrando!", "langs": ["en"] },
+      { "text": "Repetitio est mater studiorum — la ripetizione è la madre dell'apprendimento.", "langs": [] },
+      { "text": "Fantastico! Il vocabolario si costruisce parola per parola.", "langs": [] }
     ]
   },
   "languages": {

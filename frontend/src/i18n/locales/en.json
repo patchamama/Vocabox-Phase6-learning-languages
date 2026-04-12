@@ -167,7 +167,18 @@
     "perPage": "Per page",
     "page": "Page {{current}} of {{total}}",
     "prev": "Previous",
-    "next": "Next"
+    "next": "Next",
+    "sortBy": "Sort by",
+    "sortBox": "Box",
+    "sortTema": "Theme",
+    "sortAdded": "Date added",
+    "sortReviewed": "Times reviewed",
+    "sortErrors": "Errors",
+    "showStats": "Show statistics",
+    "expandAll": "Expand all",
+    "statsReviewed": "{{n}} review",
+    "statsNever": "Never reviewed",
+    "collapse": "Collapse"
   },
   "stats": {
     "title": "Statistics",
@@ -268,16 +279,18 @@
     "continue": "Continue →",
     "continuingIn": "Continuing in {{seconds}}s…",
     "motivational": [
-      "Übung macht den Meister — practice makes perfect!",
-      "Ogni lingua è una visione del mondo — and you're expanding yours!",
-      "Wer rastet, der rostet. Keep going — never stop!",
-      "C'est en forgeant qu'on devient forgeron. You're forging your fluency!",
-      "Chi va piano va sano e va lontano. Step by step, you'll get there.",
-      "Fantastic! Vocabulary is built one word at a time.",
-      "A língua é a alma de um povo — and you're speaking their language!",
-      "Vouloir c'est pouvoir. You're proving it right now!",
-      "Repetitio est mater studiorum — repetition is the mother of learning.",
-      "Ein Land, eine Sprache — and you're mastering more than one!"
+      { "text": "Übung macht den Meister — practice makes perfect!", "langs": ["de"] },
+      { "text": "Wer rastet, der rostet. Keep going — never stop!", "langs": ["de"] },
+      { "text": "Ein Land, eine Sprache — and you're mastering more than one!", "langs": ["de"] },
+      { "text": "C'est en forgeant qu'on devient forgeron. You're forging your fluency!", "langs": ["fr"] },
+      { "text": "Vouloir c'est pouvoir. You're proving it right now!", "langs": ["fr"] },
+      { "text": "Chi va piano va sano e va lontano. Step by step, you'll get there.", "langs": ["it"] },
+      { "text": "Ogni lingua è una visione del mondo — and you're expanding yours!", "langs": ["it"] },
+      { "text": "A língua é a alma de um povo — and you're speaking their language!", "langs": ["pt"] },
+      { "text": "Every word learned is a door opened. Keep going!", "langs": ["en"] },
+      { "text": "Practice makes perfect — and you're proving it!", "langs": ["en"] },
+      { "text": "Repetitio est mater studiorum — repetition is the mother of learning.", "langs": [] },
+      { "text": "Fantastic! Vocabulary is built one word at a time.", "langs": [] }
     ]
   },
   "languages": {

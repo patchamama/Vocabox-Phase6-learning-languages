@@ -136,6 +136,11 @@ def submit_answer(
     user_word.box_level = new_box
     user_word.next_review_date = next_date
     user_word.last_reviewed = datetime.utcnow()
+    user_word.times_reviewed = (user_word.times_reviewed or 0) + 1
+    if answer.correct:
+        user_word.times_correct = (user_word.times_correct or 0) + 1
+    else:
+        user_word.times_incorrect = (user_word.times_incorrect or 0) + 1
     db.commit()
 
     msg = f"Correcto! → Caja {new_box}" if answer.correct else "Incorrecto → Caja 0"

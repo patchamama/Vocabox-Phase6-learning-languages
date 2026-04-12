@@ -167,7 +167,18 @@
     "perPage": "Pro Seite",
     "page": "Seite {{current}} von {{total}}",
     "prev": "Zurück",
-    "next": "Weiter"
+    "next": "Weiter",
+    "sortBy": "Sortieren nach",
+    "sortBox": "Box",
+    "sortTema": "Thema",
+    "sortAdded": "Hinzugefügt",
+    "sortReviewed": "Mal wiederholt",
+    "sortErrors": "Fehler",
+    "showStats": "Statistiken anzeigen",
+    "expandAll": "Alle ausklappen",
+    "statsReviewed": "{{n}}× wiederholt",
+    "statsNever": "Noch nicht geübt",
+    "collapse": "Einklappen"
   },
   "stats": {
     "title": "Statistik",
@@ -268,16 +279,18 @@
     "continue": "Weiter →",
     "continuingIn": "Weiter in {{seconds}}s…",
     "motivational": [
-      "Übung macht den Meister — du beweist es gerade!",
-      "Ogni lingua è una visione del mondo — deine Welt wird größer!",
-      "Wer rastet, der rostet. Weiter so — niemals aufhören!",
-      "C'est en forgeant qu'on devient forgeron. Du schmiedest deine Sprachkenntnisse!",
-      "Chi va piano va sano e va lontano. Schritt für Schritt ans Ziel.",
-      "Fantastisch! Vokabular entsteht Wort für Wort.",
-      "A língua é a alma de um povo — und du sprichst schon ihre Sprache!",
-      "Vouloir c'est pouvoir — Wollen ist Können. Du zeigst es!",
-      "Repetitio est mater studiorum — Wiederholung ist die Mutter des Lernens.",
-      "Eine Sprache ist nie genug — du bist auf dem richtigen Weg!"
+      { "text": "Übung macht den Meister — du beweist es gerade!", "langs": ["de"] },
+      { "text": "Wer rastet, der rostet. Weiter so — niemals aufhören!", "langs": ["de"] },
+      { "text": "Eine Sprache ist nie genug — du bist auf dem richtigen Weg!", "langs": ["de"] },
+      { "text": "C'est en forgeant qu'on devient forgeron. Du schmiedest deine Sprachkenntnisse!", "langs": ["fr"] },
+      { "text": "Vouloir c'est pouvoir — Wollen ist Können. Du zeigst es!", "langs": ["fr"] },
+      { "text": "Chi va piano va sano e va lontano. Schritt für Schritt ans Ziel.", "langs": ["it"] },
+      { "text": "Ogni lingua è una visione del mondo — deine Welt wird größer!", "langs": ["it"] },
+      { "text": "A língua é a alma de um povo — und du sprichst schon ihre Sprache!", "langs": ["pt"] },
+      { "text": "Every word learned opens a new door. Keep going!", "langs": ["en"] },
+      { "text": "Practice makes perfect — und du beweist es!", "langs": ["en"] },
+      { "text": "Repetitio est mater studiorum — Wiederholung ist die Mutter des Lernens.", "langs": [] },
+      { "text": "Fantastisch! Vokabular entsteht Wort für Wort.", "langs": [] }
     ]
   },
   "languages": {

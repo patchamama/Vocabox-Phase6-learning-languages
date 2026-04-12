@@ -45,5 +45,8 @@ class UserWordOut(BaseModel):
     box_level: int
     next_review_date: datetime
     last_reviewed: Optional[datetime] = None
+    times_reviewed: int = 0
+    times_correct: int = 0
+    times_incorrect: int = 0
 
     model_config = {"from_attributes": True}

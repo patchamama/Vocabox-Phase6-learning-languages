@@ -132,6 +132,8 @@ export default function Review() {
     progressPct,
     errorQueueSize,
     errorResolvedCount,
+    totalIterations,
+    doneIterations,
   } = useReviewStore()
 
   const [lastEntry, setLastEntry] = useState<LastEntry | null>(null)
@@ -142,13 +144,31 @@ export default function Review() {
   const [isEditing, setIsEditing] = useState(false)
   const [headerTooltip, setHeaderTooltip] = useState<{ lines: string[]; color: 'blue' | 'red' } | null>(null)
 
-  // Pick a random motivational phrase (stable per session-finish)
-  const motivationalPhrases = t('session.motivational', { returnObjects: true }) as string[]
-  const motivationalPhrase = useMemo(
-    () => Array.isArray(motivationalPhrases) ? motivationalPhrases[Math.floor(Math.random() * motivationalPhrases.length)] : '',
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isFinished]
-  )
+  // Pick a motivational phrase matching session languages (stable per session-finish)
+  const motivationalPhrase = useMemo(() => {
+    if (!isFinished) return ''
+    type MotivEntry = { text: string; langs: string[] }
+    const all = t('session.motivational', { returnObjects: true }) as MotivEntry[]
+    if (!Array.isArray(all) || all.length === 0) return ''
+
+    // Collect unique languages used in this session
+    const sessionLangs = new Set<string>()
+    for (const w of allWords) {
+      sessionLangs.add(w.idioma_origen)
+      sessionLangs.add(w.idioma_destino)
+    }
+
+    // Priority 1: phrase whose langs overlap session languages
+    const matching = all.filter(
+      (e) => e.langs.length > 0 && e.langs.some((l) => sessionLangs.has(l))
+    )
+    // Priority 2: universal phrases (langs: [])
+    const universal = all.filter((e) => e.langs.length === 0)
+
+    const pool = matching.length > 0 ? matching : universal.length > 0 ? universal : all
+    return pool[Math.floor(Math.random() * pool.length)].text
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFinished])
 
   // Fire confetti when finishing with ≥85%
   useEffect(() => {
@@ -322,46 +342,48 @@ export default function Review() {
           {/* Box flow diagram */}
           {activeBoxes.length > 0 && (
             <div className="card space-y-3">
-              <h3 className="text-xs font-medium text-slate-500 uppercase tracking-widest">{t('session.boxFlow')}</h3>
+              <h3 className="text-[10px] font-medium text-slate-500 uppercase tracking-widest">{t('session.boxFlow')}</h3>
+
+              {/* Stuck-at-C0 warning — words that failed while in C0 */}
+              {(dropped[0] ?? 0) > 0 && (
+                <div className="rounded-lg bg-red-900/30 border border-red-700/40 px-2 py-1.5">
+                  <p className="text-[10px] text-red-400 font-semibold mb-1">
+                    {boxPrefix}0 ⇄ {boxPrefix}0 · {dropped[0]}
+                  </p>
+                  <p className="text-[10px] text-red-300/80 leading-snug">
+                    {(droppedWords[0] ?? []).join(' · ')}
+                  </p>
+                </div>
+              )}
 
               <div className="overflow-x-auto">
-                {/* Row 1: C0 + vertical arrow down to C1 row */}
-                {(() => {
-                  const adv0 = advanced[0] ?? 0
-                  const drop0 = dropped[0] ?? 0
-                  const showArrow = adv0 > 0 || drop0 > 0
-                  const arrowGreen = adv0 > 0
-                  const arrowCount = arrowGreen ? adv0 : drop0
-                  const arrowWords = arrowGreen ? (advancedWords[0] ?? []) : (droppedWords[0] ?? [])
-                  return (
-                    <div className="flex flex-col items-start mb-1">
-                      <span className={`text-xs font-bold px-2 py-1 rounded-lg ${BOX_BG[0]} text-slate-900`}>
-                        {boxPrefix}0
-                      </span>
-                      {showArrow && (
-                        <div
-                          className={`flex flex-col items-center ml-1 leading-tight cursor-default ${arrowGreen ? 'text-green-400' : 'text-red-400'}`}
-                          title={arrowWords.join(', ')}
-                        >
-                          <span className="text-[10px] font-semibold">{arrowCount}</span>
-                          <span className="text-base leading-none">↓</span>
-                        </div>
-                      )}
+                {/* Row 1: C0 pill + down-arrow toward C1 row (only if words advanced from C0) */}
+                {(advanced[0] ?? 0) > 0 && (
+                  <div className="flex flex-col items-start mb-1">
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${BOX_BG[0]} text-slate-900`}>
+                      {boxPrefix}0
+                    </span>
+                    <div
+                      className="flex flex-col items-center ml-1 leading-tight cursor-default text-green-400"
+                      title={(advancedWords[0] ?? []).join(', ')}
+                    >
+                      <span className="text-[9px] font-semibold">{advanced[0]}</span>
+                      <span className="text-xs leading-none">↓</span>
                     </div>
-                  )
-                })()}
+                  </div>
+                )}
 
-                {/* Row 2: C1–C6 chain with horizontal arrows and drop badges below */}
-                <div className="flex items-start gap-1">
+                {/* Row 2: C1–C6 chain */}
+                <div className="flex items-start gap-0.5">
                   {[1, 2, 3, 4, 5, 6].map((box, idx) => {
                     const adv = advanced[box] ?? 0
                     const drop = dropped[box] ?? 0
                     const hasActivity = activeBoxes.includes(box) || adv > 0 || drop > 0
                     return (
-                      <div key={box} className="flex items-start gap-1">
+                      <div key={box} className="flex items-start gap-0.5">
                         {/* Box pill + optional drop badge below */}
-                        <div className={`flex flex-col items-center gap-0.5 ${!hasActivity ? 'opacity-25' : ''}`}>
-                          <span className={`text-xs font-bold px-2 py-1 rounded-lg ${BOX_BG[box] ?? 'bg-slate-600'} text-slate-900`}>
+                        <div className={`flex flex-col items-center gap-0.5 ${!hasActivity ? 'opacity-20' : ''}`}>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${BOX_BG[box] ?? 'bg-slate-600'} text-slate-900`}>
                             {boxPrefix}{box}
                           </span>
                           {drop > 0 && (
@@ -369,8 +391,8 @@ export default function Review() {
                               className="flex flex-col items-center leading-tight cursor-default"
                               title={(droppedWords[box] ?? []).join(', ')}
                             >
-                              <span className="text-red-400 text-[10px] font-medium">↓{drop}</span>
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-900/60 text-red-300">
+                              <span className="text-red-400 text-[9px] font-medium">↓{drop}</span>
+                              <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-red-900/60 text-red-300">
                                 {boxPrefix}0
                               </span>
                             </div>
@@ -379,7 +401,7 @@ export default function Review() {
                         {/* Horizontal advance arrow to next box */}
                         {idx < 5 && (
                           <span
-                            className={`text-xs font-medium pt-1 cursor-default ${adv > 0 ? 'text-green-400' : 'text-slate-700'}`}
+                            className={`text-[10px] font-medium pt-0.5 cursor-default ${adv > 0 ? 'text-green-400' : 'text-slate-700'}`}
                             title={adv > 0 ? (advancedWords[box] ?? []).join(', ') : undefined}
                           >
                             {adv > 0 ? `→${adv}` : '→'}
@@ -392,7 +414,7 @@ export default function Review() {
               </div>
 
               {/* Legend */}
-              <div className="flex gap-4 justify-center text-[10px] text-slate-500">
+              <div className="flex gap-4 justify-center text-[9px] text-slate-500">
                 <span><span className="text-green-400">↓N →N</span> {t('session.advanced')}</span>
                 <span><span className="text-red-400">↓N {boxPrefix}0</span> {t('session.droppedToZero', { prefix: boxPrefix })}</span>
               </div>
@@ -468,7 +490,7 @@ export default function Review() {
                 onMouseLeave={() => setHeaderTooltip(null)}
               >✗ {incorrectWordIds.length}</span>
             )}
-            <span className="text-slate-500">{totalWords - correctWordIds.length - incorrectWordIds.length}</span>
+            <span className="text-slate-500">{totalIterations() - doneIterations()}</span>
             {!isPairMode && word && (
               <span
                 className={`text-xs px-2 py-0.5 rounded-full font-bold text-slate-900 ${BOX_BG[word.box_level] ?? 'bg-slate-500'}`}
