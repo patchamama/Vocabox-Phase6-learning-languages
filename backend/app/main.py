@@ -1,10 +1,8 @@
-import os
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 
 from .database import Base, SessionLocal, engine
 
@@ -70,6 +68,7 @@ app.add_middleware(
         "http://localhost:3000",
         "http://backend.patchamama.com:9009",
         "http://backend.patchamama.com",
+        "https://patchamama.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -89,30 +88,17 @@ app.include_router(test_mode.router,     prefix="/api")
 _STATIC_DIR = Path(__file__).parent / "static"
 
 if _STATIC_DIR.is_dir():
-    # Mount /assets (JS/CSS chunks)
-    app.mount("/assets", StaticFiles(directory=str(_STATIC_DIR / "assets")), name="assets")
-
-    # Serve all known static root files explicitly (icons, manifest, SW, etc.)
-    _STATIC_ROOT_FILES = [
-        f for f in os.listdir(_STATIC_DIR)
-        if os.path.isfile(_STATIC_DIR / f) and f != "index.html"
-    ]
-
-    for _fname in _STATIC_ROOT_FILES:
-        _fpath = str(_STATIC_DIR / _fname)
-        # closure to capture correct path per iteration
-        def _make_handler(path: str):
-            def _handler():
-                return FileResponse(path)
-            return _handler
-        app.get(f"/{_fname}", include_in_schema=False)(_make_handler(_fpath))
-
-    # SPA fallback — every non-API, non-static route returns index.html
+    # Single catch-all: serve real static files if they exist, otherwise SPA index.html.
+    # Using a single route avoids FastAPI/Starlette routing conflicts between
+    # app.mount() and @app.get("/{full_path:path}") catch-alls.
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa_fallback(full_path: str):
         if full_path.startswith("api/"):
             from fastapi import HTTPException
             raise HTTPException(status_code=404)
+        candidate = _STATIC_DIR / full_path
+        if candidate.is_file():
+            return FileResponse(str(candidate))
         return FileResponse(str(_STATIC_DIR / "index.html"))
 else:
     @app.get("/", tags=["root"])

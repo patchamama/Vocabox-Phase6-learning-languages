@@ -26,7 +26,7 @@ function PrivateRoute({ children }: { children: ReactNode }) {
 
 export default function App() {
   return (
-    <BrowserRouter future={{ v7_startTransition: true }}>
+    <BrowserRouter basename={import.meta.env.BASE_URL} future={{ v7_startTransition: true }}>
       <ScrollToTop />
       <Routes>
         <Route path="/login" element={<Login />} />
