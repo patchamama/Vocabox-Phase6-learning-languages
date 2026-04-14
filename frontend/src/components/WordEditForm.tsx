@@ -1,11 +1,14 @@
 /**
  * WordEditForm — shared edit panel used in both Words and Review pages.
  * Loads temas and languages on mount so it works as a self-contained widget.
+ * Advanced section: split tool + audio fields (audio_url, audio_text, etc.)
+ * LEO button: fetches up to 3 entries from LEO Dictionary and lets the user
+ * pick one to auto-fill all fields including audio URLs.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { languagesApi, temasApi, wordsApi } from '../api/client'
-import type { Language, Tema } from '../types'
+import { languagesApi, leoApi, temasApi, wordsApi } from '../api/client'
+import type { Language, LeoEntry, LeoResult, Tema } from '../types'
 import LanguageSelect from './LanguageSelect'
 import TemaSelect from './TemaSelect'
 
@@ -25,10 +28,15 @@ interface WordData {
   idioma_origen: string
   idioma_destino: string
   tema_id: number | null
+  audio_url?: string | null
+  audio_url_translation?: string | null
+  audio_text?: string | null
+  audio_text_translation?: string | null
+  category?: string | null
 }
 
 interface SavedPayload extends Partial<WordData> {
-  tema?: Tema | null  // full tema object so callers can update display name/color
+  tema?: Tema | null
 }
 
 interface Props {
@@ -36,6 +44,14 @@ interface Props {
   onSaved: (updated: SavedPayload) => void
   onCancel: () => void
   onDeleted?: () => void
+}
+
+const CAT_LABELS: Record<string, string> = {
+  noun: 'Sustantivo',
+  verb: 'Verbo',
+  adjective: 'Adjetivo/Adv.',
+  phrase: 'Frase',
+  prep: 'Preposición',
 }
 
 export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Props) {
@@ -46,6 +62,11 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
     idioma_origen: word.idioma_origen,
     idioma_destino: word.idioma_destino,
     tema_id: word.tema_id ? String(word.tema_id) : '',
+    audio_url: word.audio_url ?? '',
+    audio_url_translation: word.audio_url_translation ?? '',
+    audio_text: word.audio_text ?? '',
+    audio_text_translation: word.audio_text_translation ?? '',
+    category: word.category ?? '',
   })
   const [temas, setTemas] = useState<Tema[]>([])
   const [languages, setLanguages] = useState<Language[]>([])
@@ -57,6 +78,12 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
   const [splitError, setSplitError] = useState<string | null>(null)
   const [splitMsg, setSplitMsg] = useState<string | null>(null)
 
+  // LEO state
+  const [leoLoading, setLeoLoading] = useState(false)
+  const [leoResults, setLeoResults] = useState<LeoResult | null>(null)
+  const [leoError, setLeoError] = useState<string | null>(null)
+  const leoRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     Promise.all([temasApi.list(), languagesApi.list()]).then(([tRes, lRes]) => {
       setTemas(tRes.data)
@@ -64,8 +91,22 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
     })
   }, [])
 
+  // Close LEO dropdown on outside click
+  useEffect(() => {
+    if (!leoResults) return
+    const handler = (e: MouseEvent) => {
+      if (leoRef.current && !leoRef.current.contains(e.target as Node)) {
+        setLeoResults(null)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [leoResults])
+
   const set = (field: keyof typeof form) => (value: string) =>
     setForm((f) => ({ ...f, [field]: value }))
+
+  const isCreate = word.word_id === 0
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -74,23 +115,26 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
     if (!p || !s) return
     setIsSaving(true)
     try {
-      await wordsApi.update(word.word_id, {
-        palabra: p,
-        significado: s,
-        idioma_origen: form.idioma_origen,
-        idioma_destino: form.idioma_destino,
-        tema_id: form.tema_id ? parseInt(form.tema_id) : null,
-      })
       const temaId = form.tema_id ? parseInt(form.tema_id) : null
-      const temaObj = temaId ? (temas.find((t) => t.id === temaId) ?? null) : null
-      onSaved({
+      const payload = {
         palabra: p,
         significado: s,
         idioma_origen: form.idioma_origen,
         idioma_destino: form.idioma_destino,
-        tema_id: temaId,
-        tema: temaObj,
-      })
+        tema_id: temaId ?? undefined,
+        audio_url: form.audio_url.trim() || null,
+        audio_url_translation: form.audio_url_translation.trim() || null,
+        audio_text: form.audio_text.trim() || null,
+        audio_text_translation: form.audio_text_translation.trim() || null,
+        category: form.category.trim() || null,
+      }
+      if (isCreate) {
+        await wordsApi.create(payload)
+      } else {
+        await wordsApi.update(word.word_id, payload)
+      }
+      const temaObj = temaId ? (temas.find((t) => t.id === temaId) ?? null) : null
+      onSaved({ ...payload, tema_id: temaId, tema: temaObj })
     } finally {
       setIsSaving(false)
     }
@@ -145,7 +189,47 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
     }
   }
 
-  // Preview split result for validation feedback
+  const handleLeoLookup = async () => {
+    const query = form.palabra.trim()
+    if (!query) return
+    setLeoLoading(true)
+    setLeoError(null)
+    setLeoResults(null)
+    try {
+      const { data } = await leoApi.lookup(query, 'esde', 3)
+      if (!data.entries?.length) {
+        setLeoError(t('wordEdit.leoNoResults'))
+      } else {
+        setLeoResults(data)
+      }
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status
+      setLeoError(status === 404 ? t('wordEdit.leoNotFound') : t('wordEdit.leoError'))
+    } finally {
+      setLeoLoading(false)
+    }
+  }
+
+  const applyLeoEntry = (entry: LeoEntry) => {
+    // For esde: sides[0]=es (significado), sides[1]=de (palabra)
+    const deSide = entry.sides.find((s) => s.lang === 'de') ?? entry.sides[1]
+    const esSide = entry.sides.find((s) => s.lang === 'es') ?? entry.sides[0]
+    if (!deSide || !esSide) return
+
+    setForm((f) => ({
+      ...f,
+      palabra: deSide.text,
+      significado: esSide.text,
+      audio_url: deSide.audio[0]?.mp3_url ?? '',
+      audio_url_translation: esSide.audio[0]?.mp3_url ?? '',
+      audio_text: deSide.audio[0]?.label ?? deSide.text,
+      audio_text_translation: esSide.audio[0]?.label ?? esSide.text,
+      category: entry.category ?? '',
+    }))
+    setLeoResults(null)
+    if (!showAdvanced) setShowAdvanced(true)
+  }
+
   const splitPreview: SplitResult | null = (() => {
     const char = splitChar.trim()
     if (!char) return null
@@ -158,25 +242,99 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
   return (
     <form onSubmit={handleSubmit} className="card space-y-3 animate-slide-up border-blue-500/30">
       <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-widest">
-        {t('wordEdit.title')}
+        {isCreate ? t('wordEdit.titleNew') : t('wordEdit.title')}
       </p>
 
-      <div className="grid grid-cols-2 gap-2">
-        <input
-          className="input text-sm"
-          placeholder={t('wordEdit.wordOrigin')}
-          value={form.palabra}
-          onChange={(e) => set('palabra')(e.target.value)}
-          required
-          autoFocus
-        />
-        <input
-          className="input text-sm"
-          placeholder={t('wordEdit.meaning')}
-          value={form.significado}
-          onChange={(e) => set('significado')(e.target.value)}
-          required
-        />
+      {/* ── Word / Meaning row + LEO button ── */}
+      <div className="flex gap-2 items-start">
+        <div className="grid grid-cols-2 gap-2 flex-1">
+          <input
+            className="input text-sm"
+            placeholder={t('wordEdit.wordOrigin')}
+            value={form.palabra}
+            onChange={(e) => set('palabra')(e.target.value)}
+            required
+            autoFocus
+          />
+          <input
+            className="input text-sm"
+            placeholder={t('wordEdit.meaning')}
+            value={form.significado}
+            onChange={(e) => set('significado')(e.target.value)}
+            required
+          />
+        </div>
+
+        {/* LEO lookup button */}
+        <div className="relative" ref={leoRef}>
+          <button
+            type="button"
+            title={t('wordEdit.leoLookup')}
+            onClick={handleLeoLookup}
+            disabled={leoLoading || !form.palabra.trim()}
+            className="flex items-center justify-center w-9 h-9 rounded-lg border border-slate-600 bg-slate-800 hover:border-blue-400 hover:bg-slate-700 disabled:opacity-40 transition-colors shrink-0"
+          >
+            {leoLoading ? (
+              <span className="text-xs text-slate-400 animate-spin">⟳</span>
+            ) : (
+              <img
+                src="https://dict.leo.org/img/svg/leo_esde.svg"
+                alt="LEO"
+                className="w-5 h-5"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none'
+                  ;(e.target as HTMLImageElement).nextElementSibling!.removeAttribute('hidden')
+                }}
+              />
+            )}
+            <span hidden className="text-xs font-bold text-blue-400">LEO</span>
+          </button>
+
+          {/* LEO results dropdown */}
+          {(leoResults || leoError) && (
+            <div className="absolute right-0 top-10 z-50 w-80 bg-slate-800 border border-slate-600 rounded-xl shadow-2xl overflow-hidden">
+              {leoError && (
+                <p className="text-xs text-red-400 p-3">{leoError}</p>
+              )}
+              {leoResults && (
+                <>
+                  <div className="px-3 py-2 border-b border-slate-700 text-xs text-slate-400 uppercase tracking-wide">
+                    LEO · {leoResults.entries.length} {t('wordEdit.leoSelect')}
+                  </div>
+                  <div className="divide-y divide-slate-700/50 max-h-64 overflow-y-auto">
+                    {leoResults.entries.map((entry, i) => {
+                      const deSide = entry.sides.find((s) => s.lang === 'de') ?? entry.sides[1]
+                      const esSide = entry.sides.find((s) => s.lang === 'es') ?? entry.sides[0]
+                      if (!deSide || !esSide) return null
+                      return (
+                        <button
+                          key={entry.aiid || i}
+                          type="button"
+                          onClick={() => applyLeoEntry(entry)}
+                          className="w-full text-left px-3 py-2.5 hover:bg-slate-700/60 transition-colors"
+                        >
+                          <div className="flex items-start gap-2">
+                            <span className="text-xs bg-slate-700 text-slate-400 rounded px-1.5 py-0.5 shrink-0 mt-0.5">
+                              {CAT_LABELS[entry.category] ?? entry.section ?? '—'}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-slate-100 truncate">{deSide.text}</p>
+                              <p className="text-xs text-slate-400 truncate">{esSide.text}</p>
+                            </div>
+                            <div className="shrink-0 flex gap-1 mt-0.5">
+                              {deSide.audio.length > 0 && <span title="Audio DE" className="text-blue-400 text-xs">🔊</span>}
+                              {esSide.audio.length > 0 && <span title="Audio ES" className="text-green-400 text-xs">🔊</span>}
+                            </div>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {languages.length > 0 && (
@@ -211,44 +369,134 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
         {t('wordEdit.advanced')}
       </button>
 
-      {/* ── Split section ── */}
-      {showAdvanced && <div className="border-t border-slate-700/60 pt-3 space-y-2">
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            className="input text-sm w-16 text-center font-mono"
-            value={splitChar}
-            onChange={(e) => { setSplitChar(e.target.value); setSplitError(null); setSplitMsg(null) }}
-            placeholder={t('wordEdit.splitChar')}
-            maxLength={3}
-          />
-          <span className="text-xs text-slate-500 flex-1">{t('wordEdit.splitChar')}</span>
-          <button
-            type="button"
-            disabled={isSaving || !splitChar.trim() || !splitPreview || splitPreview.words.length < 2}
-            onClick={handleSplit}
-            className="btn-secondary py-1.5 px-3 text-sm"
-          >
-            {isSaving ? t('wordEdit.splitCreating', { count: splitPreview?.words.length ?? 0 }) : t('wordEdit.splitBtn')}
-          </button>
-        </div>
+      {/* ── Advanced section: split + audio + category ── */}
+      {showAdvanced && (
+        <div className="border-t border-slate-700/60 pt-3 space-y-3">
+          {/* Split tool — only in edit mode */}
+          {!isCreate && <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                className="input text-sm w-16 text-center font-mono"
+                value={splitChar}
+                onChange={(e) => { setSplitChar(e.target.value); setSplitError(null); setSplitMsg(null) }}
+                placeholder={t('wordEdit.splitChar')}
+                maxLength={3}
+              />
+              <span className="text-xs text-slate-500 flex-1">{t('wordEdit.splitChar')}</span>
+              <button
+                type="button"
+                disabled={isSaving || !splitChar.trim() || !splitPreview || splitPreview.words.length < 2}
+                onClick={handleSplit}
+                className="btn-secondary py-1.5 px-3 text-sm"
+              >
+                {isSaving ? t('wordEdit.splitCreating', { count: splitPreview?.words.length ?? 0 }) : t('wordEdit.splitBtn')}
+              </button>
+            </div>
 
-        {splitPreview && !splitError && !splitMsg && (
-          <div className="text-xs text-slate-500 space-y-0.5">
-            {splitPreview.words.map((w, i) => (
-              <div key={i} className={`flex gap-1 ${splitPreview.meanings[i] === undefined ? 'text-red-400' : ''}`}>
-                <span className="text-slate-400">{i + 1}.</span>
-                <span>{w}</span>
-                <span className="text-slate-600">→</span>
-                <span>{splitPreview.meanings[i] ?? '?'}</span>
+            {splitPreview && !splitError && !splitMsg && (
+              <div className="text-xs text-slate-500 space-y-0.5">
+                {splitPreview.words.map((w, i) => (
+                  <div key={i} className={`flex gap-1 ${splitPreview.meanings[i] === undefined ? 'text-red-400' : ''}`}>
+                    <span className="text-slate-400">{i + 1}.</span>
+                    <span>{w}</span>
+                    <span className="text-slate-600">→</span>
+                    <span>{splitPreview.meanings[i] ?? '?'}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
+            )}
 
-        {splitError && <p className="text-xs text-red-400">{splitError}</p>}
-        {splitMsg && <p className="text-xs text-green-400">{splitMsg}</p>}
-      </div>}
+            {splitError && <p className="text-xs text-red-400">{splitError}</p>}
+            {splitMsg && <p className="text-xs text-green-400">{splitMsg}</p>}
+          </div>}
+
+          {/* Audio + category fields */}
+          <div className="space-y-2 border-t border-slate-700/40 pt-2">
+            <p className="text-xs text-slate-500 uppercase tracking-wide">
+              {t('wordEdit.audioSection')}
+            </p>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-slate-500 block mb-0.5">{t('wordEdit.audioUrl')}</label>
+                <input
+                  type="text"
+                  className="input text-xs"
+                  placeholder="https://…mp3"
+                  value={form.audio_url}
+                  onChange={(e) => set('audio_url')(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 block mb-0.5">{t('wordEdit.audioUrlTranslation')}</label>
+                <input
+                  type="text"
+                  className="input text-xs"
+                  placeholder="https://…mp3"
+                  value={form.audio_url_translation}
+                  onChange={(e) => set('audio_url_translation')(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 block mb-0.5">{t('wordEdit.audioText')}</label>
+                <input
+                  type="text"
+                  className="input text-xs"
+                  placeholder={t('wordEdit.audioTextPlaceholder')}
+                  value={form.audio_text}
+                  onChange={(e) => set('audio_text')(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 block mb-0.5">{t('wordEdit.audioTextTranslation')}</label>
+                <input
+                  type="text"
+                  className="input text-xs"
+                  placeholder={t('wordEdit.audioTextPlaceholder')}
+                  value={form.audio_text_translation}
+                  onChange={(e) => set('audio_text_translation')(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-500 block mb-0.5">{t('wordEdit.category')}</label>
+              <input
+                type="text"
+                className="input text-sm"
+                placeholder="noun / verb / adjective…"
+                value={form.category}
+                onChange={(e) => set('category')(e.target.value)}
+              />
+            </div>
+
+            {/* Audio preview buttons */}
+            {(form.audio_url || form.audio_url_translation) && (
+              <div className="flex gap-2">
+                {form.audio_url && (
+                  <button
+                    type="button"
+                    onClick={() => new Audio(form.audio_url).play().catch(() => {})}
+                    className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1 rounded-lg transition-colors"
+                  >
+                    ▶ {t('wordEdit.playWord')}
+                  </button>
+                )}
+                {form.audio_url_translation && (
+                  <button
+                    type="button"
+                    onClick={() => new Audio(form.audio_url_translation).play().catch(() => {})}
+                    className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1 rounded-lg transition-colors"
+                  >
+                    ▶ {t('wordEdit.playTranslation')}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-2">
         <button type="button" onClick={onCancel} className="btn-secondary py-2 text-sm px-3">

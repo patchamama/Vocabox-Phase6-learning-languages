@@ -5,11 +5,12 @@
  * On correct pick: fills the box AND reveals the full word.
  * On error: flash red, reset.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ReviewWord } from '../../types'
 import { accentInsensitiveMatch } from '../../utils/normalize'
 import { langPair } from '../../utils/langFlags'
+import SpeakButton from '../SpeakButton'
 
 interface Props {
   word: ReviewWord
@@ -44,11 +45,21 @@ export default function FirstLetterExercise({ word, onAnswer, autoAdvanceMs, aut
 
   const [chosen, setChosen] = useState<string[]>([])
   const [flash, setFlash] = useState<'error' | 'correct' | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const speak = () => {
+    const url = word.reversed ? word.audio_url_translation : word.audio_url
+    if (url) {
+      audioRef.current?.pause()
+      audioRef.current = new Audio(url)
+      audioRef.current.play().catch(() => {})
+      return
+    }
     speechSynthesis.cancel()
-    const u = new SpeechSynthesisUtterance(word.palabra)
-    u.lang = word.idioma_origen
+    const text = word.reversed ? word.significado : word.palabra
+    const lang = word.reversed ? word.idioma_destino : word.idioma_origen
+    const u = new SpeechSynthesisUtterance(text)
+    u.lang = lang
     speechSynthesis.speak(u)
   }
 
@@ -57,8 +68,9 @@ export default function FirstLetterExercise({ word, onAnswer, autoAdvanceMs, aut
     setFlash(null)
     if (!autoPlay) return
     speechSynthesis.cancel()
+    audioRef.current?.pause()
     const timer = setTimeout(() => speak(), 150)
-    return () => { clearTimeout(timer); speechSynthesis.cancel() }
+    return () => { clearTimeout(timer); speechSynthesis.cancel(); audioRef.current?.pause() }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [word.user_word_id, autoPlay])
 
@@ -111,13 +123,12 @@ export default function FirstLetterExercise({ word, onAnswer, autoAdvanceMs, aut
           {langPair(word.idioma_origen, word.idioma_destino)}
         </p>
         <p className="text-4xl font-bold">{word.palabra}</p>
-        <button
+        <SpeakButton
           onClick={speak}
-          className="text-2xl text-slate-400 hover:text-blue-400 transition-colors mt-2"
-          title="Escuchar"
-        >
-          🔊
-        </button>
+          hasMp3={!!(word.reversed ? word.audio_url_translation : word.audio_url)}
+          size="lg"
+          className="mt-2"
+        />
         {word.tema_nombre && (
           <span
             className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full font-medium text-white"

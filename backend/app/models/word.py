@@ -17,6 +17,10 @@ class Word(Base):
     idioma_destino = Column(String(10), default="es")
     tema_id = Column(Integer, ForeignKey("temas.id"), nullable=True)
     audio_url = Column(String(500), nullable=True)
+    audio_url_translation = Column(String(500), nullable=True)
+    audio_text = Column(String(200), nullable=True)
+    audio_text_translation = Column(String(200), nullable=True)
+    category = Column(String(50), nullable=True)
 
     tema = relationship("Tema", back_populates="words")
     user_words = relationship(

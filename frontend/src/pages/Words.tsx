@@ -1,13 +1,13 @@
-import { FormEvent, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getLastErrors } from './Review'
 import { useTranslation } from 'react-i18next'
-import { languagesApi, temasApi, wordsApi } from '../api/client'
-import LanguageSelect from '../components/LanguageSelect'
-import TemaSelect from '../components/TemaSelect'
+import { temasApi, wordsApi } from '../api/client'
+import AudioReviewPanel from '../components/AudioReviewPanel'
+import SpeakButton from '../components/SpeakButton'
 import WordEditForm from '../components/WordEditForm'
 import { useSettingsStore } from '../stores/settingsStore'
-import type { Language, Tema, UserWord } from '../types'
+import type { Tema, UserWord } from '../types'
 
 // ── WordCard ──────────────────────────────────────────────────────────────────
 // Shared between list mode and flashcard revealed state.
@@ -44,6 +44,11 @@ function WordCard({
           idioma_origen: uw.word.idioma_origen,
           idioma_destino: uw.word.idioma_destino,
           tema_id: uw.word.tema_id,
+          audio_url: uw.word.audio_url,
+          audio_url_translation: uw.word.audio_url_translation,
+          audio_text: uw.word.audio_text,
+          audio_text_translation: uw.word.audio_text_translation,
+          category: uw.word.category,
         }}
         onSaved={onSaved}
         onCancel={onCancelEdit}
@@ -95,13 +100,12 @@ function WordCard({
         <span className={`text-xs px-2 py-0.5 rounded-full text-slate-900 font-bold ${BOX_COLORS[uw.box_level]}`}>
           {boxPrefix}{uw.box_level}
         </span>
-        <button
+        <SpeakButton
           onClick={(e) => { e.stopPropagation(); onToggleExpand(); onSpeak() }}
-          className="text-slate-500 hover:text-blue-400 transition-colors px-1 text-base"
-          title="Reproducir"
-        >
-          🔊
-        </button>
+          hasMp3={!!uw.word.audio_url}
+          size="sm"
+          className="px-1"
+        />
         <button
           onClick={(e) => { e.stopPropagation(); onEdit() }}
           className="text-slate-500 hover:text-blue-400 transition-colors px-2"
@@ -151,14 +155,6 @@ function useLocalStorage<T>(key: string, initial: T): [T, (v: T | ((prev: T) => 
   return [state, setState]
 }
 
-const EMPTY_FORM = {
-  palabra: '',
-  significado: '',
-  idioma_origen: 'de',
-  idioma_destino: 'es',
-  tema_id: '',
-}
-
 const SELECT_CLASS =
   'bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all'
 
@@ -189,7 +185,11 @@ export default function Words() {
   const [searchParams] = useSearchParams()
   const { autoPlayAudio, wordsOnly, pageSizeOptions, selectedPageSize, setSelectedPageSize } = useSettingsStore()
 
-  const speak = (palabra: string, idioma: string) => {
+  const speak = (palabra: string, idioma: string, audioUrl?: string | null) => {
+    if (audioUrl) {
+      new Audio(audioUrl).play().catch(() => {})
+      return
+    }
     speechSynthesis.cancel()
     const u = new SpeechSynthesisUtterance(palabra)
     u.lang = idioma
@@ -199,12 +199,10 @@ export default function Words() {
   // ── Data ─────────────────────────────────────────────────────────────────────
   const [userWords, setUserWords] = useState<UserWord[]>([])
   const [temas, setTemas] = useState<Tema[]>([])
-  const [languages, setLanguages] = useState<Language[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   // ── CRUD ─────────────────────────────────────────────────────────────────────
   const [isAdding, setIsAdding] = useState(false)
-  const [form, setForm] = useState(EMPTY_FORM)
   const [editId, setEditId] = useState<number | null>(null)
   const [showDeleteAll, setShowDeleteAll] = useState(false)
   const [isBusy, setIsBusy] = useState(false)
@@ -227,6 +225,7 @@ export default function Words() {
 
   // ── Advanced panel (persistent) ──────────────────────────────────────────────
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [showAudioPanel, setShowAudioPanel] = useState(false)
   const [showStats, setShowStats] = useLocalStorage<boolean>('words:showStats', false)
   const [expandAll, setExpandAll] = useLocalStorage<boolean>('words:expandAll', false)
 
@@ -247,14 +246,12 @@ export default function Words() {
   // ── Load ─────────────────────────────────────────────────────────────────────
   const load = async () => {
     setIsLoading(true)
-    const [wRes, tRes, lRes] = await Promise.all([
+    const [wRes, tRes] = await Promise.all([
       wordsApi.myWords(),
       temasApi.list(),
-      languagesApi.list(),
     ])
     setUserWords(wRes.data)
     setTemas(tRes.data)
-    setLanguages(lRes.data)
     setIsLoading(false)
   }
 
@@ -301,7 +298,7 @@ export default function Words() {
       return next
     })
     if (!isCurrentlyRevealed && autoPlayAudio) {
-      speak(uw.word.palabra, uw.word.idioma_origen)
+      speak(uw.word.palabra, uw.word.idioma_origen, uw.word.audio_url)
     }
   }
 
@@ -320,23 +317,6 @@ export default function Words() {
       setSortDir(field === 'times_incorrect' || field === 'times_reviewed' ? 'desc' : 'asc')
     }
     resetPage()
-  }
-
-  // ── Add ──────────────────────────────────────────────────────────────────────
-  const handleAdd = async (e: FormEvent) => {
-    e.preventDefault()
-    setIsBusy(true)
-    try {
-      await wordsApi.create({
-        ...form,
-        tema_id: form.tema_id ? parseInt(form.tema_id) : undefined,
-      })
-      setForm(EMPTY_FORM)
-      setIsAdding(false)
-      load()
-    } finally {
-      setIsBusy(false)
-    }
   }
 
   // ── Delete ───────────────────────────────────────────────────────────────────
@@ -361,9 +341,6 @@ export default function Words() {
     a.click()
     URL.revokeObjectURL(url)
   }
-
-  const setAddField = (field: keyof typeof EMPTY_FORM) => (value: string) =>
-    setForm((f) => ({ ...f, [field]: value }))
 
   // ── Sort indicator ────────────────────────────────────────────────────────────
   const sortIndicator = (field: SortField) => {
@@ -469,6 +446,14 @@ export default function Words() {
         >
           ⚙ {showAdvanced ? '▴' : '▾'}
         </button>
+        {/* Audio review */}
+        <button
+          onClick={() => setShowAudioPanel((v) => !v)}
+          title={t('audioReview.button')}
+          className={`btn-secondary py-2 px-3 text-sm ${showAudioPanel ? 'border-blue-500 text-blue-300' : ''}`}
+        >
+          🎧
+        </button>
       </div>
 
       {/* Advanced options panel */}
@@ -522,6 +507,14 @@ export default function Words() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Audio review panel */}
+      {showAudioPanel && (
+        <AudioReviewPanel
+          filteredWords={filtered}
+          onClose={() => setShowAudioPanel(false)}
+        />
       )}
 
       {/* Flashcard side toggle */}
@@ -597,37 +590,18 @@ export default function Words() {
 
       {/* Add form */}
       {isAdding && (
-        <form onSubmit={handleAdd} className="card space-y-3 animate-slide-up">
-          <div className="grid grid-cols-2 gap-2">
-            <input
-              className="input"
-              placeholder={t('words.wordOrigin')}
-              value={form.palabra}
-              onChange={(e) => setAddField('palabra')(e.target.value)}
-              required
-            />
-            <input
-              className="input"
-              placeholder={t('words.meaning')}
-              value={form.significado}
-              onChange={(e) => setAddField('significado')(e.target.value)}
-              required
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <LanguageSelect languages={languages} value={form.idioma_origen} onChange={setAddField('idioma_origen')} />
-            <LanguageSelect languages={languages} value={form.idioma_destino} onChange={setAddField('idioma_destino')} />
-          </div>
-          <TemaSelect
-            temas={temas}
-            value={form.tema_id}
-            onChange={setAddField('tema_id')}
-            onTemaCreated={(tm) => setTemas((prev) => [...prev, tm])}
-          />
-          <button type="submit" disabled={isBusy} className="btn-primary w-full">
-            {isBusy ? t('words.saving') : t('words.save')}
-          </button>
-        </form>
+        <WordEditForm
+          word={{
+            word_id: 0,
+            palabra: '',
+            significado: '',
+            idioma_origen: 'de',
+            idioma_destino: 'es',
+            tema_id: null,
+          }}
+          onSaved={() => { setIsAdding(false); load() }}
+          onCancel={() => setIsAdding(false)}
+        />
       )}
 
       {/* Content */}
@@ -661,7 +635,7 @@ export default function Words() {
                   showStats={showStats}
                   t={t as (key: string, opts?: Record<string, unknown>) => string}
                   boxPrefix={t('box.prefix')}
-                  onSpeak={() => speak(uw.word.palabra, uw.word.idioma_origen)}
+                  onSpeak={() => speak(uw.word.palabra, uw.word.idioma_origen, uw.word.audio_url)}
                   onEdit={() => setEditId(uw.word.id)}
                   onCollapse={() => toggleReveal(uw)}
                   onToggleExpand={() => toggleExpand(uw.word.id)}
@@ -699,7 +673,7 @@ export default function Words() {
               showStats={showStats}
               t={t as (key: string, opts?: Record<string, unknown>) => string}
               boxPrefix={t('box.prefix')}
-              onSpeak={() => speak(uw.word.palabra, uw.word.idioma_origen)}
+              onSpeak={() => speak(uw.word.palabra, uw.word.idioma_origen, uw.word.audio_url)}
               onEdit={() => setEditId(uw.word.id)}
               onToggleExpand={() => toggleExpand(uw.word.id)}
               isExpanded={expandAll || expandedId === uw.word.id}

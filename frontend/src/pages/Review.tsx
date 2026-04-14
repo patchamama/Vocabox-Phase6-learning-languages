@@ -654,6 +654,8 @@ export default function Review() {
               idioma_origen: word.idioma_origen,
               idioma_destino: word.idioma_destino,
               tema_id: word.tema_id,
+              audio_url: word.audio_url,
+              audio_url_translation: word.audio_url_translation,
             }}
             onSaved={({ tema, ...rest }) => {
               patchWord(word.user_word_id, {

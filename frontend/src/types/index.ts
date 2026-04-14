@@ -18,6 +18,10 @@ export interface Word {
   idioma_destino: string
   tema_id: number | null
   audio_url: string | null
+  audio_url_translation: string | null
+  audio_text: string | null
+  audio_text_translation: string | null
+  category: string | null
   tema: Tema | null
 }
 
@@ -41,6 +45,7 @@ export interface ReviewWord {
   idioma_destino: string
   box_level: number
   audio_url: string | null
+  audio_url_translation: string | null
   exercise_type: 'write' | 'multiple_choice'
   choices: string[] | null
   tema_id: number | null
@@ -80,6 +85,33 @@ export interface Language {
   code: string
   name_es: string | null
   name_en: string | null
+}
+
+export interface LeoAudio {
+  file_id: string
+  label: string
+  mp3_url: string
+}
+
+export interface LeoSide {
+  lang: string
+  text: string
+  audio: LeoAudio[]
+}
+
+export interface LeoEntry {
+  aiid: string
+  section: string
+  category: string
+  sides: LeoSide[]
+}
+
+export interface LeoResult {
+  word: string
+  lang_pair: string
+  total_results: number
+  lang_labels: Record<string, string>
+  entries: LeoEntry[]
 }
 
 export interface BoxStats {

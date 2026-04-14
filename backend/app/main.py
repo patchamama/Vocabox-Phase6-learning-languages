@@ -11,7 +11,30 @@ from . import models  # noqa: F401
 
 Base.metadata.create_all(bind=engine)
 
-from .routers import auth, import_router, languages, review, stats, temas, test_mode, words
+
+def _migrate_words_columns() -> None:
+    """Add new columns to the words table if they don't exist yet."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    if "words" not in inspector.get_table_names():
+        return
+    existing = {c["name"] for c in inspector.get_columns("words")}
+    new_cols = [
+        ("category", "VARCHAR(50)"),
+        ("audio_url_translation", "VARCHAR(500)"),
+        ("audio_text", "VARCHAR(200)"),
+        ("audio_text_translation", "VARCHAR(200)"),
+    ]
+    with engine.begin() as conn:
+        for col, typ in new_cols:
+            if col not in existing:
+                conn.execute(text(f"ALTER TABLE words ADD COLUMN {col} {typ}"))
+
+
+_migrate_words_columns()
+
+from .routers import audio_review, auth, import_router, languages, leo, review, stats, temas, test_mode, words
 
 # ── Language dictionary seed data ─────────────────────────────────────────────
 
@@ -83,6 +106,8 @@ app.include_router(temas.router,         prefix="/api")
 app.include_router(import_router.router, prefix="/api")
 app.include_router(languages.router,     prefix="/api")
 app.include_router(test_mode.router,     prefix="/api")
+app.include_router(leo.router,           prefix="/api")
+app.include_router(audio_review.router,  prefix="/api")
 
 # ── Static frontend (served from app/static after deploy) ─────────────────────
 _STATIC_DIR = Path(__file__).parent / "static"

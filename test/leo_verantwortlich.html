@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LEO: verantwortlich</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f0f4f8; margin: 0; padding: 24px 16px; color: #1a1a2e;
+    }
+    .container { max-width: 780px; margin: 0 auto; }
+
+    header {
+      background: #1a3a5c; color: #fff;
+      border-radius: 12px 12px 0 0; padding: 20px 24px;
+    }
+    header h1 { margin: 0 0 4px; font-size: 22px; font-weight: 700; }
+    header p  { margin: 0; font-size: 13px; opacity: 0.72; }
+
+    .entry {
+      background: #fff; border: 1px solid #dde4ef; border-top: none; overflow: hidden;
+    }
+    .entry:last-child { border-radius: 0 0 12px 12px; }
+
+    .entry-header {
+      background: #eef2f9; padding: 9px 16px;
+      display: flex; align-items: center; gap: 10px;
+      border-bottom: 1px solid #dde4ef;
+    }
+    .entry-num {
+      background: #1a3a5c; color: #fff; border-radius: 50%;
+      width: 22px; height: 22px; font-size: 11px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .entry-section {
+      font-size: 11px; color: #5a6a7e; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+
+    .sides { display: grid; grid-template-columns: 1fr 1fr; }
+    .side  { padding: 14px 16px; }
+    .side:first-child { border-right: 1px solid #dde4ef; }
+
+    .lang-badge {
+      display: inline-block; background: #e8f0fe; color: #1a3a5c;
+      border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 7px;
+    }
+    .entry-text {
+      font-size: 14px; font-weight: 500; margin-bottom: 10px;
+      line-height: 1.5; color: #1a1a2e;
+    }
+
+    .audio-list { display: flex; flex-direction: column; gap: 6px; }
+    .audio-item { display: flex; align-items: center; gap: 7px; }
+
+    .btn-play {
+      background: #1a3a5c; border: none; border-radius: 50%;
+      width: 28px; height: 28px; cursor: pointer; color: #fff; font-size: 10px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: background .15s;
+    }
+    .btn-play:hover   { background: #254e7a; }
+    .btn-play.playing { background: #c0392b; }
+
+    .audio-label {
+      font-size: 12px; color: #5a6a7e; flex: 1; min-width: 0;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .btn-dl {
+      text-decoration: none; background: none; border: 1px solid #c8d0da;
+      border-radius: 5px; color: #5a6a7e; font-size: 11px; padding: 3px 8px;
+      white-space: nowrap; transition: all .15s; flex-shrink: 0;
+    }
+    .btn-dl:hover { background: #eef2f9; border-color: #1a3a5c; color: #1a3a5c; }
+    .no-audio { font-size: 12px; color: #bbb; font-style: italic; }
+
+    @media (max-width: 520px) {
+      .sides { grid-template-columns: 1fr; }
+      .side:first-child { border-right: none; border-bottom: 1px solid #dde4ef; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>&#128270; verantwortlich</h1>
+      <p>3 resultados &mdash; LEO Diccionario</p>
+    </header>
+    
+      <div class="entry">
+        <div class="entry-header">
+          <span class="entry-num">#1</span>
+          <span class="entry-section">Adjetivos/Adverbios</span>
+        </div>
+        <div class="sides">
+        <div class="side">
+          <div class="lang-badge">Español</div>
+          <div class="entry-text">responsable adj. m./f. - encargado</div>
+          <div class="audio-list">
+              <div class="audio-item">
+                <button class="btn-play" data-url="https://dict.leo.org/media/audio/gRImndAZJv7CooAh02-maQ.mp3" title="Reproducir">&#9654;</button>
+                <span class="audio-label" title="responsable">responsable</span>
+                <a class="btn-dl" href="https://dict.leo.org/media/audio/gRImndAZJv7CooAh02-maQ.mp3" download="gRImndAZJv7CooAh02-maQ.mp3">&#11015; MP3</a>
+              </div></div>
+        </div>
+        <div class="side">
+          <div class="lang-badge">Alemán</div>
+          <div class="entry-text">verantwortlich</div>
+          <div class="audio-list">
+              <div class="audio-item">
+                <button class="btn-play" data-url="https://dict.leo.org/media/audio/NPa6lhcqtdgv6KFMiIaKnA.mp3" title="Reproducir">&#9654;</button>
+                <span class="audio-label" title="verantwortlich">verantwortlich</span>
+                <a class="btn-dl" href="https://dict.leo.org/media/audio/NPa6lhcqtdgv6KFMiIaKnA.mp3" download="NPa6lhcqtdgv6KFMiIaKnA.mp3">&#11015; MP3</a>
+              </div></div>
+        </div></div>
+      </div>
+      <div class="entry">
+        <div class="entry-header">
+          <span class="entry-num">#2</span>
+          <span class="entry-section">Verbos</span>
+        </div>
+        <div class="sides">
+        <div class="side">
+          <div class="lang-badge">Español</div>
+          <div class="entry-text">responder de algo</div>
+          <div class="audio-list">
+              <div class="audio-item">
+                <button class="btn-play" data-url="https://dict.leo.org/media/audio/kr1c7fhoaMl1RjWYy7hvxQ.mp3" title="Reproducir">&#9654;</button>
+                <span class="audio-label" title="responder">responder</span>
+                <a class="btn-dl" href="https://dict.leo.org/media/audio/kr1c7fhoaMl1RjWYy7hvxQ.mp3" download="kr1c7fhoaMl1RjWYy7hvxQ.mp3">&#11015; MP3</a>
+              </div></div>
+        </div>
+        <div class="side">
+          <div class="lang-badge">Alemán</div>
+          <div class="entry-text">für etw.Akk. verantwortlich sein | war, gewesen |</div>
+          <div class="audio-list">
+              <div class="audio-item">
+                <button class="btn-play" data-url="https://dict.leo.org/media/audio/lRg5GkUtfEK7Oi7PBm9gTQ.mp3" title="Reproducir">&#9654;</button>
+                <span class="audio-label" title="für etw. verantwortlich sein">für etw. verantwortlich sein</span>
+                <a class="btn-dl" href="https://dict.leo.org/media/audio/lRg5GkUtfEK7Oi7PBm9gTQ.mp3" download="lRg5GkUtfEK7Oi7PBm9gTQ.mp3">&#11015; MP3</a>
+              </div></div>
+        </div></div>
+      </div>
+      <div class="entry">
+        <div class="entry-header">
+          <span class="entry-num">#3</span>
+          <span class="entry-section">Verbos</span>
+        </div>
+        <div class="sides">
+        <div class="side">
+          <div class="lang-badge">Español</div>
+          <div class="entry-text">responsabilizarse de algo</div>
+          <div class="audio-list">
+              <div class="audio-item">
+                <button class="btn-play" data-url="https://dict.leo.org/media/audio/QMK2c1MEkeWwULokpcDR0g.mp3" title="Reproducir">&#9654;</button>
+                <span class="audio-label" title="responsabilizarse">responsabilizarse</span>
+                <a class="btn-dl" href="https://dict.leo.org/media/audio/QMK2c1MEkeWwULokpcDR0g.mp3" download="QMK2c1MEkeWwULokpcDR0g.mp3">&#11015; MP3</a>
+              </div></div>
+        </div>
+        <div class="side">
+          <div class="lang-badge">Alemán</div>
+          <div class="entry-text">sichAkk. für etw.Akk. verantwortlich machen</div>
+          <span class="no-audio">Sin audio disponible</span>
+        </div></div>
+      </div>
+  </div>
+  <script>
+    let current = null;
+    document.querySelectorAll('.btn-play').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (current) {
+          current.audio.pause();
+          current.btn.innerHTML = '&#9654;';
+          current.btn.classList.remove('playing');
+          if (current.btn === btn) { current = null; return; }
+        }
+        const audio = new Audio(btn.dataset.url);
+        btn.innerHTML = '&#9632;';
+        btn.classList.add('playing');
+        current = { audio, btn };
+        audio.play();
+        audio.onended = () => {
+          btn.innerHTML = '&#9654;';
+          btn.classList.remove('playing');
+          current = null;
+        };
+      });
+    });
+  </script>
+</body>
+</html>

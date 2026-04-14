@@ -12,6 +12,7 @@ class ReviewWordOut(BaseModel):
     idioma_destino: str
     box_level: int
     audio_url: Optional[str] = None
+    audio_url_translation: Optional[str] = None
     exercise_type: str  # "write" | "multiple_choice"
     choices: Optional[List[str]] = None
     tema_id: Optional[int] = None

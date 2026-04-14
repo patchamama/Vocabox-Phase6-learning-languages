@@ -108,6 +108,7 @@ def get_review_words(
                 idioma_destino=uw.word.idioma_destino,
                 box_level=uw.box_level,
                 audio_url=uw.word.audio_url,
+                audio_url_translation=uw.word.audio_url_translation,
                 exercise_type=exercise_type,
                 choices=choices,
                 tema_id=tema_id,

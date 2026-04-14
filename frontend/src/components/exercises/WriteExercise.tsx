@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ReviewWord } from '../../types'
+import SpeakButton from '../SpeakButton'
 import { langPair } from '../../utils/langFlags'
 import { stripAccent } from '../../utils/normalize'
 import { assignShortcuts, ShortcutLabel } from '../../utils/shortcutLabel'
@@ -19,6 +20,7 @@ export default function WriteExercise({ word, onAnswer, autoPlay = false }: Prop
   const [showOptions, setShowOptions] = useState(false)
   const [selectedChoice, setSelectedChoice] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const choices = word.choices ?? null
 
@@ -55,9 +57,18 @@ export default function WriteExercise({ word, onAnswer, autoPlay = false }: Prop
   }, [optionShortcuts])
 
   const speak = () => {
+    const url = word.reversed ? word.audio_url_translation : word.audio_url
+    if (url) {
+      audioRef.current?.pause()
+      audioRef.current = new Audio(url)
+      audioRef.current.play().catch(() => {})
+      return
+    }
     speechSynthesis.cancel()
-    const u = new SpeechSynthesisUtterance(word.palabra)
-    u.lang = word.idioma_origen
+    const text = word.reversed ? word.significado : word.palabra
+    const lang = word.reversed ? word.idioma_destino : word.idioma_origen
+    const u = new SpeechSynthesisUtterance(text)
+    u.lang = lang
     speechSynthesis.speak(u)
   }
 
@@ -88,8 +99,9 @@ export default function WriteExercise({ word, onAnswer, autoPlay = false }: Prop
 
     if (!autoPlay) return
     speechSynthesis.cancel()
+    audioRef.current?.pause()
     const timer = setTimeout(() => speak(), 150)
-    return () => { clearTimeout(timer); speechSynthesis.cancel() }
+    return () => { clearTimeout(timer); speechSynthesis.cancel(); audioRef.current?.pause() }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [word.user_word_id, autoPlay])
 
@@ -174,13 +186,11 @@ export default function WriteExercise({ word, onAnswer, autoPlay = false }: Prop
         </p>
         <p className="font-bold mb-3 break-words hyphens-auto leading-tight
           text-4xl [word-break:break-word]">{word.palabra}</p>
-        <button
+        <SpeakButton
           onClick={speak}
-          className="text-2xl text-slate-400 hover:text-blue-400 transition-colors"
-          title="Escuchar"
-        >
-          🔊
-        </button>
+          hasMp3={!!(word.reversed ? word.audio_url_translation : word.audio_url)}
+          size="lg"
+        />
         {word.tema_nombre && (
           <span
             className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full font-medium text-white"

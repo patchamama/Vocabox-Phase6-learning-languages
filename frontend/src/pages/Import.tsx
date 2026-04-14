@@ -5,11 +5,23 @@ import TemaSelect from '../components/TemaSelect'
 import type { ImportPreview, ImportResult, Tema } from '../types'
 
 type Step = 'upload' | 'preview' | 'result'
+type Tab = 'files' | 'pdf'
 
-const ACCEPTED = '.csv,.xlsx'
+const ACCEPTED_FILES = '.csv,.xlsx'
+const ACCEPTED_PDF = '.pdf'
+
+// LEO language pairs available for PDF import
+const LEO_PAIRS = [
+  { lp: 'esde', src: 'de', tgt: 'es', label: 'Alemán → Español' },
+  { lp: 'ende', src: 'de', tgt: 'en', label: 'Alemán → Inglés' },
+  { lp: 'frde', src: 'de', tgt: 'fr', label: 'Alemán → Francés' },
+  { lp: 'itde', src: 'de', tgt: 'it', label: 'Alemán → Italiano' },
+  { lp: 'ptde', src: 'de', tgt: 'pt', label: 'Alemán → Portugués' },
+]
 
 export default function Import() {
   const { t } = useTranslation()
+  const [tab, setTab] = useState<Tab>('files')
   const [step, setStep] = useState<Step>('upload')
   const [isDragging, setIsDragging] = useState(false)
   const [file, setFile] = useState<File | null>(null)
@@ -19,6 +31,7 @@ export default function Import() {
   const [temas, setTemas] = useState<Tema[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [pdfPair, setPdfPair] = useState(LEO_PAIRS[0])
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -29,9 +42,16 @@ export default function Import() {
 
   const handleFile = (f: File) => {
     const name = f.name.toLowerCase()
-    if (!name.endsWith('.csv') && !name.endsWith('.xlsx')) {
-      setError(t('import.onlyFormats'))
-      return
+    if (tab === 'files') {
+      if (!name.endsWith('.csv') && !name.endsWith('.xlsx')) {
+        setError(t('import.onlyFormats'))
+        return
+      }
+    } else {
+      if (!name.endsWith('.pdf')) {
+        setError(t('import.onlyPdf'))
+        return
+      }
     }
     setFile(f)
     setError(null)
@@ -56,7 +76,9 @@ export default function Import() {
     setIsLoading(true)
     setError(null)
     try {
-      const { data } = await importApi.preview(file)
+      const { data } = tab === 'pdf'
+        ? await importApi.pdfPreview(file, pdfPair.src, pdfPair.tgt)
+        : await importApi.preview(file)
       setPreview(data)
       setStep('preview')
     } catch (err: unknown) {
@@ -99,6 +121,13 @@ export default function Import() {
     if (inputRef.current) inputRef.current.value = ''
   }
 
+  const switchTab = (t: Tab) => {
+    setTab(t)
+    setFile(null)
+    setError(null)
+    if (inputRef.current) inputRef.current.value = ''
+  }
+
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
@@ -108,7 +137,51 @@ export default function Import() {
       {/* ── STEP 1: Upload ── */}
       {step === 'upload' && (
         <div className="space-y-4">
-          <p className="text-slate-400 text-sm">{t('import.description')}</p>
+          {/* Tab selector */}
+          <div className="flex rounded-xl overflow-hidden border border-slate-700 text-sm">
+            <button
+              type="button"
+              onClick={() => switchTab('files')}
+              className={`flex-1 py-2 font-medium transition-colors ${
+                tab === 'files'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {t('import.tabFiles')}
+            </button>
+            <button
+              type="button"
+              onClick={() => switchTab('pdf')}
+              className={`flex-1 py-2 font-medium transition-colors ${
+                tab === 'pdf'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {t('import.tabPdf')}
+            </button>
+          </div>
+
+          <p className="text-slate-400 text-sm">
+            {tab === 'pdf' ? t('import.pdfDescription') : t('import.description')}
+          </p>
+
+          {/* PDF lang pair selector */}
+          {tab === 'pdf' && (
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">{t('import.pdfLangPair')}</label>
+              <select
+                className="input text-sm w-full"
+                value={pdfPair.lp}
+                onChange={(e) => setPdfPair(LEO_PAIRS.find((p) => p.lp === e.target.value)!)}
+              >
+                {LEO_PAIRS.map((p) => (
+                  <option key={p.lp} value={p.lp}>{p.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Drop zone */}
           <div
@@ -122,19 +195,21 @@ export default function Import() {
                 : 'border-slate-600 hover:border-slate-400'
             }`}
           >
-            <div className="text-4xl mb-3">📥</div>
+            <div className="text-4xl mb-3">{tab === 'pdf' ? '📄' : '📥'}</div>
             <p className="text-slate-300 font-medium">
               {file ? file.name : t('import.dropZone')}
             </p>
             <p className="text-slate-500 text-sm mt-1">
               {file
                 ? `${(file.size / 1024).toFixed(1)} KB · ${t('import.dropZoneChange')}`
-                : t('import.dropZoneOr')}
+                : tab === 'pdf'
+                  ? t('import.dropZoneOrPdf')
+                  : t('import.dropZoneOr')}
             </p>
             <input
               ref={inputRef}
               type="file"
-              accept={ACCEPTED}
+              accept={tab === 'pdf' ? ACCEPTED_PDF : ACCEPTED_FILES}
               className="hidden"
               onChange={onInputChange}
             />
@@ -162,7 +237,7 @@ export default function Import() {
           {/* Summary card */}
           <div className="card space-y-3">
             <div className="flex items-center gap-2 text-slate-300 font-medium">
-              <span className="text-lg">📂</span>
+              <span className="text-lg">{tab === 'pdf' ? '📄' : '📂'}</span>
               <span className="truncate">{file?.name}</span>
             </div>
 

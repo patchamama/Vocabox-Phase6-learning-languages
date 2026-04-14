@@ -1,0 +1,86 @@
+{
+  "word": "machen",
+  "lang_pair": "esde",
+  "total_results": 3,
+  "lang_labels": {
+    "es": "Español",
+    "de": "Alemán"
+  },
+  "entries": [
+    {
+      "aiid": "H5VZb1liMKZ",
+      "section": "Verbos",
+      "category": "verb",
+      "sides": [
+        {
+          "lang": "es",
+          "text": "hacer algo",
+          "audio": [
+            {
+              "file_id": "qZIlWG0s2gqTP7AZm3nuaw",
+              "label": "hacer algo",
+              "mp3_url": "https://dict.leo.org/media/audio/qZIlWG0s2gqTP7AZm3nuaw.mp3"
+            }
+          ]
+        },
+        {
+          "lang": "de",
+          "text": "etw.Akk. machen | machte, gemacht |",
+          "audio": [
+            {
+              "file_id": "4792Oq4tWcrr5n-jrNqT2A",
+              "label": "etw. machen",
+              "mp3_url": "https://dict.leo.org/media/audio/4792Oq4tWcrr5n-jrNqT2A.mp3"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "aiid": "GGvrAjtLMqT",
+      "section": "Verbos",
+      "category": "verb",
+      "sides": [
+        {
+          "lang": "es",
+          "text": "convertir algo (o: a alguien) en algo (o: alguien)",
+          "audio": []
+        },
+        {
+          "lang": "de",
+          "text": "jmdn./etw. zu jmdm./etw. machen | machte, gemacht |",
+          "audio": [
+            {
+              "file_id": "onLG0_I82AbXUFvlz7v3og",
+              "label": "jmdn./etw. zu jmdm./etw. machen",
+              "mp3_url": "https://dict.leo.org/media/audio/onLG0_I82AbXUFvlz7v3og.mp3"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "aiid": "EfQiS-laZhU",
+      "section": "Verbos",
+      "category": "verb",
+      "sides": [
+        {
+          "lang": "es",
+          "text": "hacer algo bien",
+          "audio": []
+        },
+        {
+          "lang": "de",
+          "text": "etw.Akk. gut/richtig machen | machte, gemacht |",
+          "audio": [
+            {
+              "file_id": "2jEeNtEZF54YeaoREDc9WA",
+              "label": "etw. gut machen",
+              "mp3_url": "https://dict.leo.org/media/audio/2jEeNtEZF54YeaoREDc9WA.mp3"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

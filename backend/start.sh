@@ -48,8 +48,8 @@ source "$VENV_DIR/bin/activate"
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
 echo "[2/3] Installing / updating dependencies..."
-pip install --quiet --upgrade pip
-pip install --quiet -r "$SCRIPT_DIR/requirements.txt"
+pip install  --upgrade pip
+pip install  -r "$SCRIPT_DIR/requirements.txt"
 echo "      Done."
 
 # ── Run ───────────────────────────────────────────────────────────────────────

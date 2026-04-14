@@ -32,22 +32,24 @@ export const authApi = {
   me: () => api.get('/auth/me'),
 }
 
+export interface WordFields {
+  palabra?: string
+  significado?: string
+  idioma_origen?: string
+  idioma_destino?: string
+  tema_id?: number | null
+  audio_url?: string | null
+  audio_url_translation?: string | null
+  audio_text?: string | null
+  audio_text_translation?: string | null
+  category?: string | null
+}
+
 export const wordsApi = {
   list: (tema_id?: number) => api.get('/words', { params: { tema_id } }),
-  create: (data: {
-    palabra: string
-    significado: string
-    idioma_origen: string
-    idioma_destino: string
-    tema_id?: number
-  }) => api.post('/words', data),
-  update: (id: number, data: {
-    palabra?: string
-    significado?: string
-    idioma_origen?: string
-    idioma_destino?: string
-    tema_id?: number | null
-  }) => api.put(`/words/${id}`, data),
+  create: (data: WordFields & { palabra: string; significado: string; idioma_origen: string; idioma_destino: string }) =>
+    api.post('/words', data),
+  update: (id: number, data: WordFields) => api.put(`/words/${id}`, data),
   delete: (id: number) => api.delete(`/words/${id}`),
   deleteAll: () => api.delete('/words/all'),
   exportCsv: () => api.get('/words/export', { responseType: 'blob' }),
@@ -97,6 +99,34 @@ export const importApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
+  pdfPreview: (file: File, srcLang = 'de', tgtLang = 'es') => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post('/import/pdf-preview', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      params: { src_lang: srcLang, tgt_lang: tgtLang },
+    })
+  },
   confirm: (rows: ImportRowPreview[], tema_id?: number) =>
     api.post('/import/confirm', { rows, tema_id }),
+}
+
+export const leoApi = {
+  lookup: (word: string, lp = 'esde', results = 3) =>
+    api.get('/leo/lookup', { params: { word, lp, results } }),
+}
+
+export const audioReviewApi = {
+  generate: (wordIds: number[], order: string, gapSeconds: number, beep: boolean) =>
+    api.post('/audio-review/generate', {
+      word_ids: wordIds,
+      order,
+      gap_seconds: gapSeconds,
+      beep,
+    }),
+  list: () => api.get('/audio-review/list'),
+  getFile: (filename: string) =>
+    api.get(`/audio-review/file/${encodeURIComponent(filename)}`, { responseType: 'blob' }),
+  deleteFile: (filename: string) =>
+    api.delete(`/audio-review/file/${encodeURIComponent(filename)}`),
 }

@@ -12,11 +12,12 @@ Duplicate detection strategy (per user):
 
 import csv
 import io
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Optional
 
 import openpyxl
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
@@ -110,6 +111,46 @@ def parse_xlsx(content: bytes) -> tuple[list[tuple], bool]:
     return rows, is_vocabox
 
 
+def parse_leo_pdf(content: bytes) -> list[tuple[str, str]]:
+    """Extract (src_word, tgt_word) pairs from a LEO vocabulary PDF.
+
+    LEO exports a two-column PDF (German left, target lang right).
+    We split by the page midpoint x-coordinate and group words by
+    row using a 20-point vertical tolerance.
+    """
+    try:
+        import pdfplumber
+    except ImportError:
+        raise HTTPException(
+            status_code=422,
+            detail="pdfplumber is required for PDF import. Run: pip install pdfplumber",
+        )
+
+    pairs: list[tuple[str, str]] = []
+    with pdfplumber.open(io.BytesIO(content)) as pdf:
+        for page in pdf.pages:
+            words = page.extract_words()
+            if not words:
+                continue
+            mid_x = page.width * 0.52
+            rows: dict = defaultdict(lambda: {"left": [], "right": []})
+            for w in words:
+                y_key = round(w["top"] / 20) * 20
+                if w["x0"] < mid_x:
+                    rows[y_key]["left"].append((w["x0"], w["top"], w["text"]))
+                else:
+                    rows[y_key]["right"].append((w["x0"], w["top"], w["text"]))
+
+            for y in sorted(rows.keys()):
+                lw = sorted(rows[y]["left"], key=lambda w: (round(w[1] / 3) * 3, w[0]))
+                rw = sorted(rows[y]["right"], key=lambda w: (round(w[1] / 3) * 3, w[0]))
+                left = " ".join(t for _, _, t in lw).strip()
+                right = " ".join(t for _, _, t in rw).strip()
+                if left and right:
+                    pairs.append((left, right))
+    return pairs
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 
@@ -200,6 +241,84 @@ async def preview_import(
                 is_duplicate=is_dup,
                 box_level=box_level,
                 next_review_date=next_review_date,
+            )
+        )
+
+    new_count = sum(1 for r in preview_rows if not r.is_duplicate)
+    dup_count = len(preview_rows) - new_count
+
+    return ImportPreviewOut(
+        rows=preview_rows,
+        total=len(preview_rows),
+        new_count=new_count,
+        duplicate_count=dup_count,
+        source_lang=src_lang_name,
+        target_lang=tgt_lang_name,
+        source_code=src_code,
+        target_code=tgt_code,
+    )
+
+
+@router.post("/pdf-preview", response_model=ImportPreviewOut)
+async def pdf_preview_import(
+    file: UploadFile = File(...),
+    src_lang: str = Query("de", description="Source language ISO code"),
+    tgt_lang: str = Query("es", description="Target language ISO code"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    filename = (file.filename or "").lower()
+    if not filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only .pdf files are supported here")
+
+    content = await file.read()
+    raw_pairs = parse_leo_pdf(content)
+    if not raw_pairs:
+        raise HTTPException(status_code=400, detail="No word pairs found in the PDF")
+
+    src_code = resolve_lang_code(src_lang, db) or src_lang
+    tgt_code = resolve_lang_code(tgt_lang, db) or tgt_lang
+
+    # Human-readable lang names from the DB (fallback to code)
+    from ..models.language_dict import LanguageDict
+    src_entry = db.query(LanguageDict).filter(LanguageDict.code == src_code).first()
+    tgt_entry = db.query(LanguageDict).filter(LanguageDict.code == tgt_code).first()
+    src_lang_name = src_entry.name_es if src_entry else src_code
+    tgt_lang_name = tgt_entry.name_es if tgt_entry else tgt_code
+
+    # Build normalized existing-word set
+    user_words = (
+        db.query(UserWord)
+        .filter(UserWord.user_id == current_user.id)
+        .options(joinedload(UserWord.word))
+        .all()
+    )
+    existing: set[tuple[str, str, str, str]] = {
+        (
+            normalize_phrase(uw.word.palabra),
+            normalize_phrase(uw.word.significado),
+            uw.word.idioma_origen,
+            uw.word.idioma_destino,
+        )
+        for uw in user_words
+    }
+
+    seen_in_file: set[tuple[str, str, str, str]] = set()
+    preview_rows: list[ImportRowPreview] = []
+
+    for src_word, tgt_word in raw_pairs:
+        if not src_word or not tgt_word:
+            continue
+        key = (normalize_phrase(src_word), normalize_phrase(tgt_word), src_code, tgt_code)
+        is_dup = key in existing or key in seen_in_file
+        seen_in_file.add(key)
+        preview_rows.append(
+            ImportRowPreview(
+                palabra=src_word,
+                significado=tgt_word,
+                idioma_origen=src_code,
+                idioma_destino=tgt_code,
+                is_duplicate=is_dup,
             )
         )
 

@@ -1,0 +1,92 @@
+{
+  "word": "Fahrrad",
+  "lang_pair": "esde",
+  "total_results": 3,
+  "lang_labels": {
+    "es": "Español",
+    "de": "Alemán"
+  },
+  "entries": [
+    {
+      "aiid": "NnIxt6oB-mo",
+      "section": "Sustantivos",
+      "category": "noun",
+      "sides": [
+        {
+          "lang": "es",
+          "text": "la bicicleta",
+          "audio": [
+            {
+              "file_id": "cJmUOc1Z5S6wTmB73rw0og",
+              "label": "la bicicleta",
+              "mp3_url": "https://dict.leo.org/media/audio/cJmUOc1Z5S6wTmB73rw0og.mp3"
+            }
+          ]
+        },
+        {
+          "lang": "de",
+          "text": "das Fahrrad Pl.: die Fahrräder",
+          "audio": [
+            {
+              "file_id": "F9ibRc5f64pJWOGYZNK2gg",
+              "label": "das Fahrrad",
+              "mp3_url": "https://dict.leo.org/media/audio/F9ibRc5f64pJWOGYZNK2gg.mp3"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "aiid": "L5e5QEdk__S",
+      "section": "Sustantivos",
+      "category": "noun",
+      "sides": [
+        {
+          "lang": "es",
+          "text": "la bici [col.]",
+          "audio": [
+            {
+              "file_id": "OHWsCzyfSPQydY2pBolXZg",
+              "label": "la bici",
+              "mp3_url": "https://dict.leo.org/media/audio/OHWsCzyfSPQydY2pBolXZg.mp3"
+            }
+          ]
+        },
+        {
+          "lang": "de",
+          "text": "das Fahrrad Pl.: die Fahrräder",
+          "audio": [
+            {
+              "file_id": "F9ibRc5f64pJWOGYZNK2gg",
+              "label": "das Fahrrad",
+              "mp3_url": "https://dict.leo.org/media/audio/F9ibRc5f64pJWOGYZNK2gg.mp3"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "aiid": "Li1dJ6TSTPI",
+      "section": "Sustantivos",
+      "category": "noun",
+      "sides": [
+        {
+          "lang": "es",
+          "text": "la cicla (Lat. Am.: Col., Ecu., Venez.)",
+          "audio": []
+        },
+        {
+          "lang": "de",
+          "text": "das Fahrrad Pl.: die Fahrräder",
+          "audio": [
+            {
+              "file_id": "F9ibRc5f64pJWOGYZNK2gg",
+              "label": "das Fahrrad",
+              "mp3_url": "https://dict.leo.org/media/audio/F9ibRc5f64pJWOGYZNK2gg.mp3"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

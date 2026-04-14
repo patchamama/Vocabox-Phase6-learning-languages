@@ -22,6 +22,10 @@ class WordCreate(BaseModel):
     idioma_destino: str = "es"
     tema_id: Optional[int] = None
     audio_url: Optional[str] = None
+    audio_url_translation: Optional[str] = None
+    audio_text: Optional[str] = None
+    audio_text_translation: Optional[str] = None
+    category: Optional[str] = None
 
 
 class WordUpdate(BaseModel):
@@ -30,6 +34,11 @@ class WordUpdate(BaseModel):
     idioma_origen: Optional[str] = None
     idioma_destino: Optional[str] = None
     tema_id: Optional[int] = None
+    audio_url: Optional[str] = None
+    audio_url_translation: Optional[str] = None
+    audio_text: Optional[str] = None
+    audio_text_translation: Optional[str] = None
+    category: Optional[str] = None
 
 
 class WordOut(WordCreate):

@@ -46,6 +46,7 @@ function makeWord(id: number, box = 1): ReviewWord {
     box_level: box,
     choices: [`meaning_${id}`, `wrong_a_${id}`, `wrong_b_${id}`, `wrong_c_${id}`],
     audio_url: null,
+    audio_url_translation: null,
     exercise_type: 'multiple_choice',
     tema_id: null,
     tema_nombre: null,
