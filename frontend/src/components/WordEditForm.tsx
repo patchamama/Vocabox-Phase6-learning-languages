@@ -83,6 +83,8 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
   const [leoResults, setLeoResults] = useState<LeoResult | null>(null)
   const [leoError, setLeoError] = useState<string | null>(null)
   const leoRef = useRef<HTMLDivElement>(null)
+  const palabraInputRef = useRef<HTMLInputElement>(null)
+  const [createFromLeo, setCreateFromLeo] = useState(false)
 
   useEffect(() => {
     Promise.all([temasApi.list(), languagesApi.list()]).then(([tRes, lRes]) => {
@@ -107,6 +109,7 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
     setForm((f) => ({ ...f, [field]: value }))
 
   const isCreate = word.word_id === 0
+  const effectiveIsCreate = isCreate || createFromLeo
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -128,7 +131,7 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
         audio_text_translation: form.audio_text_translation.trim() || null,
         category: form.category.trim() || null,
       }
-      if (isCreate) {
+      if (effectiveIsCreate) {
         await wordsApi.create(payload)
       } else {
         await wordsApi.update(word.word_id, payload)
@@ -190,17 +193,37 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
   }
 
   const handleLeoLookup = async () => {
-    const query = form.palabra.trim()
+    // Use selected text in the input if present, otherwise full value
+    const inputEl = palabraInputRef.current
+    let query = form.palabra.trim()
+    if (
+      inputEl &&
+      inputEl.selectionStart !== null &&
+      inputEl.selectionEnd !== null &&
+      inputEl.selectionStart !== inputEl.selectionEnd
+    ) {
+      const sel = inputEl.value.slice(inputEl.selectionStart, inputEl.selectionEnd).trim()
+      if (sel) query = sel
+    }
     if (!query) return
     setLeoLoading(true)
     setLeoError(null)
     setLeoResults(null)
     try {
-      const { data } = await leoApi.lookup(query, 'esde', 3)
+      const { data } = await leoApi.lookup(query, 'esde', 5)
       if (!data.entries?.length) {
         setLeoError(t('wordEdit.leoNoResults'))
       } else {
-        setLeoResults(data)
+        // Sort: entries with both audio tracks come first
+        const sorted = [...data.entries].sort((a, b) => {
+          const hasAudio = (e: LeoEntry) => {
+            const de = e.sides.find((s) => s.lang === 'de') ?? e.sides[1]
+            const other = e.sides.find((s) => s.lang !== 'de') ?? e.sides[0]
+            return (de?.audio?.length ?? 0) > 0 && (other?.audio?.length ?? 0) > 0
+          }
+          return (hasAudio(b) ? 1 : 0) - (hasAudio(a) ? 1 : 0)
+        })
+        setLeoResults({ ...data, entries: sorted })
       }
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status
@@ -230,6 +253,25 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
     if (!showAdvanced) setShowAdvanced(true)
   }
 
+  const applyLeoEntryAsNew = (entry: LeoEntry) => {
+    const deSide = entry.sides.find((s) => s.lang === 'de') ?? entry.sides[1]
+    const esSide = entry.sides.find((s) => s.lang === 'es') ?? entry.sides[0]
+    if (!deSide || !esSide) return
+    setForm((f) => ({
+      ...f,
+      palabra: deSide.text,
+      significado: esSide.text,
+      audio_url: deSide.audio[0]?.mp3_url ?? '',
+      audio_url_translation: esSide.audio[0]?.mp3_url ?? '',
+      audio_text: deSide.audio[0]?.label ?? deSide.text,
+      audio_text_translation: esSide.audio[0]?.label ?? esSide.text,
+      category: entry.category ?? '',
+    }))
+    setCreateFromLeo(true)
+    setLeoResults(null)
+    if (!showAdvanced) setShowAdvanced(true)
+  }
+
   const splitPreview: SplitResult | null = (() => {
     const char = splitChar.trim()
     if (!char) return null
@@ -242,13 +284,14 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
   return (
     <form onSubmit={handleSubmit} className="card space-y-3 animate-slide-up border-blue-500/30">
       <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-widest">
-        {isCreate ? t('wordEdit.titleNew') : t('wordEdit.title')}
+        {effectiveIsCreate ? t('wordEdit.titleNew') : t('wordEdit.title')}
       </p>
 
       {/* ── Word / Meaning row + LEO button ── */}
       <div className="flex gap-2 items-start">
         <div className="grid grid-cols-2 gap-2 flex-1">
           <input
+            ref={palabraInputRef}
             className="input text-sm"
             placeholder={t('wordEdit.wordOrigin')}
             value={form.palabra}
@@ -301,32 +344,39 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
                   <div className="px-3 py-2 border-b border-slate-700 text-xs text-slate-400 uppercase tracking-wide">
                     LEO · {leoResults.entries.length} {t('wordEdit.leoSelect')}
                   </div>
-                  <div className="divide-y divide-slate-700/50 max-h-64 overflow-y-auto">
+                  <div className="divide-y divide-slate-700/50 max-h-72 overflow-y-auto">
                     {leoResults.entries.map((entry, i) => {
                       const deSide = entry.sides.find((s) => s.lang === 'de') ?? entry.sides[1]
                       const esSide = entry.sides.find((s) => s.lang === 'es') ?? entry.sides[0]
                       if (!deSide || !esSide) return null
                       return (
-                        <button
+                        <div
                           key={entry.aiid || i}
-                          type="button"
                           onClick={() => applyLeoEntry(entry)}
-                          className="w-full text-left px-3 py-2.5 hover:bg-slate-700/60 transition-colors"
+                          className="w-full text-left px-3 py-2.5 hover:bg-slate-700/60 transition-colors cursor-pointer"
                         >
                           <div className="flex items-start gap-2">
                             <span className="text-xs bg-slate-700 text-slate-400 rounded px-1.5 py-0.5 shrink-0 mt-0.5">
                               {CAT_LABELS[entry.category] ?? entry.section ?? '—'}
                             </span>
-                            <div className="min-w-0">
+                            <div className="min-w-0 flex-1">
                               <p className="text-sm font-medium text-slate-100 truncate">{deSide.text}</p>
                               <p className="text-xs text-slate-400 truncate">{esSide.text}</p>
                             </div>
-                            <div className="shrink-0 flex gap-1 mt-0.5">
+                            <div className="shrink-0 flex items-center gap-1 mt-0.5">
                               {deSide.audio.length > 0 && <span title="Audio DE" className="text-blue-400 text-xs">🔊</span>}
                               {esSide.audio.length > 0 && <span title="Audio ES" className="text-green-400 text-xs">🔊</span>}
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); applyLeoEntryAsNew(entry) }}
+                                title={t('wordEdit.leoAddNew')}
+                                className="text-xs bg-green-900/50 hover:bg-green-600 text-green-400 hover:text-white px-1.5 py-0.5 rounded transition-colors ml-1"
+                              >
+                                +
+                              </button>
                             </div>
                           </div>
-                        </button>
+                        </div>
                       )
                     })}
                   </div>
@@ -373,7 +423,7 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
       {showAdvanced && (
         <div className="border-t border-slate-700/60 pt-3 space-y-3">
           {/* Split tool — only in edit mode */}
-          {!isCreate && <div className="space-y-2">
+          {!effectiveIsCreate && <div className="space-y-2">
             <div className="flex items-center gap-2">
               <input
                 type="text"

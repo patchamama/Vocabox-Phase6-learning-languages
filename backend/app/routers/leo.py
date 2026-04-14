@@ -17,7 +17,7 @@ router = APIRouter(prefix="/leo", tags=["leo"])
 def leo_lookup(
     word: str = Query(..., description="Word to look up"),
     lp: str = Query("esde", description="Language pair: esde|ende|frde|itde|ptde"),
-    results: int = Query(3, ge=1, le=10, description="Max number of results"),
+    results: int = Query(5, ge=1, le=10, description="Max number of results"),
     current_user: User = Depends(get_current_user),
 ):
     if lp not in LANG_PAIRS:

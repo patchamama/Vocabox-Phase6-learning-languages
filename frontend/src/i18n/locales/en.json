@@ -271,7 +271,8 @@
     "category": "Category",
     "playWord": "Word",
     "playTranslation": "Translation",
-    "leoNotFound": "Word not found in LEO"
+    "leoNotFound": "Word not found in LEO",
+    "leoAddNew": "Add as new word"
   },
   "temaSelect": {
     "noTheme": "No theme",

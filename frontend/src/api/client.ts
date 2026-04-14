@@ -112,7 +112,7 @@ export const importApi = {
 }
 
 export const leoApi = {
-  lookup: (word: string, lp = 'esde', results = 3) =>
+  lookup: (word: string, lp = 'esde', results = 5) =>
     api.get('/leo/lookup', { params: { word, lp, results } }),
 }
 

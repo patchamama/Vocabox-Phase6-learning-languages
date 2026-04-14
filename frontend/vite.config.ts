@@ -45,6 +45,7 @@ export default defineConfig({
         target: 'http://localhost:9009',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/vocabox/, ''),
+        ws: true,
       },
     },
   },

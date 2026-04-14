@@ -271,7 +271,8 @@
     "category": "Kategorie",
     "playWord": "Wort",
     "playTranslation": "Übersetzung",
-    "leoNotFound": "Wort in LEO nicht gefunden"
+    "leoNotFound": "Wort in LEO nicht gefunden",
+    "leoAddNew": "Als neues Wort hinzufügen"
   },
   "temaSelect": {
     "noTheme": "Kein Thema",

@@ -12,6 +12,15 @@ interface AudioFile {
   filename: string
   size_kb: number
   created_at: number
+  duration_seconds?: number | null
+}
+
+function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = Math.floor(seconds % 60)
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  return `${m}:${String(s).padStart(2, '0')}`
 }
 
 interface JobState {
@@ -33,7 +42,7 @@ export default function AudioReviewPanel({ filteredWords, onClose }: Props) {
   const { t } = useTranslation()
   const [order, setOrder] = useState<'word_first' | 'translation_first'>('word_first')
   const [gapSeconds, setGapSeconds] = useState(2)
-  const [beep, setBeep] = useState(false)
+  const [beep, setBeep] = useState(true)
   const [isGenerating, setIsGenerating] = useState(false)
   const [jobState, setJobState] = useState<JobState | null>(null)
   const [audioFiles, setAudioFiles] = useState<AudioFile[]>([])
@@ -90,6 +99,18 @@ export default function AudioReviewPanel({ filteredWords, onClose }: Props) {
       ws.onerror = () => {
         setJobState((s) => (s ? { ...s, status: 'error', error: 'WebSocket error' } : null))
         setIsGenerating(false)
+      }
+
+      ws.onclose = (ev) => {
+        // If closed unexpectedly (not code 1000) and still generating, mark error
+        if (ev.code !== 1000 && ev.code !== 1005) {
+          setJobState((s) =>
+            s && s.status !== 'done' && s.status !== 'error'
+              ? { ...s, status: 'error', error: `WebSocket closed (${ev.code})` }
+              : s,
+          )
+          setIsGenerating(false)
+        }
       }
     } catch {
       setJobState({ status: 'error', progress: 0, total: 0, filename: null, error: 'Request failed' })
@@ -316,6 +337,9 @@ export default function AudioReviewPanel({ filteredWords, onClose }: Props) {
                 <span className="text-xs text-slate-400 flex-1 truncate font-mono" title={af.filename}>
                   {af.filename}
                 </span>
+                {af.duration_seconds != null && (
+                  <span className="text-xs text-slate-500 shrink-0">{formatDuration(af.duration_seconds)}</span>
+                )}
                 <span className="text-xs text-slate-600 shrink-0">{af.size_kb} KB</span>
                 <button
                   onClick={() => handlePlay(af.filename)}
