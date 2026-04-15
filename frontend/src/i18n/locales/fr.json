@@ -369,6 +369,7 @@
     "completeWithTtsDesc": "Si le MP3 existant a été enregistré avec moins de texte que l'entrée actuelle, la partie manquante sera ajoutée par TTS.",
     "extraLangsLabel": "Langues supplémentaires",
     "extraLangsNone": "Aucune configurée — les définir dans Paramètres",
+    "pause": "Pause",
     "downloadSrt": "Télécharger les sous-titres",
     "viewWords": "Voir les mots avec sous-titres",
     "gapLabel": "Pause",

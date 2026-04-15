@@ -121,18 +121,6 @@ export default function AudioReviewPanel({ filteredWords, onClose }: Props) {
     }, 100)
   }
 
-  // Pause the currently playing audio and save its position
-  const pauseCurrent = () => {
-    const entry = playingFile ? audioCache.current.get(playingFile) : null
-    if (entry) {
-      pausedAt.current.set(playingFile!, entry.audio.currentTime)
-      entry.audio.pause()
-    }
-    stopCurrent()
-    stopTracking()
-    setIsPaused(true)
-  }
-
   const loadAudioFiles = async () => {
     try {
       const res = await audioReviewApi.list()
@@ -288,6 +276,16 @@ export default function AudioReviewPanel({ filteredWords, onClose }: Props) {
 
   const handleOpenSubtitles = async (af: AudioFile) => {
     if (!af.srt_filename) return
+    // Pause panel audio and save position before opening subtitle player
+    if (playingFile) {
+      const entry = audioCache.current.get(playingFile)
+      if (entry) {
+        pausedAt.current.set(playingFile, entry.audio.currentTime)
+        entry.audio.pause()
+      }
+      stopTracking()
+      setIsPaused(true)
+    }
     try {
       const [audioRes, srtRes] = await Promise.all([
         audioReviewApi.getFile(af.filename),

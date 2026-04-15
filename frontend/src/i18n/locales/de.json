@@ -369,6 +369,7 @@
     "completeWithTtsDesc": "Falls das vorhandene MP3 mit weniger Text aufgenommen wurde als der aktuelle Eintrag, wird der fehlende Teil per TTS angefügt.",
     "extraLangsLabel": "Zusatzsprachen",
     "extraLangsNone": "Keine konfiguriert — in Einstellungen festlegen",
+    "pause": "Pause",
     "includeTtsWords": "{{count}} Wörter ohne MP3 einschließen (TTS)",
     "downloadSrt": "Untertitel herunterladen",
     "viewWords": "Wörter mit Untertiteln anzeigen",
