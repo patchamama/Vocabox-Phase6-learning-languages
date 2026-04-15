@@ -344,6 +344,7 @@
     "generating": "Elaborazione {{progress}} di {{total}}...",
     "done": "Audio pronto!",
     "play": "Riproduci",
+    "stop": "Ferma",
     "download": "Scarica",
     "previousAudios": "Audio generati",
     "deleteSelected": "Elimina selezionati ({{count}})",

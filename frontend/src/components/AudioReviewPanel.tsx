@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import api, { audioReviewApi } from '../api/client'
+import { playAudio, stopCurrent } from '../utils/audioManager'
 import type { UserWord } from '../types'
 
 interface AudioFile {
@@ -48,16 +49,32 @@ export default function AudioReviewPanel({ filteredWords, onClose }: Props) {
   const [audioFiles, setAudioFiles] = useState<AudioFile[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [loadingPlay, setLoadingPlay] = useState<string | null>(null)
+  const [playingFile, setPlayingFile] = useState<string | null>(null)
+  const [playProgress, setPlayProgress] = useState<{ current: number; total: number } | null>(null)
+  const playingAudioRef = useRef<HTMLAudioElement | null>(null)
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
 
   const eligible = filteredWords.filter(
     (uw) => uw.word.audio_url && uw.word.audio_url_translation,
   )
 
+  const stopProgress = () => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current)
+      progressIntervalRef.current = null
+    }
+    setPlayingFile(null)
+    setPlayProgress(null)
+    playingAudioRef.current = null
+  }
+
   useEffect(() => {
     loadAudioFiles()
     return () => {
       wsRef.current?.close()
+      stopCurrent()
+      stopProgress()
     }
   }, [])
 
@@ -119,13 +136,50 @@ export default function AudioReviewPanel({ filteredWords, onClose }: Props) {
   }
 
   const handlePlay = async (filename: string) => {
+    // If same file is already playing, stop it
+    if (playingFile === filename) {
+      stopCurrent()
+      stopProgress()
+      return
+    }
+
     setLoadingPlay(filename)
     try {
       const res = await audioReviewApi.getFile(filename)
       const url = URL.createObjectURL(res.data as Blob)
       const audio = new Audio(url)
-      audio.onended = () => URL.revokeObjectURL(url)
-      audio.play().catch(() => {})
+
+      // Stop previous progress tracking
+      stopProgress()
+
+      playingAudioRef.current = audio
+      setPlayingFile(filename)
+
+      audio.onended = () => {
+        URL.revokeObjectURL(url)
+        stopProgress()
+      }
+
+      playAudio(audio)
+
+      // Start progress polling once metadata is available
+      const startTracking = () => {
+        if (progressIntervalRef.current) clearInterval(progressIntervalRef.current)
+        setPlayProgress({ current: 0, total: audio.duration })
+        progressIntervalRef.current = setInterval(() => {
+          if (audio.paused || audio.ended) {
+            stopProgress()
+            return
+          }
+          setPlayProgress({ current: audio.currentTime, total: audio.duration })
+        }, 250)
+      }
+
+      if (audio.readyState >= 1) {
+        startTracking()
+      } else {
+        audio.onloadedmetadata = startTracking
+      }
     } finally {
       setLoadingPlay(null)
     }
@@ -326,43 +380,63 @@ export default function AudioReviewPanel({ filteredWords, onClose }: Props) {
             {audioFiles.map((af) => (
               <div
                 key={af.filename}
-                className="flex items-center gap-2 py-1.5 px-2 hover:bg-slate-700/30 rounded-lg group"
+                className="flex flex-col gap-0.5 py-1.5 px-2 hover:bg-slate-700/30 rounded-lg group"
               >
-                <input
-                  type="checkbox"
-                  checked={selected.has(af.filename)}
-                  onChange={() => toggleSelect(af.filename)}
-                  className="w-3.5 h-3.5 accent-blue-500 shrink-0 cursor-pointer"
-                />
-                <span className="text-xs text-slate-400 flex-1 truncate font-mono" title={af.filename}>
-                  {af.filename}
-                </span>
-                {af.duration_seconds != null && (
-                  <span className="text-xs text-slate-500 shrink-0">{formatDuration(af.duration_seconds)}</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(af.filename)}
+                    onChange={() => toggleSelect(af.filename)}
+                    className="w-3.5 h-3.5 accent-blue-500 shrink-0 cursor-pointer"
+                  />
+                  <span className="text-xs text-slate-400 flex-1 truncate font-mono" title={af.filename}>
+                    {af.filename}
+                  </span>
+                  {/* Progress or static duration */}
+                  {playingFile === af.filename && playProgress ? (
+                    <span className="text-xs text-blue-400 shrink-0 tabular-nums">
+                      {formatDuration(playProgress.current)}/{formatDuration(playProgress.total)}
+                    </span>
+                  ) : af.duration_seconds != null ? (
+                    <span className="text-xs text-slate-500 shrink-0">{formatDuration(af.duration_seconds)}</span>
+                  ) : null}
+                  <span className="text-xs text-slate-600 shrink-0">{af.size_kb} KB</span>
+                  <button
+                    onClick={() => handlePlay(af.filename)}
+                    disabled={loadingPlay === af.filename}
+                    title={playingFile === af.filename ? t('audioReview.stop') : t('audioReview.play')}
+                    className={`transition-colors text-xs px-1 opacity-0 group-hover:opacity-100 ${
+                      playingFile === af.filename
+                        ? 'text-blue-400 hover:text-red-400 !opacity-100'
+                        : 'text-slate-500 hover:text-blue-400'
+                    }`}
+                  >
+                      {loadingPlay === af.filename ? '…' : playingFile === af.filename ? '■' : '▶'}
+                  </button>
+                  <button
+                    onClick={() => handleDownload(af.filename)}
+                    title={t('audioReview.download')}
+                    className="text-slate-500 hover:text-green-400 transition-colors text-xs px-1 opacity-0 group-hover:opacity-100"
+                  >
+                    ↓
+                  </button>
+                  <button
+                    onClick={() => handleDelete(af.filename)}
+                    title={t('common.delete')}
+                    className="text-slate-500 hover:text-red-400 transition-colors text-xs px-1 opacity-0 group-hover:opacity-100"
+                  >
+                    🗑
+                  </button>
+                </div>
+                {/* Progress bar — only shown while playing */}
+                {playingFile === af.filename && playProgress && playProgress.total > 0 && (
+                  <div className="w-full bg-slate-700 rounded-full h-1 mt-0.5">
+                    <div
+                      className="bg-blue-500 h-1 rounded-full transition-all duration-200"
+                      style={{ width: `${(playProgress.current / playProgress.total) * 100}%` }}
+                    />
+                  </div>
                 )}
-                <span className="text-xs text-slate-600 shrink-0">{af.size_kb} KB</span>
-                <button
-                  onClick={() => handlePlay(af.filename)}
-                  disabled={loadingPlay === af.filename}
-                  title={t('audioReview.play')}
-                  className="text-slate-500 hover:text-blue-400 transition-colors text-xs px-1 opacity-0 group-hover:opacity-100"
-                >
-                  {loadingPlay === af.filename ? '…' : '▶'}
-                </button>
-                <button
-                  onClick={() => handleDownload(af.filename)}
-                  title={t('audioReview.download')}
-                  className="text-slate-500 hover:text-green-400 transition-colors text-xs px-1 opacity-0 group-hover:opacity-100"
-                >
-                  ↓
-                </button>
-                <button
-                  onClick={() => handleDelete(af.filename)}
-                  title={t('common.delete')}
-                  className="text-slate-500 hover:text-red-400 transition-colors text-xs px-1 opacity-0 group-hover:opacity-100"
-                >
-                  🗑
-                </button>
               </div>
             ))}
           </div>

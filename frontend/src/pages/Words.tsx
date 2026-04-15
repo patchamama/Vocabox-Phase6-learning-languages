@@ -7,6 +7,7 @@ import AudioReviewPanel from '../components/AudioReviewPanel'
 import SpeakButton from '../components/SpeakButton'
 import WordEditForm from '../components/WordEditForm'
 import { useSettingsStore } from '../stores/settingsStore'
+import { playAudio, speakUtterance } from '../utils/audioManager'
 import type { Tema, UserWord } from '../types'
 
 // ── WordCard ──────────────────────────────────────────────────────────────────
@@ -187,13 +188,12 @@ export default function Words() {
 
   const speak = (palabra: string, idioma: string, audioUrl?: string | null) => {
     if (audioUrl) {
-      new Audio(audioUrl).play().catch(() => {})
+      playAudio(new Audio(audioUrl))
       return
     }
-    speechSynthesis.cancel()
     const u = new SpeechSynthesisUtterance(palabra)
     u.lang = idioma
-    speechSynthesis.speak(u)
+    speakUtterance(u)
   }
 
   // ── Data ─────────────────────────────────────────────────────────────────────
