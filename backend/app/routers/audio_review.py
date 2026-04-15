@@ -1005,7 +1005,7 @@ async def _run_generation(
 
             _jobs[job_id].update({
                 "status": "done",
-                "progress": total,
+                "progress": _jobs[job_id]["total"],
                 "filename": out_name,
                 "srt_filename": srt_name,
             })
