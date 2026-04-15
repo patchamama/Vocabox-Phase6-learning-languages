@@ -131,8 +131,7 @@ export default function AudioReviewPanel({ filteredWords, onClose }: Props) {
   const handleGenerate = async () => {
     if (!eligible.length && !(useTtsInAudioReview && includeTtsWords)) return
     setIsGenerating(true)
-    const baseEligible = eligible.length + (useTtsInAudioReview && includeTtsWords ? ttsEligible : 0)
-    const totalEligible = order === 'both' ? baseEligible * 2 : baseEligible
+    const totalEligible = eligible.length + (useTtsInAudioReview && includeTtsWords ? ttsEligible : 0)
     setJobState({ status: 'pending', progress: 0, total: totalEligible, filename: null, srt_filename: null, error: null })
 
     try {

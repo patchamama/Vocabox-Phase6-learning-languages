@@ -332,10 +332,11 @@ async def start_generation(
         raise HTTPException(status_code=400, detail="No words with audio found in selection")
 
     job_id = str(uuid.uuid4())
+    _total = len(words_data) * 2 if req.order == "both" else len(words_data)
     _jobs[job_id] = {
         "status": "pending",
         "progress": 0,
-        "total": len(words_data),
+        "total": _total,
         "filename": None,
         "srt_filename": None,
         "error": None,
@@ -349,7 +350,7 @@ async def start_generation(
             req.extra_languages, req.ollama_model, req.complete_with_tts,
         )
     )
-    return {"job_id": job_id, "total": len(words_data)}
+    return {"job_id": job_id, "total": _total}
 
 
 # ── Background generation ─────────────────────────────────────────────────────
@@ -766,7 +767,6 @@ async def _run_generation(
     jid = job_id[:8]
     out_dir = _user_dir(user_id)
     loop = asyncio.get_running_loop()
-    total = len(words_data)
     _jobs[job_id]["status"] = "running"
 
     try:
@@ -815,9 +815,6 @@ async def _run_generation(
                 )
             else:
                 work_items = [(word, order, i) for i, word in enumerate(words_data)]
-
-            # Progress counts total unique words (not passes), so keep tracking by word index
-            processed_word_indices: set = set()
 
             # ── Per-segment loop + SRT entries ────────────────────────────────
             word_segments: List[str] = []
@@ -970,9 +967,8 @@ async def _run_generation(
                 # Advance cursor by real measured duration of the full segment
                 cursor += dur_seg_real if dur_seg_real > 0 else (rel + silence_dur)
 
-                # Update progress: count unique words processed
-                processed_word_indices.add(word_idx)
-                _jobs[job_id]["progress"] = len(processed_word_indices)
+                # Update progress: count segments processed (not unique words, to handle "both" mode)
+                _jobs[job_id]["progress"] = seg_idx + 1
 
                 # Persist Ollama-generated translations to DB (best-effort, sync)
                 if ollama_model and word.get("extras"):
