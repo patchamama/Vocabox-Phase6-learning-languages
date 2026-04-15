@@ -115,19 +115,64 @@ export const importApi = {
 export const leoApi = {
   lookup: (word: string, lp = 'esde', results = 5) =>
     api.get('/leo/lookup', { params: { word, lp, results } }),
+  autoFetchExtras: (word: string, extraLangs: string[]) =>
+    api.post('/leo/auto-fetch-extras', { word, extra_langs: extraLangs }),
+}
+
+export const wordTranslationsApi = {
+  list: (wordId: number) => api.get(`/words/${wordId}/translations`),
+  upsert: (wordId: number, data: { idioma: string; texto: string; audio_url?: string | null; audio_text?: string | null; source?: string }) =>
+    api.post(`/words/${wordId}/translations`, data),
+  delete: (wordId: number, idioma: string) =>
+    api.delete(`/words/${wordId}/translations/${idioma}`),
 }
 
 export const audioReviewApi = {
-  generate: (wordIds: number[], order: string, gapSeconds: number, beep: boolean) =>
+  generate: (
+    wordIds: number[],
+    order: string,
+    gapSeconds: number,
+    beep: boolean,
+    useTts = false,
+    includeTtsWords = false,
+    ttsVoices: Record<string, string> = {},
+    ttsRate = 1.0,
+    extraLanguages: string[] = [],
+    ollamaModel = '',
+    completeWithTts = true,
+  ) =>
     api.post('/audio-review/generate', {
       word_ids: wordIds,
       order,
       gap_seconds: gapSeconds,
       beep,
+      use_tts: useTts,
+      include_tts_words: includeTtsWords,
+      tts_voices: ttsVoices,
+      tts_rate: ttsRate,
+      extra_languages: extraLanguages,
+      ollama_model: ollamaModel,
+      complete_with_tts: completeWithTts,
     }),
   list: () => api.get('/audio-review/list'),
   getFile: (filename: string) =>
     api.get(`/audio-review/file/${encodeURIComponent(filename)}`, { responseType: 'blob' }),
+  getSrt: (filename: string) =>
+    api.get(`/audio-review/srt/${encodeURIComponent(filename)}`, { responseType: 'text' }),
   deleteFile: (filename: string) =>
     api.delete(`/audio-review/file/${encodeURIComponent(filename)}`),
+  getVoices: () => api.get('/audio-review/voices'),
+  previewVoice: (lang: string, voice: string, rate: number, text?: string) =>
+    api.post(
+      '/audio-review/voices/preview',
+      { lang, voice, rate, text },
+      { responseType: 'blob' },
+    ),
+  getTtsFilters: (lang: string) => api.get(`/audio-review/tts-filters/${lang}`),
+  putTtsFilters: (lang: string, content: string) => api.put(`/audio-review/tts-filters/${lang}`, { content }),
+  deleteTtsFilters: (lang: string) => api.delete(`/audio-review/tts-filters/${lang}`),
+}
+
+export const ollamaApi = {
+  getStatus: () => api.get('/ollama/status'),
 }

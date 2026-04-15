@@ -1,0 +1,789 @@
+1
+00:00:00,000 --> 00:00:01,142
+der Bildschirm Pl.: die Bildschirme
+[lang:de]
+
+2
+00:00:01,442 --> 00:00:02,622
+la pantalla, el monitor
+[lang:es]
+
+3
+00:00:04,619 --> 00:00:06,131
+die Sprechblase Pl.: die Sprechblasen
+[lang:de]
+
+4
+00:00:06,431 --> 00:00:07,684
+burbuja de diálogo
+[lang:es]
+
+5
+00:00:09,684 --> 00:00:10,797
+Chat einblenden
+[lang:de]
+
+6
+00:00:11,097 --> 00:00:11,917
+Mostrar chat
+[lang:es]
+
+7
+00:00:13,917 --> 00:00:15,616
+etw.Akk. abschreiben | schrieb ab, abgeschrieben |
+[lang:de]
+
+8
+00:00:15,916 --> 00:00:16,759
+copiar algo, fijarse
+[lang:es]
+
+9
+00:00:18,759 --> 00:00:20,366
+die Anmerkung Pl.: die Anmerkungen
+[lang:de]
+
+10
+00:00:20,666 --> 00:00:21,895
+la anotación
+[lang:es]
+
+11
+00:00:23,895 --> 00:00:24,792
+beachten sie
+[lang:de]
+
+12
+00:00:25,092 --> 00:00:25,936
+tenga en cuenta
+[lang:es]
+
+13
+00:00:27,936 --> 00:00:29,959
+Also da jetzt nicht drauf achten
+[lang:de]
+
+14
+00:00:30,259 --> 00:00:32,487
+Así que no le prestes atención a eso ahora.
+[lang:es]
+
+15
+00:00:34,487 --> 00:00:36,116
+Alles kar, ich bin dabei.
+[lang:de]
+
+16
+00:00:36,416 --> 00:00:38,479
+Todo está bien, estoy dentro.
+[lang:es]
+
+17
+00:00:40,479 --> 00:00:42,075
+soweit bei Ihnen erfüllt sind
+[lang:de]
+
+18
+00:00:42,375 --> 00:00:44,986
+siempre y cuando se cumplan sus requisitos.
+[lang:es]
+
+19
+00:00:46,986 --> 00:00:47,973
+etw.Akk. erfüllen | erfüllte, erfüllt |
+[lang:de]
+
+20
+00:00:48,273 --> 00:00:49,038
+cumplir (con) algo
+[lang:es]
+
+21
+00:00:51,038 --> 00:00:51,879
+soweit gut
+[lang:de]
+
+22
+00:00:52,179 --> 00:00:53,536
+Hasta ahora, todo bien.
+[lang:es]
+
+23
+00:00:55,536 --> 00:00:56,642
+soweit Konj.
+[lang:de]
+
+24
+00:00:56,942 --> 00:00:57,840
+por lo que, tanto
+[lang:es]
+
+25
+00:00:59,840 --> 00:01:00,647
+woweit
+[lang:de]
+
+26
+00:01:00,947 --> 00:01:01,932
+hasta qué punto
+[lang:es]
+
+27
+00:01:03,932 --> 00:01:05,772
+die technischen Rahmenbedingung
+[lang:de]
+
+28
+00:01:06,072 --> 00:01:07,232
+el marco técnico
+[lang:es]
+
+29
+00:01:09,232 --> 00:01:11,223
+dass wir da mal kurz innehalten
+[lang:de]
+
+30
+00:01:11,523 --> 00:01:13,567
+que hagamos una pausa por un momento
+[lang:es]
+
+31
+00:01:15,567 --> 00:01:16,764
+innehalten | hielt inne, innegehalten |
+[lang:de]
+
+32
+00:01:17,064 --> 00:01:17,786
+parar, pausa
+[lang:es]
+
+33
+00:01:19,786 --> 00:01:21,143
+unmittelbar
+[lang:de]
+
+34
+00:01:21,443 --> 00:01:23,309
+inmediatamente adv., directamente
+[lang:es]
+
+35
+00:01:25,309 --> 00:01:27,277
+irgendwie irgendwo irgendwann
+[lang:de]
+
+36
+00:01:27,577 --> 00:01:31,012
+De alguna manera, en algún lugar, en algún momento
+[lang:es]
+
+37
+00:01:33,012 --> 00:01:34,101
+zögernd
+[lang:de]
+
+38
+00:01:34,401 --> 00:01:36,964
+dubitativo, dubitativa adj., vacilar
+[lang:es]
+
+39
+00:01:38,964 --> 00:01:39,988
+zögern | zögerte, gezögert |
+[lang:de]
+
+40
+00:01:40,288 --> 00:01:41,336
+vacilar, dudar, detenerse
+[lang:es]
+
+41
+00:01:43,336 --> 00:01:45,199
+das kann man schon vorweg sagen
+[lang:de]
+
+42
+00:01:45,499 --> 00:01:47,344
+Eso se puede decir de antemano.
+[lang:es]
+
+43
+00:01:49,344 --> 00:01:50,833
+irgendetwas
+[lang:de]
+
+44
+00:01:51,133 --> 00:01:52,085
+cualquier cosa, algo pron. - indefinido
+[lang:es]
+
+45
+00:01:54,085 --> 00:01:55,395
+irgendjemand
+[lang:de]
+
+46
+00:01:55,695 --> 00:01:56,239
+alguien pron. - indefinido
+[lang:es]
+
+47
+00:01:58,239 --> 00:01:59,404
+vorab Adv. - im Voraus
+[lang:de]
+
+48
+00:01:59,704 --> 00:02:01,252
+de antemano adv., ante todo
+[lang:es]
+
+49
+00:02:03,252 --> 00:02:04,770
+anhand von dem/der
+[lang:de]
+
+50
+00:02:05,070 --> 00:02:05,985
+basado en el/la
+[lang:es]
+
+51
+00:02:07,985 --> 00:02:09,477
+die Schulungsunterlagen
+[lang:de]
+
+52
+00:02:09,777 --> 00:02:11,610
+materiales de capacitación
+[lang:es]
+
+53
+00:02:13,610 --> 00:02:14,460
+nämlich
+[lang:de]
+
+54
+00:02:14,760 --> 00:02:15,868
+esto es, es decir, o sea
+[lang:es]
+
+55
+00:02:17,868 --> 00:02:18,953
+das ist nämlich
+[lang:de]
+
+56
+00:02:19,253 --> 00:02:20,378
+Eso se debe a que
+[lang:es]
+
+57
+00:02:22,378 --> 00:02:24,171
+bzw / beziehungsweise
+[lang:de]
+
+58
+00:02:24,471 --> 00:02:25,724
+o respectivamente
+[lang:es]
+
+59
+00:02:27,724 --> 00:02:29,080
+die Unterlage Pl.: die Unterlagen
+[lang:de]
+
+60
+00:02:29,380 --> 00:02:30,697
+el documento
+[lang:es]
+
+61
+00:02:32,688 --> 00:02:37,036
+System ist Heute verschoben. Vorabprüfung. Heute abnahmen.
+[lang:de]
+
+62
+00:02:37,336 --> 00:02:41,804
+El sistema se pospone hoy. Verificación preliminar. Pruebas de aceptación hoy.
+[lang:es]
+
+63
+00:02:43,804 --> 00:02:45,131
+die Schnittstelle Pl.: die Schnittstellen
+[lang:de]
+
+64
+00:02:45,431 --> 00:02:46,700
+la interfaz [INFORM.][INGEN.][TELECOM.] - en inglés interface
+[lang:es]
+
+65
+00:02:48,700 --> 00:02:49,953
+die Vermutung Pl.: die Vermutungen
+[lang:de]
+
+66
+00:02:50,253 --> 00:02:52,118
+la suposición
+[lang:es]
+
+67
+00:02:54,109 --> 00:02:55,296
+der Bezeichner Pl.: die Bezeichner
+[lang:de]
+
+68
+00:02:55,596 --> 00:02:57,272
+identificador [INFORM.][TELECOM.]
+[lang:es]
+
+69
+00:02:59,269 --> 00:03:04,362
+Die Feldtypen URL und E-Mail werden durch reguläre Ausdrücke validiert.
+[lang:de]
+
+70
+00:03:04,662 --> 00:03:09,943
+Los tipos de campo URL y correo electrónico se validan mediante expresiones regulares.
+[lang:es]
+
+71
+00:03:11,943 --> 00:03:13,435
+die Oberfläche Pl.: die Oberflächen
+[lang:de]
+
+72
+00:03:13,735 --> 00:03:15,440
+la superficie, interfaz
+[lang:es]
+
+73
+00:03:17,434 --> 00:03:19,764
+einheitliche Metadatendarstellung
+[lang:de]
+
+74
+00:03:20,064 --> 00:03:22,547
+representación uniforme de metadatos
+[lang:es]
+
+75
+00:03:24,547 --> 00:03:25,980
+Vererbungsbeziehungen
+[lang:de]
+
+76
+00:03:26,280 --> 00:03:27,589
+Relaciones de herencia
+[lang:es]
+
+77
+00:03:29,590 --> 00:03:31,371
+Die Ansicht für den Aspekt
+[lang:de]
+
+78
+00:03:31,671 --> 00:03:33,040
+La vista del aspecto
+[lang:es]
+
+79
+00:03:35,040 --> 00:03:36,306
+bezeichnet
+[lang:de]
+
+80
+00:03:36,606 --> 00:03:39,460
+designado, calificado, calificada adj.
+[lang:es]
+
+81
+00:03:41,460 --> 00:03:43,661
+etw.Akk. für etw.Akk. verwenden | verwendete/verwandte, verwendet/verwandt |
+[lang:de]
+
+82
+00:03:43,961 --> 00:03:46,410
+usar algo para algo, aplicar algo
+[lang:es]
+
+83
+00:03:48,410 --> 00:03:49,393
+der Bedarf Pl.s. Tabellen - an etw.Dat.
+[lang:de]
+
+84
+00:03:49,693 --> 00:03:51,108
+requisito, la necesidad - de algo
+[lang:es]
+
+85
+00:03:53,105 --> 00:03:54,504
+das Mitglied Pl.: die Mitglieder
+[lang:de]
+
+86
+00:03:54,804 --> 00:03:56,005
+el miembro, afiliado
+[lang:es]
+
+87
+00:03:58,005 --> 00:04:00,186
+um ein Objekt endgültig zu löschen?
+[lang:de]
+
+88
+00:04:00,486 --> 00:04:02,737
+¿Eliminar permanentemente un objeto?
+[lang:es]
+
+89
+00:04:04,737 --> 00:04:06,402
+Welche Aussage trifft zu?
+[lang:de]
+
+90
+00:04:06,702 --> 00:04:08,427
+¿Cuál afirmación es verdadera?
+[lang:es]
+
+91
+00:04:10,427 --> 00:04:12,367
+von etw.Dat. abweichen | wich ab, abgewichen |
+[lang:de]
+
+92
+00:04:12,667 --> 00:04:13,577
+discrepar o disferir de algo (o: alguien)
+[lang:es]
+
+93
+00:04:15,577 --> 00:04:16,846
+grobe Vorstellung
+[lang:de]
+
+94
+00:04:17,146 --> 00:04:18,317
+idea aproximada
+[lang:es]
+
+95
+00:04:20,317 --> 00:04:21,773
+jmdm. etw.Akk. empfehlen | empfahl, empfohlen |
+[lang:de]
+
+96
+00:04:22,073 --> 00:04:23,682
+recomendar algo a alguien
+[lang:es]
+
+97
+00:04:25,682 --> 00:04:28,091
+da bei der Verarbeitung des Suchbegriffs
+[lang:de]
+
+98
+00:04:28,391 --> 00:04:31,593
+ya que durante el procesamiento del término de búsqueda
+[lang:es]
+
+99
+00:04:33,593 --> 00:04:37,371
+Die ELO iSearch wird als unscharfe Suche bezeichnet
+[lang:de]
+
+100
+00:04:37,671 --> 00:04:40,526
+ELO iSearch se conoce como búsqueda difusa.
+[lang:es]
+
+101
+00:04:42,526 --> 00:04:44,970
+wird als die bevorzugte Suchvariante
+[lang:de]
+
+102
+00:04:45,270 --> 00:04:48,032
+se considera la variante de búsqueda preferida
+[lang:es]
+
+103
+00:04:50,032 --> 00:04:52,173
+leistungsfähigeren Ansatz
+[lang:de]
+
+104
+00:04:52,473 --> 00:04:54,005
+un enfoque más eficiente
+[lang:es]
+
+105
+00:04:56,005 --> 00:04:57,176
+insgesamt
+[lang:de]
+
+106
+00:04:57,476 --> 00:04:58,534
+en total, en conjunto
+[lang:es]
+
+107
+00:05:00,534 --> 00:05:02,140
+die Anforderungen
+[lang:de]
+
+108
+00:05:02,440 --> 00:05:03,866
+condiciones, requisitos
+[lang:es]
+
+109
+00:05:05,866 --> 00:05:08,766
+und eignet sich somit für spezifische Anforderungen.
+[lang:de]
+
+110
+00:05:09,066 --> 00:05:12,629
+y por lo tanto es adecuado para requisitos específicos.
+[lang:es]
+
+111
+00:05:14,629 --> 00:05:15,950
+Im Gegensatz dazu
+[lang:de]
+
+112
+00:05:16,250 --> 00:05:17,398
+En contraste con
+[lang:es]
+
+113
+00:05:19,398 --> 00:05:20,583
+einschließlich +Gen./Dat./Akk.
+[lang:de]
+
+114
+00:05:20,883 --> 00:05:22,340
+inclusive adv.
+[lang:es]
+
+115
+00:05:24,340 --> 00:05:25,478
+umfassende Suche
+[lang:de]
+
+116
+00:05:25,778 --> 00:05:27,042
+búsqueda exhaustiva
+[lang:es]
+
+117
+00:05:29,043 --> 00:05:30,300
+etw.Akk. ermöglichen | ermöglichte, ermöglicht |
+[lang:de]
+
+118
+00:05:30,600 --> 00:05:31,762
+posibilitar algo
+[lang:es]
+
+119
+00:05:33,760 --> 00:05:34,719
+Auf diese Weise
+[lang:de]
+
+120
+00:05:35,019 --> 00:05:35,854
+De este modo
+[lang:es]
+
+121
+00:05:37,854 --> 00:05:39,531
+Sie können dabei festlegen
+[lang:de]
+
+122
+00:05:39,831 --> 00:05:41,076
+Puedes especificar
+[lang:es]
+
+123
+00:05:43,076 --> 00:05:44,229
+um zu erfahren
+[lang:de]
+
+124
+00:05:44,529 --> 00:05:45,508
+Para averiguarlo
+[lang:es]
+
+125
+00:05:47,508 --> 00:05:52,483
+Änderungen am Originaldokument wirken sich automatisch auf die Referenzen aus.
+[lang:de]
+
+126
+00:05:52,783 --> 00:05:57,901
+Los cambios en el documento original se reflejan automáticamente en las referencias.
+[lang:es]
+
+127
+00:05:59,901 --> 00:06:01,660
+das ursprüngliche Dokument
+[lang:de]
+
+128
+00:06:01,960 --> 00:06:03,329
+el documento original
+[lang:es]
+
+129
+00:06:05,329 --> 00:06:06,506
+Diese legen fest,
+[lang:de]
+
+130
+00:06:06,806 --> 00:06:07,873
+Estos determinan,
+[lang:es]
+
+131
+00:06:09,873 --> 00:06:14,302
+Passwörter sollten deshalb notiert und an einem sicheren Ort verwahrt werden.
+[lang:de]
+
+132
+00:06:14,602 --> 00:06:19,508
+Por lo tanto, las contraseñas deben escribirse y guardarse en un lugar seguro.
+[lang:es]
+
+133
+00:06:21,508 --> 00:06:23,405
+Die Aufnahme eines Dokuments
+[lang:de]
+
+134
+00:06:23,705 --> 00:06:25,399
+La grabación de un documento
+[lang:es]
+
+135
+00:06:27,399 --> 00:06:30,028
+für alle zugehörigen Dokumente verwendet.
+[lang:de]
+
+136
+00:06:30,328 --> 00:06:33,311
+Se utiliza para todos los documentos relacionados.
+[lang:es]
+
+137
+00:06:35,311 --> 00:06:36,407
+empfiehlt es sich,
+[lang:de]
+
+138
+00:06:36,707 --> 00:06:37,913
+Se recomienda que
+[lang:es]
+
+139
+00:06:39,913 --> 00:06:46,153
+Stichwortlisten dienen der Vereinheitlichung von Eingaben und beschleunigen die Eingabe von Metadaten.
+[lang:de]
+
+140
+00:06:46,453 --> 00:06:52,141
+Las listas de palabras clave sirven para estandarizar la entrada y acelerar la entrada de metadatos.
+[lang:es]
+
+141
+00:06:54,141 --> 00:06:56,769
+Sie können Textfelder auch einschränken
+[lang:de]
+
+142
+00:06:57,069 --> 00:06:59,299
+También puedes restringir los campos de texto.
+[lang:es]
+
+143
+00:07:01,300 --> 00:07:07,522
+Im Folgenden werden die vier in der Praxis am häufigsten verwendeten Feldtypen in ELO kurz erläutert:
+[lang:de]
+
+144
+00:07:07,822 --> 00:07:13,824
+A continuación se presenta una breve explicación de los cuatro tipos de campos más utilizados en ELO:
+[lang:es]
+
+145
+00:07:15,824 --> 00:07:19,707
+die wiederum von Maske zu Maske unterschiedlich angelegt sein können.
+[lang:de]
+
+146
+00:07:20,007 --> 00:07:23,806
+que a su vez pueden diseñarse de manera diferente de una máscara a otra.
+[lang:es]
+
+147
+00:07:25,806 --> 00:07:33,358
+Daher ist es entscheidend, den Aufbau und die Eigenschaften einer Maske im Voraus entsprechend Ihrem Zweck zu planen
+[lang:de]
+
+148
+00:07:33,658 --> 00:07:41,408
+Por lo tanto, es fundamental planificar con antelación el diseño y las propiedades de una mascarilla en función de su finalidad.
+[lang:es]
+
+149
+00:07:43,408 --> 00:07:44,957
+Daher ist es entscheidend
+[lang:de]
+
+150
+00:07:45,257 --> 00:07:47,040
+Por lo tanto, es crucial
+[lang:es]
+
+151
+00:07:49,040 --> 00:07:50,043
+zügig
+[lang:de]
+
+152
+00:07:50,343 --> 00:07:51,590
+sin dificultad, rápido
+[lang:es]
+
+153
+00:07:53,590 --> 00:07:55,587
+etw.Akk. auf etw.Akk. legen | legte, gelegt |
+[lang:de]
+
+154
+00:07:55,887 --> 00:07:58,439
+poner algo en (o: sobre) algo
+[lang:es]
+
+155
+00:08:00,439 --> 00:08:01,615
+entscheidend
+[lang:de]
+
+156
+00:08:01,915 --> 00:08:04,163
+crucial, decisivo, decisiva adj.
+[lang:es]
+
+157
+00:08:06,163 --> 00:08:07,365
+etw.Akk. ausdrücken | drückte aus, ausgedrückt |
+[lang:de]
+
+158
+00:08:07,665 --> 00:08:08,675
+expresar algo
+[lang:es]

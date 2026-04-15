@@ -10,6 +10,16 @@ export interface Tema {
   color: string
 }
 
+export interface WordTranslation {
+  id: number
+  word_id: number
+  idioma: string
+  texto: string
+  audio_url: string | null
+  audio_text: string | null
+  source: string | null
+}
+
 export interface Word {
   id: number
   palabra: string
@@ -24,6 +34,7 @@ export interface Word {
   category: string | null
   source: string | null
   tema: Tema | null
+  translations: WordTranslation[]
 }
 
 export interface UserWord {

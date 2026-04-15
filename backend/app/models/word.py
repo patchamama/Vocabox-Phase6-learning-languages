@@ -27,3 +27,7 @@ class Word(Base):
     user_words = relationship(
         "UserWord", back_populates="word", cascade="all, delete-orphan"
     )
+    translations = relationship(
+        "WordTranslation", back_populates="word", cascade="all, delete-orphan",
+        order_by="WordTranslation.idioma",
+    )

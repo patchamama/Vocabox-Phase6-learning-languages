@@ -1,0 +1,22 @@
+# TTS text filters — one regex per line, # for comments, blank lines ignored.
+# These patterns are stripped from text before speech synthesis.
+# VERSION: 2
+
+# Pipe separator (LEO-style alternates: "laufen | rennen")
+\s*\|\s*
+
+# Abbreviations: short words (1-5 chars) followed by a period, then space or end-of-string.
+# Matches: Pl., Sg., Adj., Konj., Nom., Gen., Dat., Akk., Inf., etw., jdn., adv., n., v., etc.
+# Does NOT match full words like "Sprechblase." at end of sentence (too long or not followed by space).
+\b\w{1,5}\.(?=\s|$)
+
+# Text in parentheses, brackets, braces
+\(.*?\)
+\[.*?\]
+\{.*?\}
+
+# Dash + qualifier (e.g. "- indefinido", "- weak")
+\s*[-–]\s+\w+
+
+# Trailing commas, semicolons
+[,;]\s*$

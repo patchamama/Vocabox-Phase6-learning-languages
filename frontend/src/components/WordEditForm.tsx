@@ -7,8 +7,10 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { languagesApi, leoApi, temasApi, wordsApi } from '../api/client'
-import type { Language, LeoEntry, LeoResult, Tema } from '../types'
+import { languagesApi, leoApi, temasApi, wordTranslationsApi, wordsApi } from '../api/client'
+import { playAudio } from '../utils/audioManager'
+import { useSettingsStore } from '../stores/settingsStore'
+import type { Language, LeoEntry, LeoResult, Tema, WordTranslation } from '../types'
 import LanguageSelect from './LanguageSelect'
 import TemaSelect from './TemaSelect'
 
@@ -57,6 +59,7 @@ const CAT_LABELS: Record<string, string> = {
 
 export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Props) {
   const { t } = useTranslation()
+  const { leoAutoFetchExtras, leoExtraLangs } = useSettingsStore()
   const [form, setForm] = useState({
     palabra: word.palabra,
     significado: word.significado,
@@ -89,11 +92,21 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
   const palabraInputRef = useRef<HTMLInputElement>(null)
   const [createFromLeo, setCreateFromLeo] = useState(false)
 
+  // Extra translations (multi-language from LEO)
+  const [extraTranslations, setExtraTranslations] = useState<WordTranslation[]>([])
+  const [extraFetching, setExtraFetching] = useState(false)
+
   useEffect(() => {
     Promise.all([temasApi.list(), languagesApi.list()]).then(([tRes, lRes]) => {
       setTemas(tRes.data)
       setLanguages(lRes.data)
     })
+    // Load existing extra translations in edit mode
+    if (word.word_id !== 0) {
+      wordTranslationsApi.list(word.word_id).then((res) => {
+        setExtraTranslations(res.data)
+      }).catch(() => {})
+    }
   }, [])
 
   // Close LEO dropdown on outside click
@@ -135,10 +148,26 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
         category: form.category.trim() || null,
         source: filledFromLeo ? 'leo' : effectiveIsCreate ? 'manual' : (word.source ?? undefined),
       }
+      let savedWordId = word.word_id
       if (effectiveIsCreate) {
-        await wordsApi.create(payload)
+        const res = await wordsApi.create(payload)
+        savedWordId = res.data.id
       } else {
         await wordsApi.update(word.word_id, payload)
+      }
+      // Persist extra translations if any
+      if (extraTranslations.length > 0 && savedWordId !== 0) {
+        await Promise.allSettled(
+          extraTranslations.map((tr) =>
+            wordTranslationsApi.upsert(savedWordId, {
+              idioma: tr.idioma,
+              texto: tr.texto,
+              audio_url: tr.audio_url,
+              audio_text: tr.audio_text,
+              source: tr.source ?? 'leo',
+            })
+          )
+        )
       }
       const temaObj = temaId ? (temas.find((t) => t.id === temaId) ?? null) : null
       onSaved({ ...payload, tema_id: temaId, tema: temaObj })
@@ -256,6 +285,37 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
     setFilledFromLeo(true)
     setLeoResults(null)
     if (!showAdvanced) setShowAdvanced(true)
+
+    // Auto-fetch extra languages if configured
+    if (leoAutoFetchExtras && leoExtraLangs.length > 0 && deSide.text) {
+      // Filter out idioma_destino (already covered by main translation)
+      const langsToFetch = leoExtraLangs.filter((l) => l !== (esSide.lang || 'es'))
+      if (langsToFetch.length > 0) {
+        setExtraFetching(true)
+        leoApi.autoFetchExtras(deSide.text, langsToFetch).then((res) => {
+          const fetched = res.data as Array<{ idioma: string; texto: string; audio_url: string | null; audio_text: string | null; found: boolean }>
+          setExtraTranslations((prev) => {
+            // Merge: keep manually edited ones, replace/add fetched ones
+            const merged = [...prev]
+            for (const ft of fetched) {
+              const idx = merged.findIndex((t) => t.idioma === ft.idioma)
+              const entry: WordTranslation = {
+                id: 0,
+                word_id: word.word_id,
+                idioma: ft.idioma,
+                texto: ft.texto,
+                audio_url: ft.audio_url,
+                audio_text: ft.audio_text,
+                source: 'leo',
+              }
+              if (idx >= 0) merged[idx] = entry
+              else merged.push(entry)
+            }
+            return merged
+          })
+        }).catch(() => {}).finally(() => setExtraFetching(false))
+      }
+    }
   }
 
   const applyLeoEntryAsNew = (entry: LeoEntry) => {
@@ -533,7 +593,7 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
                 {form.audio_url && (
                   <button
                     type="button"
-                    onClick={() => new Audio(form.audio_url).play().catch(() => {})}
+                    onClick={() => playAudio(new Audio(form.audio_url!))}
                     className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1 rounded-lg transition-colors"
                   >
                     ▶ {t('wordEdit.playWord')}
@@ -542,12 +602,80 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
                 {form.audio_url_translation && (
                   <button
                     type="button"
-                    onClick={() => new Audio(form.audio_url_translation).play().catch(() => {})}
+                    onClick={() => playAudio(new Audio(form.audio_url_translation!))}
                     className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1 rounded-lg transition-colors"
                   >
                     ▶ {t('wordEdit.playTranslation')}
                   </button>
                 )}
+              </div>
+            )}
+
+            {/* ── Extra translations (multi-language LEO) ── */}
+            {(extraTranslations.length > 0 || extraFetching) && (
+              <div className="border-t border-slate-200 dark:border-slate-600 pt-3 space-y-2">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  {t('wordEdit.extraTranslations')}
+                  {extraFetching && (
+                    <span className="text-blue-400 text-xs animate-pulse">{t('common.loading')}</span>
+                  )}
+                </p>
+                {extraTranslations.map((tr) => (
+                  <div key={tr.idioma} className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 rounded-lg p-2">
+                    {/* Language badge */}
+                    <span className="text-xs font-mono bg-slate-700 text-slate-300 rounded px-1.5 py-0.5 uppercase shrink-0">
+                      {tr.idioma}
+                    </span>
+                    {/* Text */}
+                    <input
+                      type="text"
+                      className="input text-sm flex-1 min-w-0"
+                      value={tr.texto}
+                      onChange={(e) =>
+                        setExtraTranslations((prev) =>
+                          prev.map((x) => x.idioma === tr.idioma ? { ...x, texto: e.target.value } : x)
+                        )
+                      }
+                    />
+                    {/* Audio URL */}
+                    <input
+                      type="text"
+                      className="input text-xs w-32 shrink-0"
+                      placeholder="audio URL"
+                      value={tr.audio_url ?? ''}
+                      onChange={(e) =>
+                        setExtraTranslations((prev) =>
+                          prev.map((x) => x.idioma === tr.idioma ? { ...x, audio_url: e.target.value || null } : x)
+                        )
+                      }
+                    />
+                    {/* Play button */}
+                    {tr.audio_url && (
+                      <button
+                        type="button"
+                        onClick={() => playAudio(new Audio(tr.audio_url!))}
+                        className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1 rounded transition-colors shrink-0"
+                        title={tr.audio_text ?? undefined}
+                      >
+                        ▶
+                      </button>
+                    )}
+                    {/* Delete */}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (word.word_id !== 0 && tr.id !== 0) {
+                          await wordTranslationsApi.delete(word.word_id, tr.idioma).catch(() => {})
+                        }
+                        setExtraTranslations((prev) => prev.filter((x) => x.idioma !== tr.idioma))
+                      }}
+                      className="text-xs text-red-400 hover:text-red-300 px-1 shrink-0"
+                      title={t('common.delete')}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
           </div>

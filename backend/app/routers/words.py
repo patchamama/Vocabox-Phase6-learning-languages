@@ -13,7 +13,8 @@ from ..models.language_dict import LanguageDict
 from ..models.user import User
 from ..models.user_word import UserWord
 from ..models.word import Word
-from ..schemas.word import UserWordOut, WordCreate, WordOut, WordUpdate
+from ..models.word_translation import WordTranslation
+from ..schemas.word import UserWordOut, WordCreate, WordOut, WordTranslationCreate, WordTranslationOut, WordUpdate
 
 router = APIRouter(prefix="/words", tags=["words"])
 
@@ -213,3 +214,78 @@ def delete_word(
         if word:
             db.delete(word)
             db.commit()
+
+
+# ── Word translations (extra languages) ──────────────────────────────────────
+
+def _assert_word_owned(word_id: int, user_id: int, db: Session) -> Word:
+    """Verify the user owns the word and return it. Raises 404 if not."""
+    user_word = (
+        db.query(UserWord)
+        .filter(UserWord.user_id == user_id, UserWord.word_id == word_id)
+        .first()
+    )
+    if not user_word:
+        raise HTTPException(status_code=404, detail="Word not found")
+    word = db.query(Word).filter(Word.id == word_id).first()
+    if not word:
+        raise HTTPException(status_code=404, detail="Word not found")
+    return word
+
+
+@router.get("/{word_id}/translations", response_model=List[WordTranslationOut])
+def get_translations(
+    word_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _assert_word_owned(word_id, current_user.id, db)
+    return db.query(WordTranslation).filter(WordTranslation.word_id == word_id).all()
+
+
+@router.post("/{word_id}/translations", response_model=WordTranslationOut, status_code=201)
+def upsert_translation(
+    word_id: int,
+    body: WordTranslationCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create or update a translation for a specific language (upsert by idioma)."""
+    _assert_word_owned(word_id, current_user.id, db)
+
+    existing = (
+        db.query(WordTranslation)
+        .filter(WordTranslation.word_id == word_id, WordTranslation.idioma == body.idioma)
+        .first()
+    )
+    if existing:
+        for field, value in body.model_dump(exclude_unset=True).items():
+            setattr(existing, field, value)
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    translation = WordTranslation(word_id=word_id, **body.model_dump())
+    db.add(translation)
+    db.commit()
+    db.refresh(translation)
+    return translation
+
+
+@router.delete("/{word_id}/translations/{idioma}", status_code=204)
+def delete_translation(
+    word_id: int,
+    idioma: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _assert_word_owned(word_id, current_user.id, db)
+    translation = (
+        db.query(WordTranslation)
+        .filter(WordTranslation.word_id == word_id, WordTranslation.idioma == idioma)
+        .first()
+    )
+    if not translation:
+        raise HTTPException(status_code=404, detail="Translation not found")
+    db.delete(translation)
+    db.commit()

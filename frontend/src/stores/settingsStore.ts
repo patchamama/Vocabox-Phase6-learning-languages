@@ -33,6 +33,22 @@ interface SettingsState {
   selectedPageSize: number
   /** Direction of review: forward (word→meaning), reverse (meaning→word), both (random) */
   reviewDirection: ReviewDirection
+  /** Use TTS to fill missing audio clips in audio review generation */
+  useTtsInAudioReview: boolean
+  /** TTS voice selection per language code, e.g. { de: 'Anna', es: 'Monica' } */
+  ttsVoices: Record<string, string>
+  /** TTS speech rate multiplier: 0.5 = slow, 1.0 = normal, 1.5 = fast */
+  ttsRate: number
+  /** Auto-fetch extra language translations from LEO when applying a LEO result */
+  leoAutoFetchExtras: boolean
+  /** Extra language codes to fetch automatically from LEO (e.g. ['en', 'fr']) */
+  leoExtraLangs: string[]
+  /** Include extra-language segments in audio review generation */
+  audioReviewExtraLangs: boolean
+  /** Ollama model to use for auto-translating missing entries (empty = disabled) */
+  ollamaTranslationModel: string
+  /** Complete existing MP3 with TTS for text not covered by the original recording */
+  completeWithTts: boolean
 
   setReviewMode: (mode: ReviewMode) => void
   setWordsPerSession: (n: number) => void
@@ -46,6 +62,14 @@ interface SettingsState {
   setPageSizeOption: (slot: 0 | 1 | 2, value: number) => void
   setSelectedPageSize: (n: number) => void
   setReviewDirection: (d: ReviewDirection) => void
+  setUseTtsInAudioReview: (v: boolean) => void
+  setTtsVoice: (lang: string, voice: string) => void
+  setTtsRate: (rate: number) => void
+  setLeoAutoFetchExtras: (v: boolean) => void
+  setLeoExtraLangs: (langs: string[]) => void
+  setAudioReviewExtraLangs: (v: boolean) => void
+  setOllamaTranslationModel: (model: string) => void
+  setCompleteWithTts: (v: boolean) => void
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -65,6 +89,14 @@ export const useSettingsStore = create<SettingsState>()(
       pageSizeOptions: [10, 30, 50],
       selectedPageSize: 30,
       reviewDirection: 'forward',
+      useTtsInAudioReview: false,
+      ttsVoices: {},
+      ttsRate: 0.9,
+      leoAutoFetchExtras: false,
+      leoExtraLangs: [],
+      audioReviewExtraLangs: false,
+      ollamaTranslationModel: '',
+      completeWithTts: true,
 
       setReviewMode: (reviewMode) => set({ reviewMode }),
       setWordsPerSession: (wordsPerSession) => set({ wordsPerSession }),
@@ -88,6 +120,15 @@ export const useSettingsStore = create<SettingsState>()(
         }),
       setSelectedPageSize: (selectedPageSize) => set({ selectedPageSize }),
       setReviewDirection: (reviewDirection) => set({ reviewDirection }),
+      setUseTtsInAudioReview: (useTtsInAudioReview) => set({ useTtsInAudioReview }),
+      setTtsVoice: (lang, voice) =>
+        set((state) => ({ ttsVoices: { ...state.ttsVoices, [lang]: voice } })),
+      setTtsRate: (ttsRate) => set({ ttsRate }),
+      setLeoAutoFetchExtras: (leoAutoFetchExtras) => set({ leoAutoFetchExtras }),
+      setLeoExtraLangs: (leoExtraLangs) => set({ leoExtraLangs }),
+      setAudioReviewExtraLangs: (audioReviewExtraLangs) => set({ audioReviewExtraLangs }),
+      setOllamaTranslationModel: (ollamaTranslationModel) => set({ ollamaTranslationModel }),
+      setCompleteWithTts: (completeWithTts) => set({ completeWithTts }),
     }),
     { name: 'vocabox-settings' }
   )

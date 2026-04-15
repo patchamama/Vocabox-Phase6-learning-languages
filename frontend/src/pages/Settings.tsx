@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { RoundType } from '../stores/settingsStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import { temasApi } from '../api/client'
+import { ollamaApi, temasApi } from '../api/client'
 import type { Tema } from '../types'
+import { TtsVoiceSettings } from '../components/TtsVoiceSettings'
+import { TtsFiltersEditor } from '../components/TtsFiltersEditor'
 
 // ─── Shared Toggle ────────────────────────────────────────────────────────────
 
@@ -335,9 +337,41 @@ export default function Settings() {
   const {
     reviewMode, wordsPerSession, transitionDelay, transitionType,
     safeRound1, safeRound2, safeRound3, autoPlayAudio, autoPlayAudioReversed, wordsOnly, reviewDirection,
+    useTtsInAudioReview, leoAutoFetchExtras, leoExtraLangs,
+    audioReviewExtraLangs, ollamaTranslationModel,
     setReviewMode, setWordsPerSession, setTransitionDelay, setTransitionType,
     setSafeRound, setAutoPlayAudio, setAutoPlayAudioReversed, setWordsOnly, setReviewDirection,
+    setUseTtsInAudioReview, setLeoAutoFetchExtras, setLeoExtraLangs,
+    setAudioReviewExtraLangs, setOllamaTranslationModel,
   } = useSettingsStore()
+
+  // Ollama status
+  const [ollamaStatus, setOllamaStatus] = useState<{ running: boolean; models: string[] } | null>(null)
+  const ollamaChecked = useRef(false)
+  useEffect(() => {
+    if (ollamaChecked.current) return
+    ollamaChecked.current = true
+    ollamaApi.getStatus()
+      .then((r) => setOllamaStatus(r.data))
+      .catch(() => setOllamaStatus({ running: false, models: [] }))
+  }, [])
+
+  // Languages that LEO supports for auto-fetch (non-DE side)
+  const LEO_EXTRA_LANGS = [
+    { code: 'es', label: t('languages.es') },
+    { code: 'en', label: t('languages.en') },
+    { code: 'fr', label: t('languages.fr') },
+    { code: 'it', label: t('languages.it') },
+    { code: 'pt', label: t('languages.pt') },
+  ]
+
+  function toggleExtraLang(code: string) {
+    if (leoExtraLangs.includes(code)) {
+      setLeoExtraLangs(leoExtraLangs.filter((l) => l !== code))
+    } else {
+      setLeoExtraLangs([...leoExtraLangs, code])
+    }
+  }
 
   return (
     <div className="p-4 pt-8 space-y-6">
@@ -441,6 +475,100 @@ export default function Settings() {
           label={t('settings.autoPlayAudioReversed')}
           description={t('settings.autoPlayAudioReversedDesc')}
         />
+        <Toggle
+          value={useTtsInAudioReview}
+          onChange={setUseTtsInAudioReview}
+          label={t('settings.useTtsInAudioReview')}
+          description={t('settings.useTtsInAudioReviewDesc')}
+        />
+        {useTtsInAudioReview && (
+          <div className="pt-2 border-t border-slate-200 dark:border-slate-600">
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
+              {t('settings.ttsVoices')}
+            </p>
+            <TtsVoiceSettings />
+          </div>
+        )}
+      </div>
+
+      {/* TTS Filters */}
+      {useTtsInAudioReview && (
+        <div className="card space-y-3">
+          <h2 className="font-semibold text-slate-800 dark:text-slate-200">{t('settings.ttsFilters')}</h2>
+          <p className="text-xs text-slate-400 dark:text-slate-500">{t('settings.ttsFiltersDesc')}</p>
+          <TtsFiltersEditor />
+        </div>
+      )}
+
+      {/* LEO Dictionary */}
+      <div className="card space-y-3">
+        <h2 className="font-semibold text-slate-800 dark:text-slate-200">{t('settings.leoTitle')}</h2>
+        <Toggle
+          value={leoAutoFetchExtras}
+          onChange={setLeoAutoFetchExtras}
+          label={t('settings.leoAutoFetch')}
+          description={t('settings.leoAutoFetchDesc')}
+        />
+        {leoAutoFetchExtras && (
+          <div className="pt-2 border-t border-slate-200 dark:border-slate-600">
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              {t('settings.leoExtraLangs')}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {LEO_EXTRA_LANGS.map(({ code, label }) => (
+                <button
+                  key={code}
+                  onClick={() => toggleExtraLang(code)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border-2 transition-all ${
+                    leoExtraLangs.includes(code)
+                      ? 'border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                      : 'border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:border-slate-400'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Ollama */}
+      <div className="card space-y-3">
+        <h2 className="font-semibold text-slate-800 dark:text-slate-200">{t('settings.ollamaTitle')}</h2>
+        {ollamaStatus === null && (
+          <p className="text-xs text-slate-400">{t('common.loading')}</p>
+        )}
+        {ollamaStatus && !ollamaStatus.running && (
+          <p className="text-xs text-amber-400">{t('settings.ollamaNotDetected')}</p>
+        )}
+        {ollamaStatus?.running && (
+          <>
+            <Toggle
+              value={audioReviewExtraLangs}
+              onChange={setAudioReviewExtraLangs}
+              label={t('settings.audioReviewExtraLangs')}
+              description={t('settings.audioReviewExtraLangsDesc')}
+            />
+            {audioReviewExtraLangs && (
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-600 space-y-2">
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  {t('settings.ollamaModel')}
+                </p>
+                <select
+                  value={ollamaTranslationModel}
+                  onChange={(e) => setOllamaTranslationModel(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 text-slate-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">{t('settings.ollamaNoModel')}</option>
+                  {ollamaStatus.models.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Content */}

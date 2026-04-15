@@ -35,7 +35,7 @@ def _migrate_words_columns() -> None:
 
 _migrate_words_columns()
 
-from .routers import audio_review, auth, import_router, languages, leo, review, stats, temas, test_mode, words
+from .routers import audio_review, auth, import_router, languages, leo, ollama, review, stats, temas, test_mode, words
 
 # ── Language dictionary seed data ─────────────────────────────────────────────
 
@@ -108,6 +108,7 @@ app.include_router(import_router.router, prefix="/api")
 app.include_router(languages.router,     prefix="/api")
 app.include_router(test_mode.router,     prefix="/api")
 app.include_router(leo.router,           prefix="/api")
+app.include_router(ollama.router,        prefix="/api")
 app.include_router(audio_review.router,  prefix="/api")
 
 # ── Static frontend (served from app/static after deploy) ─────────────────────

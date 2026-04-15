@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel
 
@@ -14,6 +14,25 @@ class TemaOut(TemaBase):
 
     model_config = {"from_attributes": True}
 
+
+# ── WordTranslation schemas ───────────────────────────────────────────────────
+
+class WordTranslationCreate(BaseModel):
+    idioma: str
+    texto: str
+    audio_url: Optional[str] = None
+    audio_text: Optional[str] = None
+    source: Optional[str] = None
+
+
+class WordTranslationOut(WordTranslationCreate):
+    id: int
+    word_id: int
+
+    model_config = {"from_attributes": True}
+
+
+# ── Word schemas ──────────────────────────────────────────────────────────────
 
 class WordCreate(BaseModel):
     palabra: str
@@ -46,6 +65,7 @@ class WordUpdate(BaseModel):
 class WordOut(WordCreate):
     id: int
     tema: Optional[TemaOut] = None
+    translations: List[WordTranslationOut] = []
 
     model_config = {"from_attributes": True}
 
