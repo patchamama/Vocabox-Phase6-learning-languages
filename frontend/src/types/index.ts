@@ -22,6 +22,7 @@ export interface Word {
   audio_text: string | null
   audio_text_translation: string | null
   category: string | null
+  source: string | null
   tema: Tema | null
 }
 
@@ -63,6 +64,8 @@ export interface ImportRowPreview {
   is_duplicate: boolean
   box_level?: number | null
   next_review_date?: string | null
+  category?: string | null
+  source?: string | null
 }
 
 export interface ImportPreview {

@@ -25,6 +25,7 @@ def _migrate_words_columns() -> None:
         ("audio_url_translation", "VARCHAR(500)"),
         ("audio_text", "VARCHAR(200)"),
         ("audio_text_translation", "VARCHAR(200)"),
+        ("source", "VARCHAR(50)"),
     ]
     with engine.begin() as conn:
         for col, typ in new_cols:

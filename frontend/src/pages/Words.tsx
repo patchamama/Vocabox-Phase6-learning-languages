@@ -50,6 +50,7 @@ function WordCard({
           audio_text: uw.word.audio_text,
           audio_text_translation: uw.word.audio_text_translation,
           category: uw.word.category,
+          source: uw.word.source,
         }}
         onSaved={onSaved}
         onCancel={onCancelEdit}

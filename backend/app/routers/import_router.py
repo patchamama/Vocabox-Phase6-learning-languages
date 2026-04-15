@@ -81,7 +81,9 @@ def parse_csv(content: bytes) -> tuple[list[tuple], bool]:
             continue
         c5 = cols[4] if len(cols) > 4 else ""
         c6 = cols[5] if len(cols) > 5 else ""
-        rows.append((c1, c2, c3, c4, c5, c6))
+        c7 = cols[6] if len(cols) > 6 else ""
+        c8 = cols[7] if len(cols) > 7 else ""
+        rows.append((c1, c2, c3, c4, c5, c6, c7, c8))
     return rows, is_vocabox
 
 
@@ -106,7 +108,9 @@ def parse_xlsx(content: bytes) -> tuple[list[tuple], bool]:
         if c1 and c2 and c3 and c4:
             c5 = str(row[4] or "").strip() if len(row) > 4 else ""
             c6 = str(row[5] or "").strip() if len(row) > 5 else ""
-            rows.append((c1, c2, c3, c4, c5, c6))
+            c7 = str(row[6] or "").strip() if len(row) > 6 else ""
+            c8 = str(row[7] or "").strip() if len(row) > 7 else ""
+            rows.append((c1, c2, c3, c4, c5, c6, c7, c8))
     wb.close()
     return rows, is_vocabox
 
@@ -207,10 +211,12 @@ async def preview_import(
     preview_rows: list[ImportRowPreview] = []
 
     for row in raw_rows:
+        # Pad to 8 fields so unpacking is always safe
+        padded = tuple(row) + ("",) * (8 - len(row))
         if is_vocabox:
-            src_word, tgt_word, _, _, box_str, date_str = row
+            src_word, tgt_word, _, _, box_str, date_str, category_str, source_str = padded[:8]
         else:
-            _, _, src_word, tgt_word, box_str, date_str = row
+            _, _, src_word, tgt_word, box_str, date_str, category_str, source_str = padded[:8]
 
         if not src_word or not tgt_word:
             continue
@@ -241,6 +247,8 @@ async def preview_import(
                 is_duplicate=is_dup,
                 box_level=box_level,
                 next_review_date=next_review_date,
+                category=category_str or None,
+                source=source_str or None,
             )
         )
 
@@ -319,6 +327,7 @@ async def pdf_preview_import(
                 idioma_origen=src_code,
                 idioma_destino=tgt_code,
                 is_duplicate=is_dup,
+                source="leo",
             )
         )
 
@@ -410,6 +419,8 @@ def confirm_import(
                 idioma_origen=row.idioma_origen,
                 idioma_destino=row.idioma_destino,
                 tema_id=data.tema_id,
+                category=row.category or None,
+                source=row.source or None,
             )
             db.add(new_word)
             db.flush()

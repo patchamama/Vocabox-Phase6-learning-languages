@@ -21,6 +21,7 @@ class Word(Base):
     audio_text = Column(String(200), nullable=True)
     audio_text_translation = Column(String(200), nullable=True)
     category = Column(String(50), nullable=True)
+    source = Column(String(50), nullable=True)  # e.g. 'leo', 'google_translate', 'manual', 'csv'
 
     tema = relationship("Tema", back_populates="words")
     user_words = relationship(

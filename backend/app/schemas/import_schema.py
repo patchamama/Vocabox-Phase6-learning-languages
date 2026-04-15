@@ -12,6 +12,8 @@ class ImportRowPreview(BaseModel):
     is_duplicate: bool
     box_level: Optional[int] = None
     next_review_date: Optional[datetime] = None
+    category: Optional[str] = None
+    source: Optional[str] = None
 
 
 class ImportPreviewOut(BaseModel):

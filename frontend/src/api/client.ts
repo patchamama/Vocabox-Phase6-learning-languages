@@ -43,6 +43,7 @@ export interface WordFields {
   audio_text?: string | null
   audio_text_translation?: string | null
   category?: string | null
+  source?: string | null
 }
 
 export const wordsApi = {

@@ -26,6 +26,7 @@ class WordCreate(BaseModel):
     audio_text: Optional[str] = None
     audio_text_translation: Optional[str] = None
     category: Optional[str] = None
+    source: Optional[str] = None
 
 
 class WordUpdate(BaseModel):
@@ -39,6 +40,7 @@ class WordUpdate(BaseModel):
     audio_text: Optional[str] = None
     audio_text_translation: Optional[str] = None
     category: Optional[str] = None
+    source: Optional[str] = None
 
 
 class WordOut(WordCreate):

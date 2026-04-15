@@ -33,6 +33,7 @@ interface WordData {
   audio_text?: string | null
   audio_text_translation?: string | null
   category?: string | null
+  source?: string | null
 }
 
 interface SavedPayload extends Partial<WordData> {
@@ -68,6 +69,8 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
     audio_text_translation: word.audio_text_translation ?? '',
     category: word.category ?? '',
   })
+  // Track whether this word's data came from LEO (so we can tag source on save)
+  const [filledFromLeo, setFilledFromLeo] = useState(false)
   const [temas, setTemas] = useState<Tema[]>([])
   const [languages, setLanguages] = useState<Language[]>([])
   const [isSaving, setIsSaving] = useState(false)
@@ -130,6 +133,7 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
         audio_text: form.audio_text.trim() || null,
         audio_text_translation: form.audio_text_translation.trim() || null,
         category: form.category.trim() || null,
+        source: filledFromLeo ? 'leo' : effectiveIsCreate ? 'manual' : (word.source ?? undefined),
       }
       if (effectiveIsCreate) {
         await wordsApi.create(payload)
@@ -249,6 +253,7 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
       audio_text_translation: esSide.audio[0]?.label ?? esSide.text,
       category: entry.category ?? '',
     }))
+    setFilledFromLeo(true)
     setLeoResults(null)
     if (!showAdvanced) setShowAdvanced(true)
   }
@@ -267,6 +272,7 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
       audio_text_translation: esSide.audio[0]?.label ?? esSide.text,
       category: entry.category ?? '',
     }))
+    setFilledFromLeo(true)
     setCreateFromLeo(true)
     setLeoResults(null)
     if (!showAdvanced) setShowAdvanced(true)
