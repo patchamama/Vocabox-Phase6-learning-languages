@@ -444,13 +444,15 @@ export default function Settings() {
     useTtsInAudioReview, leoAutoFetchExtras, leoExtraLangs,
     audioReviewExtraLangs, ollamaTranslationModel,
     ollamaTimeout, ollamaPromptTranslate, ollamaPromptEnhance,
-    videoClipPauseSec, videoClipContext, videoClipAutoPlay, videoClipPlaybackRate,
+    videoClipPauseSec, videoClipContext, videoClipAutoPlay, videoClipPlaybackRate, maxRefsPerWord,
+    subtitleIndexPalabra, subtitleIndexAudioText, subtitleIndexSignificado,
     setReviewMode, setWordsPerSession, setTransitionDelay, setTransitionType,
     setSafeRound, setAutoPlayAudio, setAutoPlayAudioReversed, setWordsOnly, setReviewDirection,
     setUseTtsInAudioReview, setLeoAutoFetchExtras, setLeoExtraLangs,
     setAudioReviewExtraLangs, setOllamaTranslationModel,
     setOllamaTimeout, setOllamaPromptTranslate, setOllamaPromptEnhance,
-    setVideoClipPauseSec, setVideoClipContext, setVideoClipAutoPlay, setVideoClipPlaybackRate,
+    setVideoClipPauseSec, setVideoClipContext, setVideoClipAutoPlay, setVideoClipPlaybackRate, setMaxRefsPerWord,
+    setSubtitleIndexPalabra, setSubtitleIndexAudioText, setSubtitleIndexSignificado,
   } = useSettingsStore()
 
   // Ollama status + default prompts
@@ -875,6 +877,49 @@ export default function Settings() {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Max refs per word */}
+        <div className="space-y-1.5">
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{t('settings.maxRefsPerWord')}</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500">{t('settings.maxRefsPerWordDesc')}</p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setMaxRefsPerWord(maxRefsPerWord - 1)}
+              className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 font-medium transition-colors"
+            >−</button>
+            <span className="w-10 text-center font-medium text-slate-700 dark:text-slate-200">{maxRefsPerWord}</span>
+            <button
+              onClick={() => setMaxRefsPerWord(maxRefsPerWord + 1)}
+              className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 font-medium transition-colors"
+            >+</button>
+          </div>
+        </div>
+
+        {/* Subtitle index fields */}
+        <div className="space-y-1.5">
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{t('settings.subtitleIndexFields')}</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500">{t('settings.subtitleIndexFieldsDesc')}</p>
+          <div className="flex flex-col gap-1.5 pt-0.5">
+            {([
+              { key: 'palabra', label: t('settings.subtitleIndexPalabra'), checked: subtitleIndexPalabra, set: setSubtitleIndexPalabra },
+              { key: 'audioText', label: t('settings.subtitleIndexAudioText'), checked: subtitleIndexAudioText, set: setSubtitleIndexAudioText },
+              { key: 'significado', label: t('settings.subtitleIndexSignificado'), checked: subtitleIndexSignificado, set: setSubtitleIndexSignificado },
+            ] as const).map(({ key, label, checked, set }) => (
+              <label key={key} className="flex items-center gap-2 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(e) => set(e.target.checked)}
+                  className="w-4 h-4 rounded accent-blue-500 cursor-pointer"
+                />
+                <span className="text-sm text-slate-600 dark:text-slate-300 group-hover:text-slate-800 dark:group-hover:text-slate-100 transition-colors">
+                  {label}
+                </span>
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-600">{t('settings.subtitleIndexFieldsHint')}</p>
         </div>
       </div>
     </div>

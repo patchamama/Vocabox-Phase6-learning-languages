@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import api, { subtitlesApi } from '../api/client'
-import type { SubtitleFile } from '../types'
+import VideoRefsModal from './VideoRefsModal'
+import { useSettingsStore } from '../stores/settingsStore'
+import type { SubtitleFile, WordVideoRef } from '../types'
 
 interface ReindexState {
   status: 'running' | 'done' | 'error'
@@ -20,10 +22,13 @@ interface UploadResults {
 
 export default function SubtitleManager() {
   const { t } = useTranslation()
+  const { maxRefsPerWord, subtitleIndexPalabra, subtitleIndexAudioText, subtitleIndexSignificado } = useSettingsStore()
 
   // ── State ────────────────────────────────────────────────────────────────────
   const [files, setFiles] = useState<SubtitleFile[]>([])
   const [isLoadingFiles, setIsLoadingFiles] = useState(true)
+  // file_id → ref count
+  const [fileRefCounts, setFileRefCounts] = useState<Map<number, number>>(new Map())
 
   // Upload
   const [uploadFiles, setUploadFiles] = useState<File[]>([])
@@ -44,21 +49,42 @@ export default function SubtitleManager() {
 
   // Reindex
   const [reindexState, setReindexState] = useState<ReindexState | null>(null)
+  const [reindexPartial, setReindexPartial] = useState(false)
+  const [reindexMinRefs, setReindexMinRefs] = useState(3)
   const wsRef = useRef<WebSocket | null>(null)
 
+  // Search
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<WordVideoRef[] | null>(null)
+  const [isSearching, setIsSearching] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
+  const [searchModal, setSearchModal] = useState<{ query: string; refs: WordVideoRef[] } | null>(null)
+
   // ── Load ─────────────────────────────────────────────────────────────────────
-  const load = () => {
+  const loadFileCounts = useCallback(async () => {
+    try {
+      const r = await subtitlesApi.getFileRefCounts()
+      setFileRefCounts(new Map(r.data.map((x) => [x.file_id, x.count])))
+    } catch {
+      // non-critical
+    }
+  }, [])
+
+  const load = useCallback(() => {
     setIsLoadingFiles(true)
-    subtitlesApi.list()
-      .then((r) => setFiles(r.data))
+    Promise.all([subtitlesApi.list(), subtitlesApi.getFileRefCounts()])
+      .then(([fRes, cRes]) => {
+        setFiles(fRes.data)
+        setFileRefCounts(new Map(cRes.data.map((x) => [x.file_id, x.count])))
+      })
       .catch(() => {})
       .finally(() => setIsLoadingFiles(false))
-  }
+  }, [])
 
   useEffect(() => {
     load()
     return () => { wsRef.current?.close() }
-  }, [])
+  }, [load])
 
   // ── File selection ────────────────────────────────────────────────────────────
   const handleFilesSelected = (fileList: FileList | null) => {
@@ -132,6 +158,7 @@ export default function SubtitleManager() {
     try {
       await subtitlesApi.deleteAllRefs()
       setDeleteAllRefsConfirm(false)
+      loadFileCounts()
     } finally {
       setIsBusy(false)
     }
@@ -142,7 +169,13 @@ export default function SubtitleManager() {
     wsRef.current?.close()
     setReindexState({ status: 'running', progress: 0, total: 0, refs_created: 0 })
 
-    const res = await subtitlesApi.startReindex()
+    const res = await subtitlesApi.startReindex({
+      minRefs: reindexPartial ? reindexMinRefs : 0,
+      maxRefs: maxRefsPerWord,
+      usePalabra: subtitleIndexPalabra,
+      useAudioText: subtitleIndexAudioText,
+      useSignificado: subtitleIndexSignificado,
+    })
     const jobId = res.data.job_id
     const token = localStorage.getItem('token') ?? ''
     const baseUrl = ((api.defaults.baseURL as string) ?? '').replace(/\/$/, '')
@@ -158,6 +191,7 @@ export default function SubtitleManager() {
         setReindexState(data)
         if (data.status === 'done' || data.status === 'error') {
           ws.close()
+          if (data.status === 'done') loadFileCounts()
         }
       } catch {
         // ignore
@@ -165,6 +199,23 @@ export default function SubtitleManager() {
     }
     ws.onerror = () => {
       setReindexState((s) => s ? { ...s, status: 'error', error: 'WebSocket error' } : null)
+    }
+  }
+
+  // ── Subtitle search ───────────────────────────────────────────────────────────
+  const handleSearch = async () => {
+    const q = searchQuery.trim()
+    if (q.length < 2) return
+    setIsSearching(true)
+    setSearchError(null)
+    setSearchResults(null)
+    try {
+      const res = await subtitlesApi.searchSegments(q)
+      setSearchResults(subtitlesApi.segmentsToVideoRefs(res.data.results))
+    } catch {
+      setSearchError(t('import.subtitleSearchError'))
+    } finally {
+      setIsSearching(false)
     }
   }
 
@@ -180,6 +231,11 @@ export default function SubtitleManager() {
     if (uploadFiles.length === 1) return `${(uploadFiles[0].size / 1024).toFixed(1)} KB · ${t('import.dropZoneChange')}`
     const totalKb = (uploadFiles.reduce((s, f) => s + f.size, 0) / 1024).toFixed(1)
     return `${totalKb} KB · ${t('import.dropZoneChange')}`
+  }
+
+  function fmtTime(ms: number) {
+    const s = Math.floor(ms / 1000)
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
   }
 
   // ── Render ────────────────────────────────────────────────────────────────────
@@ -310,10 +366,119 @@ export default function SubtitleManager() {
         </button>
       </div>
 
+      {/* ── Search section ── */}
+      <div className="card space-y-3">
+        <h3 className="font-medium text-slate-200">{t('import.subtitleSearch')}</h3>
+        <p className="text-xs text-slate-400">{t('import.subtitleSearchDesc')}</p>
+
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleSearch() }}
+            placeholder={t('import.subtitleSearchPlaceholder')}
+            className="flex-1 bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+          />
+          <button
+            onClick={handleSearch}
+            disabled={isSearching || searchQuery.trim().length < 2}
+            className="btn-secondary text-sm px-4 disabled:opacity-40"
+          >
+            {isSearching
+              ? <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              : '🔍'}
+          </button>
+        </div>
+
+        {searchError && <p className="text-red-400 text-xs">{searchError}</p>}
+
+        {searchResults !== null && (
+          <div className="space-y-1">
+            {searchResults.length === 0 ? (
+              <p className="text-slate-500 text-xs">{t('import.subtitleSearchEmpty')}</p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-slate-400">
+                    {t('import.subtitleSearchResults', { n: searchResults.length })}
+                  </p>
+                  <button
+                    onClick={() => setSearchModal({ query: searchQuery.trim(), refs: searchResults })}
+                    className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                  >
+                    {t('import.subtitleSearchOpenAll')} ▶
+                  </button>
+                </div>
+
+                <div className="divide-y divide-slate-700/50 border border-slate-700 rounded-xl overflow-hidden max-h-64 overflow-y-auto">
+                  {searchResults.map((ref) => (
+                    <button
+                      key={ref.id}
+                      onClick={() => setSearchModal({ query: searchQuery.trim(), refs: [ref] })}
+                      className="w-full text-left px-3 py-2 hover:bg-slate-700/50 transition-colors"
+                    >
+                      <p className="text-xs text-slate-200 line-clamp-2">{ref.segment.text}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {ref.segment.file.filename} · {fmtTime(ref.segment.start_ms)}–{fmtTime(ref.segment.end_ms)}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* ── Reindex section ── */}
       <div className="card space-y-2">
         <h3 className="font-medium text-slate-200">{t('import.subtitleReindex')}</h3>
         <p className="text-xs text-slate-400">{t('import.subtitleReindexDesc')}</p>
+
+        {/* Partial reindex toggle */}
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setReindexPartial(false)}
+              className={`text-xs px-3 py-1 rounded-lg border transition-colors ${
+                !reindexPartial
+                  ? 'border-blue-500 bg-blue-500/20 text-blue-300'
+                  : 'border-slate-600 text-slate-500 hover:border-slate-400 hover:text-slate-300'
+              }`}
+            >
+              {t('import.subtitleReindexFull')}
+            </button>
+            <button
+              onClick={() => setReindexPartial(true)}
+              className={`text-xs px-3 py-1 rounded-lg border transition-colors ${
+                reindexPartial
+                  ? 'border-blue-500 bg-blue-500/20 text-blue-300'
+                  : 'border-slate-600 text-slate-500 hover:border-slate-400 hover:text-slate-300'
+              }`}
+            >
+              {t('import.subtitleReindexPartial')}
+            </button>
+          </div>
+
+          {reindexPartial && (
+            <div className="flex items-center gap-2 pl-1">
+              <p className="text-xs text-slate-400 shrink-0">{t('import.subtitleReindexMinRefs')}</p>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setReindexMinRefs((n) => Math.max(1, n - 1))}
+                  className="w-6 h-6 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm"
+                >−</button>
+                <span className="w-8 text-center text-sm text-slate-200">{reindexMinRefs}</span>
+                <button
+                  onClick={() => setReindexMinRefs((n) => Math.min(50, n + 1))}
+                  className="w-6 h-6 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm"
+                >+</button>
+              </div>
+              <p className="text-xs text-slate-500">{t('import.subtitleReindexMinRefsHint', { n: reindexMinRefs })}</p>
+            </div>
+          )}
+        </div>
 
         {reindexState && (
           <div className="space-y-1">
@@ -348,7 +513,7 @@ export default function SubtitleManager() {
         >
           {reindexState?.status === 'running'
             ? '⟳ ' + t('import.subtitleReindexing', { done: reindexState.progress, total: reindexState.total })
-            : '⟳ ' + t('import.subtitleReindex')}
+            : '⟳ ' + (reindexPartial ? t('import.subtitleReindexPartialBtn') : t('import.subtitleReindex'))}
         </button>
 
         {/* Delete all refs */}
@@ -387,61 +552,91 @@ export default function SubtitleManager() {
           <div className="px-4 py-4 text-slate-500 text-sm">{t('import.subtitleNoFiles')}</div>
         ) : (
           <div className="divide-y divide-slate-700/50">
-            {files.map((f) => (
-              <div key={f.id} className="px-4 py-3">
-                {deleteConfirmId === f.id ? (
-                  <div className="space-y-2">
-                    <p className="text-xs text-slate-300">{t('import.subtitleDeleteConfirm')}</p>
-                    <div className="flex gap-2">
-                      <button onClick={() => setDeleteConfirmId(null)} className="btn-secondary flex-1 text-xs py-1.5">
-                        {t('words.bulkCancel')}
-                      </button>
-                      <button
-                        onClick={() => handleDelete(f.id)}
-                        disabled={deletingId === f.id}
-                        className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded-xl px-3 py-1.5 text-xs font-medium transition-colors flex items-center justify-center gap-1.5"
-                      >
-                        {deletingId === f.id ? (
-                          <>
-                            <span className="inline-block w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                            <span>{t('common.loading')}</span>
-                          </>
-                        ) : t('import.subtitleDelete')}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-slate-200 truncate">{f.filename}</p>
-                      <div className="flex flex-wrap items-center gap-2 mt-0.5">
-                        {f.youtube_id ? (
-                          <span className="text-xs text-blue-400 font-mono">{f.youtube_id}</span>
-                        ) : (
-                          <span className="text-xs text-slate-600">{t('import.subtitleNoId')}</span>
-                        )}
-                        <span className="text-xs text-slate-500">
-                          {t('import.subtitleSegments', { count: f.total_segments })}
-                        </span>
-                        {f.language && (
-                          <span className="text-xs bg-slate-700 px-1.5 py-0.5 rounded-full">{f.language}</span>
-                        )}
+            {files.map((f) => {
+              const refCount = fileRefCounts.get(f.id)
+              return (
+                <div key={f.id} className="px-4 py-3">
+                  {deleteConfirmId === f.id ? (
+                    <div className="space-y-2">
+                      <p className="text-xs text-slate-300">{t('import.subtitleDeleteConfirm')}</p>
+                      <div className="flex gap-2">
+                        <button onClick={() => setDeleteConfirmId(null)} className="btn-secondary flex-1 text-xs py-1.5">
+                          {t('words.bulkCancel')}
+                        </button>
+                        <button
+                          onClick={() => handleDelete(f.id)}
+                          disabled={deletingId === f.id}
+                          className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded-xl px-3 py-1.5 text-xs font-medium transition-colors flex items-center justify-center gap-1.5"
+                        >
+                          {deletingId === f.id ? (
+                            <>
+                              <span className="inline-block w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                              <span>{t('common.loading')}</span>
+                            </>
+                          ) : t('import.subtitleDelete')}
+                        </button>
                       </div>
                     </div>
-                    <button
-                      onClick={() => setDeleteConfirmId(f.id)}
-                      className="text-slate-500 hover:text-red-400 transition-colors text-sm shrink-0"
-                      title={t('import.subtitleDelete')}
-                    >
-                      🗑
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
+                  ) : (
+                    <div className="flex items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm text-slate-200 truncate" title={f.filename}>{f.filename}</p>
+                          {refCount !== undefined && refCount > 0 && (
+                            <span className="text-xs font-medium bg-purple-600/30 text-purple-300 border border-purple-500/40 px-1.5 py-0.5 rounded-full shrink-0">
+                              {refCount} refs
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                          {f.youtube_id ? (
+                            <a
+                              href={`https://www.youtube.com/watch?v=${f.youtube_id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-xs text-blue-400 font-mono hover:text-blue-300 hover:underline transition-colors"
+                              title={`YouTube: ${f.youtube_id}`}
+                            >
+                              ▶ {f.youtube_id}
+                            </a>
+                          ) : (
+                            <span className="text-xs text-slate-600">{t('import.subtitleNoId')}</span>
+                          )}
+                          <span className="text-xs text-slate-500">
+                            {t('import.subtitleSegments', { count: f.total_segments })}
+                          </span>
+                          {f.language && (
+                            <span className="text-xs bg-slate-700 px-1.5 py-0.5 rounded-full">{f.language}</span>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setDeleteConfirmId(f.id)}
+                        className="text-slate-500 hover:text-red-400 transition-colors text-sm shrink-0"
+                        title={t('import.subtitleDelete')}
+                      >
+                        🗑
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
+
+      {/* ── Search result viewer modal ── */}
+      {searchModal && (
+        <VideoRefsModal
+          wordId={0}
+          palabra={searchModal.query}
+          significado=""
+          overrideRefs={searchModal.refs}
+          onClose={() => setSearchModal(null)}
+        />
+      )}
     </div>
   )
 }

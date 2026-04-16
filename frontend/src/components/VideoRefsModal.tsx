@@ -74,11 +74,13 @@ interface Props {
   significado: string
   audioText?: string
   onClose: () => void
+  /** Pre-loaded refs (e.g. from subtitle search). Skips the API fetch when provided. */
+  overrideRefs?: WordVideoRef[]
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function VideoRefsModal({ wordId, palabra, significado, audioText, onClose }: Props) {
+export default function VideoRefsModal({ wordId, palabra, significado, audioText, onClose, overrideRefs }: Props) {
   const { t } = useTranslation()
   const {
     videoClipPauseSec,
@@ -117,10 +119,14 @@ export default function VideoRefsModal({ wordId, palabra, significado, audioText
 
   // ── Load refs ───────────────────────────────────────────────────────────────
   useEffect(() => {
+    if (overrideRefs) {
+      setRefs(overrideRefs)
+      return
+    }
     subtitlesApi.getRefs(wordId)
       .then((r) => setRefs(r.data))
       .catch(() => setError('Error al cargar los clips'))
-  }, [wordId])
+  }, [wordId, overrideRefs])
 
   // ── Escape key ──────────────────────────────────────────────────────────────
   useEffect(() => {

@@ -65,6 +65,10 @@ interface SettingsState {
   videoClipPlaybackRate: number
   /** Maximum number of video clips to store per word (1–50) */
   maxRefsPerWord: number
+  /** Which word fields to use when indexing subtitle clips */
+  subtitleIndexPalabra: boolean
+  subtitleIndexAudioText: boolean
+  subtitleIndexSignificado: boolean
 
   setReviewMode: (mode: ReviewMode) => void
   setWordsPerSession: (n: number) => void
@@ -94,6 +98,9 @@ interface SettingsState {
   setVideoClipAutoPlay: (v: boolean) => void
   setVideoClipPlaybackRate: (r: number) => void
   setMaxRefsPerWord: (n: number) => void
+  setSubtitleIndexPalabra: (v: boolean) => void
+  setSubtitleIndexAudioText: (v: boolean) => void
+  setSubtitleIndexSignificado: (v: boolean) => void
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -129,6 +136,9 @@ export const useSettingsStore = create<SettingsState>()(
       videoClipAutoPlay: true,
       videoClipPlaybackRate: 1,
       maxRefsPerWord: 10,
+      subtitleIndexPalabra: true,
+      subtitleIndexAudioText: true,
+      subtitleIndexSignificado: true,
 
       setReviewMode: (reviewMode) => set({ reviewMode }),
       setWordsPerSession: (wordsPerSession) => set({ wordsPerSession }),
@@ -169,6 +179,9 @@ export const useSettingsStore = create<SettingsState>()(
       setVideoClipAutoPlay: (videoClipAutoPlay) => set({ videoClipAutoPlay }),
       setVideoClipPlaybackRate: (videoClipPlaybackRate) => set({ videoClipPlaybackRate }),
       setMaxRefsPerWord: (maxRefsPerWord) => set({ maxRefsPerWord: Math.max(1, Math.min(50, maxRefsPerWord)) }),
+      setSubtitleIndexPalabra: (subtitleIndexPalabra) => set({ subtitleIndexPalabra }),
+      setSubtitleIndexAudioText: (subtitleIndexAudioText) => set({ subtitleIndexAudioText }),
+      setSubtitleIndexSignificado: (subtitleIndexSignificado) => set({ subtitleIndexSignificado }),
     }),
     { name: 'vocabox-settings' }
   )

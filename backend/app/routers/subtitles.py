@@ -262,6 +262,9 @@ def start_reindex(
                 user_id, db2, on_progress=_progress,
                 min_refs=req.min_refs,
                 max_refs=effective_max,
+                use_palabra=req.use_palabra,
+                use_audio_text=req.use_audio_text,
+                use_significado=req.use_significado,
             )
             _jobs[job_id]["status"] = "done"
             _jobs[job_id]["refs_created"] = result["refs_created"]

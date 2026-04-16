@@ -55,6 +55,9 @@ class SegmentContextOut(BaseModel):
 class ReindexRequest(BaseModel):
     min_refs: int = 0   # 0 = full reindex; >0 = only words with fewer refs
     max_refs: int = 0   # 0 = use DEFAULT_MAX_REFS
+    use_palabra: bool = True
+    use_audio_text: bool = True
+    use_significado: bool = True
 
 
 class FileRefCountOut(BaseModel):

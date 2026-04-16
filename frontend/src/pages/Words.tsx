@@ -9,7 +9,8 @@ import VideoRefsModal from '../components/VideoRefsModal'
 import WordEditForm from '../components/WordEditForm'
 import { useSettingsStore } from '../stores/settingsStore'
 import { playAudio, speakUtterance } from '../utils/audioManager'
-import type { Tema, UserWord } from '../types'
+import type { SavedPayload } from '../components/WordEditForm'
+import type { Tema, UserWord, Word } from '../types'
 
 // ── WordCard ──────────────────────────────────────────────────────────────────
 // Shared between list mode and flashcard revealed state.
@@ -26,7 +27,7 @@ interface WordCardProps {
   boxPrefix: string
   // editor
   isEditing: boolean
-  onSaved: () => void
+  onSaved: (updated: SavedPayload) => void
   onCancelEdit: () => void
   onDeleted: () => void
   // video refs
@@ -817,7 +818,12 @@ export default function Words() {
                   onToggleExpand={() => toggleExpand(uw.word.id)}
                   isExpanded={expandAll || expandedId === uw.word.id}
                   isEditing={editId === uw.word.id}
-                  onSaved={() => { setEditId(null); load() }}
+                  onSaved={(updated) => {
+                    setEditId(null)
+                    setUserWords((prev) => prev.map((item) =>
+                      item.word.id === uw.word.id ? { ...item, word: { ...item.word, ...updated } as Word } : item
+                    ))
+                  }}
                   onCancelEdit={() => setEditId(null)}
                   onDeleted={() => { setEditId(null); load() }}
                   clipCount={wordRefCounts.get(uw.word.id)}
@@ -856,7 +862,12 @@ export default function Words() {
               onToggleExpand={() => toggleExpand(uw.word.id)}
               isExpanded={expandAll || expandedId === uw.word.id}
               isEditing={editId === uw.word.id}
-              onSaved={() => { setEditId(null); load() }}
+              onSaved={(updated) => {
+                setEditId(null)
+                setUserWords((prev) => prev.map((item) =>
+                  item.word.id === uw.word.id ? { ...item, word: { ...item.word, ...updated } as Word } : item
+                ))
+              }}
               onCancelEdit={() => setEditId(null)}
               onDeleted={() => { setEditId(null); load() }}
               clipCount={wordRefCounts.get(uw.word.id)}

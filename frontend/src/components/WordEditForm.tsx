@@ -50,7 +50,7 @@ interface WordData {
   source?: string | null
 }
 
-interface SavedPayload extends Partial<WordData> {
+export interface SavedPayload extends Partial<WordData> {
   tema?: Tema | null
 }
 

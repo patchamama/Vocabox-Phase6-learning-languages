@@ -46,14 +46,21 @@ def index_word(
     db: Session,
     audio_text: Optional[str] = None,
     max_refs: int = DEFAULT_MAX_REFS,
+    use_palabra: bool = True,
+    use_audio_text: bool = True,
+    use_significado: bool = True,
 ) -> int:
     """Rebuild video refs for one (user, word) pair. Returns number of refs written."""
     file_ids = _user_file_ids(user_id, db)
     if not file_ids:
         return 0
 
-    raw = [palabra, significado]
-    if audio_text:
+    raw: list[str] = []
+    if use_palabra and palabra:
+        raw.append(palabra)
+    if use_significado and significado:
+        raw.append(significado)
+    if use_audio_text and audio_text:
         raw.append(audio_text)
 
     terms = sorted(
@@ -144,6 +151,9 @@ def reindex_all(
     on_progress: Optional[Callable[[int, int], None]] = None,
     min_refs: int = 0,
     max_refs: int = DEFAULT_MAX_REFS,
+    use_palabra: bool = True,
+    use_audio_text: bool = True,
+    use_significado: bool = True,
 ) -> dict:
     """Rebuild word→video refs for a specific user.
 
@@ -184,6 +194,9 @@ def reindex_all(
             uw.word_id, uw.word.palabra, uw.word.significado, user_id, db,
             audio_text=uw.word.audio_text,
             max_refs=max_refs,
+            use_palabra=use_palabra,
+            use_audio_text=use_audio_text,
+            use_significado=use_significado,
         )
         if on_progress:
             on_progress(i + 1, total)

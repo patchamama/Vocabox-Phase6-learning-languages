@@ -180,7 +180,7 @@ export const audioReviewApi = {
   deleteTtsFilters: (lang: string) => api.delete(`/audio-review/tts-filters/${lang}`),
 }
 
-import type { SegmentContext, SubtitleFile, WordVideoRef } from '../types'
+import type { SegmentContext, SegmentRef, SubtitleFile, SubtitleSearchResult, WordVideoRef } from '../types'
 
 export const subtitlesApi = {
   upload: (file: File, youtubeId?: string, language?: string) => {
@@ -195,11 +195,31 @@ export const subtitlesApi = {
   list: () => api.get<SubtitleFile[]>('/subtitles'),
   delete: (id: number) => api.delete(`/subtitles/${id}`),
   deleteAllRefs: () => api.delete('/subtitles/all-refs'),
-  startReindex: () => api.post<{ job_id: string }>('/subtitles/reindex'),
+  startReindex: (params?: {
+    minRefs?: number
+    maxRefs?: number
+    usePalabra?: boolean
+    useAudioText?: boolean
+    useSignificado?: boolean
+  }) =>
+    api.post<{ job_id: string }>('/subtitles/reindex', {
+      min_refs: params?.minRefs ?? 0,
+      max_refs: params?.maxRefs ?? 0,
+      use_palabra: params?.usePalabra ?? true,
+      use_audio_text: params?.useAudioText ?? true,
+      use_significado: params?.useSignificado ?? true,
+    }),
   getRefs: (wordId: number) => api.get<WordVideoRef[]>(`/subtitles/refs/${wordId}`),
   getWordIdsWithRefs: () => api.get<{ refs: { word_id: number; count: number }[] }>('/subtitles/word-ids-with-refs'),
   getSegmentContext: (segmentId: number, before: number, after: number) =>
     api.get<SegmentContext>(`/subtitles/segment-context/${segmentId}`, { params: { before, after } }),
+  getFileRefCounts: () =>
+    api.get<{ file_id: number; count: number }[]>('/subtitles/file-ref-counts'),
+  searchSegments: (q: string, limit = 30) =>
+    api.get<SubtitleSearchResult>('/subtitles/search', { params: { q, limit } }),
+  /** Convenience: convert SegmentRef[] from search into WordVideoRef[] for VideoRefsModal */
+  segmentsToVideoRefs: (segs: SegmentRef[]): WordVideoRef[] =>
+    segs.map((seg, i) => ({ id: -(i + 1), word_id: 0, segment_id: seg.id, segment: seg })),
 }
 
 export const ollamaApi = {
