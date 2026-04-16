@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getLastErrors } from './Review'
 import { useTranslation } from 'react-i18next'
-import { temasApi, wordsApi } from '../api/client'
+import { subtitlesApi, temasApi, wordsApi } from '../api/client'
 import AudioReviewPanel from '../components/AudioReviewPanel'
 import SpeakButton from '../components/SpeakButton'
+import VideoRefsModal from '../components/VideoRefsModal'
 import WordEditForm from '../components/WordEditForm'
 import { useSettingsStore } from '../stores/settingsStore'
 import { playAudio, speakUtterance } from '../utils/audioManager'
@@ -28,12 +29,16 @@ interface WordCardProps {
   onSaved: () => void
   onCancelEdit: () => void
   onDeleted: () => void
+  // video refs
+  clipCount?: number
+  onVideoRefs?: () => void
 }
 
 function WordCard({
   uw, showStats, t, onEdit, onCollapse, onSpeak,
   onToggleExpand, isExpanded,
   boxPrefix, isEditing, onSaved, onCancelEdit, onDeleted,
+  clipCount, onVideoRefs,
 }: WordCardProps) {
   if (isEditing) {
     return (
@@ -99,6 +104,18 @@ function WordCard({
         )}
       </div>
       <div className={`flex shrink-0 gap-1 ${isExpanded ? 'items-start' : 'items-center'}`}>
+        {!!clipCount && onVideoRefs && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onVideoRefs() }}
+            className="relative text-slate-500 hover:text-purple-400 transition-colors px-1.5 text-base"
+            title={t('words.videoRefs')}
+          >
+            🎬
+            <span className="absolute -top-1 -right-0 text-[8px] font-bold bg-purple-600 text-white rounded-full min-w-[13px] h-[13px] flex items-center justify-center leading-none px-0.5">
+              {clipCount > 9 ? '9+' : clipCount}
+            </span>
+          </button>
+        )}
         <span className={`text-xs px-2 py-0.5 rounded-full text-slate-900 font-bold ${BOX_COLORS[uw.box_level]}`}>
           {boxPrefix}{uw.box_level}
         </span>
@@ -202,6 +219,10 @@ export default function Words() {
   const [temas, setTemas] = useState<Tema[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
+  // ── Video refs ───────────────────────────────────────────────────────────────
+  const [wordRefCounts, setWordRefCounts] = useState<Map<number, number>>(new Map())
+  const [videoRefsWord, setVideoRefsWord] = useState<UserWord | null>(null)
+
   // ── CRUD ─────────────────────────────────────────────────────────────────────
   const [isAdding, setIsAdding] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
@@ -260,14 +281,16 @@ export default function Words() {
   // ── Load ─────────────────────────────────────────────────────────────────────
   const load = async () => {
     setIsLoading(true)
-    const [wRes, tRes, cRes] = await Promise.all([
+    const [wRes, tRes, cRes, rRes] = await Promise.all([
       wordsApi.myWords(),
       temasApi.list(),
       wordsApi.categories(),
+      subtitlesApi.getWordIdsWithRefs(),
     ])
     setUserWords(wRes.data)
     setTemas(tRes.data)
     setCategories(cRes.data)
+    setWordRefCounts(new Map(rRes.data.refs.map((r) => [r.word_id, r.count])))
     setIsLoading(false)
   }
 
@@ -797,6 +820,8 @@ export default function Words() {
                   onSaved={() => { setEditId(null); load() }}
                   onCancelEdit={() => setEditId(null)}
                   onDeleted={() => { setEditId(null); load() }}
+                  clipCount={wordRefCounts.get(uw.word.id)}
+                  onVideoRefs={() => setVideoRefsWord(uw)}
                 />
               </div>
             ) : (
@@ -834,9 +859,22 @@ export default function Words() {
               onSaved={() => { setEditId(null); load() }}
               onCancelEdit={() => setEditId(null)}
               onDeleted={() => { setEditId(null); load() }}
+              clipCount={wordRefCounts.get(uw.word.id)}
+              onVideoRefs={() => setVideoRefsWord(uw)}
             />
           ))}
         </div>
+      )}
+
+      {/* Video refs modal */}
+      {videoRefsWord && (
+        <VideoRefsModal
+          wordId={videoRefsWord.word.id}
+          palabra={videoRefsWord.word.palabra}
+          significado={videoRefsWord.word.significado}
+          audioText={videoRefsWord.word.audio_text ?? undefined}
+          onClose={() => setVideoRefsWord(null)}
+        />
       )}
 
       {/* ── Pagination bar ── */}

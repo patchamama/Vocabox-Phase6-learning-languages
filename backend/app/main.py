@@ -9,6 +9,22 @@ from .database import Base, SessionLocal, engine
 # Register all ORM models before create_all
 from . import models  # noqa: F401
 
+
+def _pre_migrate() -> None:
+    """Drop tables that need a schema redesign — data is fully rebuildable."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    # word_video_refs: user_id column added in a later revision.
+    # Table data is fully derived (rebuilt via reindex), so it's safe to drop.
+    if "word_video_refs" in inspector.get_table_names():
+        cols = {c["name"] for c in inspector.get_columns("word_video_refs")}
+        if "user_id" not in cols:
+            with engine.begin() as conn:
+                conn.execute(text("DROP TABLE word_video_refs"))
+
+
+_pre_migrate()
 Base.metadata.create_all(bind=engine)
 
 
@@ -35,7 +51,7 @@ def _migrate_words_columns() -> None:
 
 _migrate_words_columns()
 
-from .routers import audio_review, auth, import_router, languages, leo, ollama, review, stats, temas, test_mode, words
+from .routers import audio_review, auth, import_router, languages, leo, ollama, review, stats, subtitles, temas, test_mode, words
 
 # ── Language dictionary seed data ─────────────────────────────────────────────
 
@@ -110,6 +126,7 @@ app.include_router(test_mode.router,     prefix="/api")
 app.include_router(leo.router,           prefix="/api")
 app.include_router(ollama.router,        prefix="/api")
 app.include_router(audio_review.router,  prefix="/api")
+app.include_router(subtitles.router,     prefix="/api")
 
 # ── Static frontend (served from app/static after deploy) ─────────────────────
 _STATIC_DIR = Path(__file__).parent / "static"

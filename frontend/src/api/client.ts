@@ -180,6 +180,28 @@ export const audioReviewApi = {
   deleteTtsFilters: (lang: string) => api.delete(`/audio-review/tts-filters/${lang}`),
 }
 
+import type { SegmentContext, SubtitleFile, WordVideoRef } from '../types'
+
+export const subtitlesApi = {
+  upload: (file: File, youtubeId?: string, language?: string) => {
+    const form = new FormData()
+    form.append('file', file)
+    if (youtubeId) form.append('youtube_id', youtubeId)
+    if (language) form.append('language', language)
+    return api.post<SubtitleFile>('/subtitles/upload', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  list: () => api.get<SubtitleFile[]>('/subtitles'),
+  delete: (id: number) => api.delete(`/subtitles/${id}`),
+  deleteAllRefs: () => api.delete('/subtitles/all-refs'),
+  startReindex: () => api.post<{ job_id: string }>('/subtitles/reindex'),
+  getRefs: (wordId: number) => api.get<WordVideoRef[]>(`/subtitles/refs/${wordId}`),
+  getWordIdsWithRefs: () => api.get<{ refs: { word_id: number; count: number }[] }>('/subtitles/word-ids-with-refs'),
+  getSegmentContext: (segmentId: number, before: number, after: number) =>
+    api.get<SegmentContext>(`/subtitles/segment-context/${segmentId}`, { params: { before, after } }),
+}
+
 export const ollamaApi = {
   getStatus: () => api.get('/ollama/status'),
   getDefaultPrompts: () => api.get<{ translate: string; enhance: string }>('/ollama/default-prompts'),

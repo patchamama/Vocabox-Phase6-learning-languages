@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { importApi, temasApi } from '../api/client'
 import TemaSelect from '../components/TemaSelect'
+import SubtitleManager from '../components/SubtitleManager'
 import type { ImportPreview, ImportResult, Tema } from '../types'
 
 type Step = 'upload' | 'preview' | 'result'
-type Tab = 'files' | 'pdf'
+type Tab = 'files' | 'pdf' | 'subtitles'
 
 const ACCEPTED_FILES = '.csv,.xlsx'
 const ACCEPTED_PDF = '.pdf'
@@ -134,34 +135,52 @@ export default function Import() {
     <div className="p-4 pt-8 space-y-5 animate-slide-up">
       <h1 className="text-2xl font-bold">{t('import.title')}</h1>
 
+      {/* ── Tab selector — always visible ── */}
+      {(step === 'upload' || tab === 'subtitles') && (
+        <div className="flex rounded-xl overflow-hidden border border-slate-700 text-sm">
+          <button
+            type="button"
+            onClick={() => switchTab('files')}
+            className={`flex-1 py-2 font-medium transition-colors ${
+              tab === 'files'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            {t('import.tabFiles')}
+          </button>
+          <button
+            type="button"
+            onClick={() => switchTab('pdf')}
+            className={`flex-1 py-2 font-medium transition-colors ${
+              tab === 'pdf'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            {t('import.tabPdf')}
+          </button>
+          <button
+            type="button"
+            onClick={() => switchTab('subtitles')}
+            className={`flex-1 py-2 font-medium transition-colors ${
+              tab === 'subtitles'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            {t('import.tabSubtitles')}
+          </button>
+        </div>
+      )}
+
+      {/* ── Subtitle manager ── */}
+      {tab === 'subtitles' && <SubtitleManager />}
+
       {/* ── STEP 1: Upload ── */}
-      {step === 'upload' && (
+      {tab !== 'subtitles' && step === 'upload' && (
         <div className="space-y-4">
-          {/* Tab selector */}
-          <div className="flex rounded-xl overflow-hidden border border-slate-700 text-sm">
-            <button
-              type="button"
-              onClick={() => switchTab('files')}
-              className={`flex-1 py-2 font-medium transition-colors ${
-                tab === 'files'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              {t('import.tabFiles')}
-            </button>
-            <button
-              type="button"
-              onClick={() => switchTab('pdf')}
-              className={`flex-1 py-2 font-medium transition-colors ${
-                tab === 'pdf'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              {t('import.tabPdf')}
-            </button>
-          </div>
+          {/* description */}
 
           <p className="text-slate-400 text-sm">
             {tab === 'pdf' ? t('import.pdfDescription') : t('import.description')}
@@ -232,7 +251,7 @@ export default function Import() {
       )}
 
       {/* ── STEP 2: Preview ── */}
-      {step === 'preview' && preview && (
+      {tab !== 'subtitles' && step === 'preview' && preview && (
         <div className="space-y-4">
           {/* Summary card */}
           <div className="card space-y-3">
@@ -334,7 +353,7 @@ export default function Import() {
       )}
 
       {/* ── STEP 3: Result ── */}
-      {step === 'result' && result && (
+      {tab !== 'subtitles' && step === 'result' && result && (
         <div className="card text-center space-y-4 animate-slide-up py-8">
           <div className="text-6xl">{result.imported > 0 ? '🎉' : '👌'}</div>
           <h2 className="text-xl font-bold">{t('import.successTitle')}</h2>

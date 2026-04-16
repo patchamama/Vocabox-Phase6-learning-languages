@@ -101,6 +101,47 @@ export interface Language {
   name_en: string | null
 }
 
+export interface SubtitleFile {
+  id: number
+  filename: string
+  youtube_id: string | null
+  language: string | null
+  total_segments: number
+  created_at: string
+}
+
+export interface SegmentRefFile {
+  id: number
+  filename: string
+  youtube_id: string | null
+}
+
+export interface SegmentRef {
+  id: number
+  start_ms: number
+  end_ms: number
+  text: string
+  file: SegmentRefFile
+}
+
+export interface WordVideoRef {
+  id: number
+  word_id: number
+  segment_id: number
+  segment: SegmentRef
+}
+
+export interface SegmentContext {
+  before: SegmentRef[]
+  segment: SegmentRef
+  after: SegmentRef[]
+}
+
+export interface SubtitleSearchResult {
+  results: SegmentRef[]
+  total: number
+}
+
 export interface LeoAudio {
   file_id: string
   label: string

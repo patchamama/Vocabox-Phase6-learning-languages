@@ -444,11 +444,13 @@ export default function Settings() {
     useTtsInAudioReview, leoAutoFetchExtras, leoExtraLangs,
     audioReviewExtraLangs, ollamaTranslationModel,
     ollamaTimeout, ollamaPromptTranslate, ollamaPromptEnhance,
+    videoClipPauseSec, videoClipContext, videoClipAutoPlay, videoClipPlaybackRate,
     setReviewMode, setWordsPerSession, setTransitionDelay, setTransitionType,
     setSafeRound, setAutoPlayAudio, setAutoPlayAudioReversed, setWordsOnly, setReviewDirection,
     setUseTtsInAudioReview, setLeoAutoFetchExtras, setLeoExtraLangs,
     setAudioReviewExtraLangs, setOllamaTranslationModel,
     setOllamaTimeout, setOllamaPromptTranslate, setOllamaPromptEnhance,
+    setVideoClipPauseSec, setVideoClipContext, setVideoClipAutoPlay, setVideoClipPlaybackRate,
   } = useSettingsStore()
 
   // Ollama status + default prompts
@@ -796,6 +798,85 @@ export default function Settings() {
 
       {/* Themes CRUD */}
       <ThemesManager />
+
+      {/* Video Clips */}
+      <div className="card space-y-4">
+        <div>
+          <h2 className="font-semibold text-slate-800 dark:text-slate-200">{t('settings.videoClips')}</h2>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{t('settings.videoClipsDesc')}</p>
+        </div>
+
+        {/* Auto-play toggle */}
+        <Toggle
+          value={videoClipAutoPlay}
+          onChange={setVideoClipAutoPlay}
+          label={t('settings.videoClipAutoPlay')}
+          description={t('settings.videoClipAutoPlayDesc')}
+        />
+
+        {/* Pause between clips */}
+        <div className="space-y-1.5">
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{t('settings.videoClipPause')}</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500">{t('settings.videoClipPauseDesc')}</p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setVideoClipPauseSec(videoClipPauseSec - 1)}
+              disabled={videoClipPauseSec <= 0}
+              className="w-8 h-8 rounded-lg bg-slate-200 dark:bg-white/5 hover:bg-slate-300 dark:hover:bg-white/15 transition-colors text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed"
+            >−</button>
+            <span className="text-lg font-bold text-slate-800 dark:text-white w-16 text-center">
+              {videoClipPauseSec === 0 ? t('settings.videoClipNone') : `${videoClipPauseSec}s`}
+            </span>
+            <button
+              onClick={() => setVideoClipPauseSec(videoClipPauseSec + 1)}
+              disabled={videoClipPauseSec >= 10}
+              className="w-8 h-8 rounded-lg bg-slate-200 dark:bg-white/5 hover:bg-slate-300 dark:hover:bg-white/15 transition-colors text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed"
+            >+</button>
+          </div>
+        </div>
+
+        {/* Context lines */}
+        <div className="space-y-1.5">
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{t('settings.videoClipContext')}</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500">{t('settings.videoClipContextDesc')}</p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setVideoClipContext(videoClipContext - 1)}
+              disabled={videoClipContext <= 0}
+              className="w-8 h-8 rounded-lg bg-slate-200 dark:bg-white/5 hover:bg-slate-300 dark:hover:bg-white/15 transition-colors text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed"
+            >−</button>
+            <span className="text-lg font-bold text-slate-800 dark:text-white w-16 text-center">
+              {videoClipContext === 0 ? '0' : `±${videoClipContext}`}
+            </span>
+            <button
+              onClick={() => setVideoClipContext(videoClipContext + 1)}
+              disabled={videoClipContext >= 5}
+              className="w-8 h-8 rounded-lg bg-slate-200 dark:bg-white/5 hover:bg-slate-300 dark:hover:bg-white/15 transition-colors text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed"
+            >+</button>
+          </div>
+        </div>
+
+        {/* Playback rate */}
+        <div className="space-y-1.5">
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{t('settings.videoClipPlaybackRate')}</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500">{t('settings.videoClipPlaybackRateDesc')}</p>
+          <div className="flex gap-1.5 flex-wrap">
+            {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((rate) => (
+              <button
+                key={rate}
+                onClick={() => setVideoClipPlaybackRate(rate)}
+                className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                  videoClipPlaybackRate === rate
+                    ? 'border-blue-500 bg-blue-500/15 text-blue-300'
+                    : 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 text-slate-500 dark:text-slate-400 hover:border-slate-400 dark:hover:border-slate-500'
+                }`}
+              >
+                {rate}x
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

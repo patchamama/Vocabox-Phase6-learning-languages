@@ -55,6 +55,16 @@ interface SettingsState {
   ollamaPromptEnhance: string
   /** Complete existing MP3 with TTS for text not covered by the original recording */
   completeWithTts: boolean
+  /** Seconds to wait between video clips in VideoRefsModal (0 = no wait) */
+  videoClipPauseSec: number
+  /** Context subtitle lines to show before and after the current clip segment */
+  videoClipContext: number
+  /** Auto-play all clips sequentially and cycle back to start */
+  videoClipAutoPlay: boolean
+  /** YouTube playback rate (0.5 | 0.75 | 1 | 1.25 | 1.5 | 1.75 | 2) */
+  videoClipPlaybackRate: number
+  /** Maximum number of video clips to store per word (1–50) */
+  maxRefsPerWord: number
 
   setReviewMode: (mode: ReviewMode) => void
   setWordsPerSession: (n: number) => void
@@ -79,6 +89,11 @@ interface SettingsState {
   setOllamaPromptTranslate: (p: string) => void
   setOllamaPromptEnhance: (p: string) => void
   setCompleteWithTts: (v: boolean) => void
+  setVideoClipPauseSec: (n: number) => void
+  setVideoClipContext: (n: number) => void
+  setVideoClipAutoPlay: (v: boolean) => void
+  setVideoClipPlaybackRate: (r: number) => void
+  setMaxRefsPerWord: (n: number) => void
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -109,6 +124,11 @@ export const useSettingsStore = create<SettingsState>()(
       ollamaPromptTranslate: '',
       ollamaPromptEnhance: '',
       completeWithTts: true,
+      videoClipPauseSec: 1,
+      videoClipContext: 1,
+      videoClipAutoPlay: true,
+      videoClipPlaybackRate: 1,
+      maxRefsPerWord: 10,
 
       setReviewMode: (reviewMode) => set({ reviewMode }),
       setWordsPerSession: (wordsPerSession) => set({ wordsPerSession }),
@@ -144,6 +164,11 @@ export const useSettingsStore = create<SettingsState>()(
       setOllamaPromptTranslate: (ollamaPromptTranslate) => set({ ollamaPromptTranslate }),
       setOllamaPromptEnhance: (ollamaPromptEnhance) => set({ ollamaPromptEnhance }),
       setCompleteWithTts: (completeWithTts) => set({ completeWithTts }),
+      setVideoClipPauseSec: (videoClipPauseSec) => set({ videoClipPauseSec: Math.max(0, Math.min(10, videoClipPauseSec)) }),
+      setVideoClipContext: (videoClipContext) => set({ videoClipContext: Math.max(0, Math.min(5, videoClipContext)) }),
+      setVideoClipAutoPlay: (videoClipAutoPlay) => set({ videoClipAutoPlay }),
+      setVideoClipPlaybackRate: (videoClipPlaybackRate) => set({ videoClipPlaybackRate }),
+      setMaxRefsPerWord: (maxRefsPerWord) => set({ maxRefsPerWord: Math.max(1, Math.min(50, maxRefsPerWord)) }),
     }),
     { name: 'vocabox-settings' }
   )
