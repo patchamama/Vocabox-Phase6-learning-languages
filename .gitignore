@@ -72,3 +72,6 @@ desktop.ini
 *.sublime-workspace
 *.swp
 *.swo
+
+# ── Generated Assets ──────────────────────────────────────────────────────────
+backend/audio_reviews/
