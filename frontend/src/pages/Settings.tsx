@@ -327,6 +327,110 @@ function PaginationEditor() {
   )
 }
 
+// ─── Ollama Prompts Editor ────────────────────────────────────────────────────
+
+function PromptField({
+  label, vars, value, defaultValue, onChange,
+}: {
+  label: string
+  vars: string
+  value: string
+  defaultValue: string
+  onChange: (v: string) => void
+}) {
+  const { t } = useTranslation()
+  const isCustom = value.trim() !== ''
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium text-slate-600 dark:text-slate-400">{label}</p>
+        <div className="flex items-center gap-2">
+          {isCustom && (
+            <button
+              onClick={() => onChange('')}
+              className="text-xs text-red-400 hover:text-red-300 transition-colors"
+            >
+              {t('settings.ollamaPromptReset')}
+            </button>
+          )}
+          {!isCustom && defaultValue && (
+            <button
+              onClick={() => onChange(defaultValue)}
+              className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
+            >
+              {t('settings.ollamaPromptLoad')}
+            </button>
+          )}
+        </div>
+      </div>
+      <p className="text-xs text-slate-400 dark:text-slate-500 font-mono break-all">{vars}</p>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={defaultValue || t('settings.ollamaPromptPlaceholder')}
+        rows={8}
+        className={`w-full px-3 py-2 rounded-xl border bg-slate-50 dark:bg-slate-700/40 text-slate-800 dark:text-white text-xs font-mono focus:outline-none focus:ring-2 focus:ring-purple-500 resize-y transition-colors ${
+          isCustom
+            ? 'border-purple-500/50 dark:border-purple-500/40'
+            : 'border-slate-300 dark:border-slate-600'
+        }`}
+      />
+      {isCustom && (
+        <p className="text-xs text-purple-400">
+          {t('settings.ollamaPromptCustomActive')}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function OllamaPromptsEditor({
+  promptTranslate, promptEnhance, onChangeTranslate, onChangeEnhance,
+  defaultTranslate, defaultEnhance,
+}: {
+  promptTranslate: string
+  promptEnhance: string
+  onChangeTranslate: (v: string) => void
+  onChangeEnhance: (v: string) => void
+  defaultTranslate: string
+  defaultEnhance: string
+}) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="border-t border-slate-200 dark:border-slate-600 pt-3 space-y-2">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between text-sm font-medium text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors"
+      >
+        <span>{t('settings.ollamaPrompts')}</span>
+        <span className="text-slate-400 text-xs">{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div className="space-y-4 pt-2">
+          <p className="text-xs text-slate-400 dark:text-slate-500">{t('settings.ollamaPromptsDesc')}</p>
+          <PromptField
+            label={t('settings.ollamaPromptTranslate')}
+            vars={t('settings.ollamaPromptTranslateVars')}
+            value={promptTranslate}
+            defaultValue={defaultTranslate}
+            onChange={onChangeTranslate}
+          />
+          <PromptField
+            label={t('settings.ollamaPromptEnhance')}
+            vars={t('settings.ollamaPromptEnhanceVars')}
+            value={promptEnhance}
+            defaultValue={defaultEnhance}
+            onChange={onChangeEnhance}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Settings Page ───────────────────────────────────────────────────────
 
 const WORDS_OPTIONS = [5, 10, 15, 20, 30]
@@ -339,20 +443,32 @@ export default function Settings() {
     safeRound1, safeRound2, safeRound3, autoPlayAudio, autoPlayAudioReversed, wordsOnly, reviewDirection,
     useTtsInAudioReview, leoAutoFetchExtras, leoExtraLangs,
     audioReviewExtraLangs, ollamaTranslationModel,
+    ollamaTimeout, ollamaPromptTranslate, ollamaPromptEnhance,
     setReviewMode, setWordsPerSession, setTransitionDelay, setTransitionType,
     setSafeRound, setAutoPlayAudio, setAutoPlayAudioReversed, setWordsOnly, setReviewDirection,
     setUseTtsInAudioReview, setLeoAutoFetchExtras, setLeoExtraLangs,
     setAudioReviewExtraLangs, setOllamaTranslationModel,
+    setOllamaTimeout, setOllamaPromptTranslate, setOllamaPromptEnhance,
   } = useSettingsStore()
 
-  // Ollama status
+  // Ollama status + default prompts
   const [ollamaStatus, setOllamaStatus] = useState<{ running: boolean; models: string[] } | null>(null)
+  const [defaultPrompts, setDefaultPrompts] = useState<{ translate: string; enhance: string } | null>(null)
   const ollamaChecked = useRef(false)
   useEffect(() => {
     if (ollamaChecked.current) return
     ollamaChecked.current = true
+    ollamaApi.getDefaultPrompts()
+      .then((r) => setDefaultPrompts(r.data))
+      .catch(() => {})
     ollamaApi.getStatus()
-      .then((r) => setOllamaStatus(r.data))
+      .then((r) => {
+        setOllamaStatus(r.data)
+        if (!ollamaTranslationModel && r.data.running && r.data.models.length > 0) {
+          const match = r.data.models.find((m) => m.toLowerCase().startsWith('translate'))
+          if (match) setOllamaTranslationModel(match)
+        }
+      })
       .catch(() => setOllamaStatus({ running: false, models: [] }))
   }, [])
 
@@ -534,7 +650,7 @@ export default function Settings() {
       </div>
 
       {/* Ollama */}
-      <div className="card space-y-3">
+      <div className="card space-y-4">
         <h2 className="font-semibold text-slate-800 dark:text-slate-200">{t('settings.ollamaTitle')}</h2>
         {ollamaStatus === null && (
           <p className="text-xs text-slate-400">{t('common.loading')}</p>
@@ -544,29 +660,67 @@ export default function Settings() {
         )}
         {ollamaStatus?.running && (
           <>
+            {/* Model select — always visible when running */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                {t('settings.ollamaModel')}
+              </p>
+              <select
+                value={ollamaTranslationModel}
+                onChange={(e) => setOllamaTranslationModel(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 text-slate-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="">{t('settings.ollamaNoModel')}</option>
+                {ollamaStatus.models.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Timeout */}
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                {t('settings.ollamaTimeout')}
+              </p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">{t('settings.ollamaTimeoutDesc')}</p>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setOllamaTimeout(ollamaTimeout - 5)}
+                  disabled={ollamaTimeout <= 10}
+                  className="w-8 h-8 rounded-lg bg-slate-200 dark:bg-white/5 hover:bg-slate-300 dark:hover:bg-white/15 transition-colors text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  −
+                </button>
+                <span className="text-lg font-bold text-slate-800 dark:text-white w-16 text-center">
+                  {ollamaTimeout}{t('settings.ollamaTimeoutSuffix')}
+                </span>
+                <button
+                  onClick={() => setOllamaTimeout(ollamaTimeout + 5)}
+                  disabled={ollamaTimeout >= 300}
+                  className="w-8 h-8 rounded-lg bg-slate-200 dark:bg-white/5 hover:bg-slate-300 dark:hover:bg-white/15 transition-colors text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            {/* Audio review extra languages */}
             <Toggle
               value={audioReviewExtraLangs}
               onChange={setAudioReviewExtraLangs}
               label={t('settings.audioReviewExtraLangs')}
               description={t('settings.audioReviewExtraLangsDesc')}
             />
-            {audioReviewExtraLangs && (
-              <div className="pt-2 border-t border-slate-200 dark:border-slate-600 space-y-2">
-                <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  {t('settings.ollamaModel')}
-                </p>
-                <select
-                  value={ollamaTranslationModel}
-                  onChange={(e) => setOllamaTranslationModel(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 text-slate-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">{t('settings.ollamaNoModel')}</option>
-                  {ollamaStatus.models.map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-              </div>
-            )}
+
+            {/* Custom prompts — collapsible */}
+            <OllamaPromptsEditor
+              promptTranslate={ollamaPromptTranslate}
+              promptEnhance={ollamaPromptEnhance}
+              onChangeTranslate={setOllamaPromptTranslate}
+              onChangeEnhance={setOllamaPromptEnhance}
+              defaultTranslate={defaultPrompts?.translate ?? ''}
+              defaultEnhance={defaultPrompts?.enhance ?? ''}
+            />
           </>
         )}
       </div>

@@ -213,6 +213,10 @@ class GenerateRequest(BaseModel):
     extra_languages: List[str] = []   # e.g. ["en", "fr"]
     # Ollama model for auto-translating missing extra-language entries (empty = disabled)
     ollama_model: str = ""
+    # Timeout in seconds for Ollama requests
+    ollama_timeout: int = 60
+    # Custom prompt template for Ollama translation (empty = use default)
+    ollama_prompt_translate: str = ""
     # Complete existing MP3 with TTS for text not covered by audio_text
     complete_with_tts: bool = True
 
@@ -348,6 +352,8 @@ async def start_generation(
             job_id, words_data, req.order, req.gap_seconds, req.beep, req.use_tts,
             current_user.id, req.tts_voices, req.tts_rate,
             req.extra_languages, req.ollama_model, req.complete_with_tts,
+            max(10, min(300, req.ollama_timeout)),
+            req.ollama_prompt_translate or "",
         )
     )
     return {"job_id": job_id, "total": _total}
@@ -763,6 +769,8 @@ async def _run_generation(
     extra_languages: Optional[List[str]] = None,
     ollama_model: str = "",
     complete_with_tts: bool = True,
+    ollama_timeout: int = 60,
+    ollama_prompt_translate: str = "",
 ) -> None:
     jid = job_id[:8]
     out_dir = _user_dir(user_id)
@@ -874,16 +882,20 @@ async def _run_generation(
                         # If no translation exists and Ollama is configured → auto-translate
                         if not ex_text and ollama_model:
                             logger.info("[%s] Ollama translate %r → %s", jid, word["palabra"], ex_lang)
-                            ex_text = await loop.run_in_executor(
-                                None,
-                                ollama_translate,
-                                word["palabra"],
-                                word["idioma_origen"][:2],
-                                word["significado"],
-                                word["idioma_destino"][:2],
-                                ex_lang,
-                                ollama_model,
-                            )
+                            _w = word["palabra"]
+                            _wi = word["idioma_origen"][:2]
+                            _s = word["significado"]
+                            _si = word["idioma_destino"][:2]
+                            _to = ollama_timeout
+                            _po = ollama_prompt_translate or None
+
+                            def _do_translate() -> str | None:
+                                return ollama_translate(
+                                    _w, _wi, _s, _si, ex_lang, ollama_model,
+                                    timeout=_to, prompt_override=_po,
+                                )
+
+                            ex_text = await loop.run_in_executor(None, _do_translate)
                             if ex_text:
                                 ex["texto"] = ex_text
                                 ex["ollama_generated"] = True

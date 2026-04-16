@@ -7,7 +7,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { languagesApi, leoApi, temasApi, wordTranslationsApi, wordsApi } from '../api/client'
+import { languagesApi, leoApi, ollamaApi, temasApi, wordTranslationsApi, wordsApi } from '../api/client'
 import { playAudio } from '../utils/audioManager'
 import { useSettingsStore } from '../stores/settingsStore'
 import type { Language, LeoEntry, LeoResult, Tema, WordTranslation } from '../types'
@@ -17,6 +17,18 @@ import TemaSelect from './TemaSelect'
 interface SplitResult {
   words: string[]
   meanings: string[]
+}
+
+interface OllamaExtraTranslation {
+  idioma: string
+  texto: string
+}
+
+interface OllamaSuggestion {
+  palabra?: string
+  significado?: string
+  category?: string
+  extra_translations?: OllamaExtraTranslation[]
 }
 
 function splitByChar(text: string, char: string): string[] {
@@ -59,7 +71,7 @@ const CAT_LABELS: Record<string, string> = {
 
 export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Props) {
   const { t } = useTranslation()
-  const { leoAutoFetchExtras, leoExtraLangs } = useSettingsStore()
+  const { leoAutoFetchExtras, leoExtraLangs, ollamaTranslationModel, ollamaTimeout, ollamaPromptEnhance } = useSettingsStore()
   const [form, setForm] = useState({
     palabra: word.palabra,
     significado: word.significado,
@@ -92,6 +104,13 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
   const palabraInputRef = useRef<HTMLInputElement>(null)
   const [createFromLeo, setCreateFromLeo] = useState(false)
 
+  // Ollama state
+  const [ollamaLoading, setOllamaLoading] = useState(false)
+  const [ollamaSuggestion, setOllamaSuggestion] = useState<OllamaSuggestion | null>(null)
+  const [ollamaError, setOllamaError] = useState<string | null>(null)
+  const [ollamaChecks, setOllamaChecks] = useState<Record<string, boolean>>({})
+  const ollamaRef = useRef<HTMLDivElement>(null)
+
   // Extra translations (multi-language from LEO)
   const [extraTranslations, setExtraTranslations] = useState<WordTranslation[]>([])
   const [extraFetching, setExtraFetching] = useState(false)
@@ -120,6 +139,19 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [leoResults])
+
+  // Close Ollama panel on outside click
+  useEffect(() => {
+    if (!ollamaSuggestion && !ollamaError) return
+    const handler = (e: MouseEvent) => {
+      if (ollamaRef.current && !ollamaRef.current.contains(e.target as Node)) {
+        setOllamaSuggestion(null)
+        setOllamaError(null)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [ollamaSuggestion, ollamaError])
 
   const set = (field: keyof typeof form) => (value: string) =>
     setForm((f) => ({ ...f, [field]: value }))
@@ -338,6 +370,76 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
     if (!showAdvanced) setShowAdvanced(true)
   }
 
+  const handleOllamaEnhance = async () => {
+    if (!form.palabra.trim() || !ollamaTranslationModel) return
+    setOllamaLoading(true)
+    setOllamaError(null)
+    setOllamaSuggestion(null)
+    try {
+      const { data } = await ollamaApi.enhanceWord({
+        palabra: form.palabra.trim(),
+        significado: form.significado.trim(),
+        idioma_origen: form.idioma_origen,
+        idioma_destino: form.idioma_destino,
+        model: ollamaTranslationModel,
+        extra_langs: leoExtraLangs.length > 0 ? leoExtraLangs : undefined,
+        timeout: ollamaTimeout,
+        prompt_override: ollamaPromptEnhance || undefined,
+      })
+      setOllamaSuggestion(data)
+      const checks: Record<string, boolean> = {}
+      if (data.palabra) checks['palabra'] = true
+      if (data.significado) checks['significado'] = true
+      if (data.category) checks['category'] = true
+      data.extra_translations?.forEach((et: OllamaExtraTranslation) => {
+        checks[`extra_${et.idioma}`] = true
+      })
+      setOllamaChecks(checks)
+    } catch {
+      setOllamaError(t('wordEdit.ollamaError'))
+    } finally {
+      setOllamaLoading(false)
+    }
+  }
+
+  const handleApplyOllama = () => {
+    if (!ollamaSuggestion) return
+    setForm((f) => ({
+      ...f,
+      ...(ollamaChecks['palabra'] && ollamaSuggestion.palabra ? { palabra: ollamaSuggestion.palabra } : {}),
+      ...(ollamaChecks['significado'] && ollamaSuggestion.significado ? { significado: ollamaSuggestion.significado } : {}),
+      ...(ollamaChecks['category'] && ollamaSuggestion.category ? { category: ollamaSuggestion.category } : {}),
+    }))
+    const extrasToApply = (ollamaSuggestion.extra_translations ?? []).filter(
+      (et) => ollamaChecks[`extra_${et.idioma}`],
+    )
+    if (extrasToApply.length > 0) {
+      setExtraTranslations((prev) => {
+        const merged = [...prev]
+        for (const et of extrasToApply) {
+          const idx = merged.findIndex((x) => x.idioma === et.idioma)
+          const entry: WordTranslation = {
+            id: 0,
+            word_id: word.word_id,
+            idioma: et.idioma,
+            texto: et.texto,
+            audio_url: null,
+            audio_text: null,
+            source: 'ollama',
+          }
+          if (idx >= 0) merged[idx] = entry
+          else merged.push(entry)
+        }
+        return merged
+      })
+    }
+    if (!showAdvanced && (ollamaChecks['category'] || extrasToApply.length > 0)) {
+      setShowAdvanced(true)
+    }
+    setOllamaSuggestion(null)
+    setOllamaError(null)
+  }
+
   const splitPreview: SplitResult | null = (() => {
     const char = splitChar.trim()
     if (!char) return null
@@ -375,13 +477,14 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
         </div>
 
         {/* LEO lookup button */}
+        <div className="flex flex-col gap-1.5 shrink-0">
         <div className="relative" ref={leoRef}>
           <button
             type="button"
             title={t('wordEdit.leoLookup')}
             onClick={handleLeoLookup}
             disabled={leoLoading || !form.palabra.trim()}
-            className="flex items-center justify-center w-9 h-9 rounded-lg border border-slate-600 bg-slate-800 hover:border-blue-400 hover:bg-slate-700 disabled:opacity-40 transition-colors shrink-0"
+            className="flex items-center justify-center w-9 h-9 rounded-lg border border-slate-600 bg-slate-800 hover:border-blue-400 hover:bg-slate-700 disabled:opacity-40 transition-colors"
           >
             {leoLoading ? (
               <span className="text-xs text-slate-400 animate-spin">⟳</span>
@@ -450,6 +553,121 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
               )}
             </div>
           )}
+        </div>
+
+        {/* Ollama enhance button */}
+        {ollamaTranslationModel && (
+          <div className="relative" ref={ollamaRef}>
+            <button
+              type="button"
+              title={t('wordEdit.ollamaEnhance')}
+              onClick={handleOllamaEnhance}
+              disabled={ollamaLoading || !form.palabra.trim()}
+              className="flex items-center justify-center w-9 h-9 rounded-lg border border-slate-600 bg-slate-800 hover:border-purple-400 hover:bg-slate-700 disabled:opacity-40 transition-colors"
+            >
+              {ollamaLoading ? (
+                <span className="text-xs text-slate-400 animate-spin">⟳</span>
+              ) : (
+                <img
+                  src="https://ollama.com/public/ollama.png"
+                  alt="Ollama"
+                  className="w-5 h-5 rounded"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none'
+                    ;(e.target as HTMLImageElement).nextElementSibling!.removeAttribute('hidden')
+                  }}
+                />
+              )}
+              <span hidden className="text-xs font-bold text-purple-400">AI</span>
+            </button>
+
+            {/* Ollama suggestion panel */}
+            {(ollamaSuggestion || ollamaError) && (
+              <div className="absolute right-0 top-10 z-50 w-80 bg-slate-800 border border-slate-600 rounded-xl shadow-2xl overflow-hidden">
+                {ollamaError && (
+                  <p className="text-xs text-red-400 p-3">{ollamaError}</p>
+                )}
+                {ollamaSuggestion && (
+                  <>
+                    <div className="px-3 py-2 border-b border-slate-700 text-xs text-slate-400 uppercase tracking-wide flex items-center gap-1.5">
+                      <img src="https://ollama.com/public/ollama.png" alt="" className="w-3.5 h-3.5 rounded" />
+                      {t('wordEdit.ollamaSuggestions')}
+                    </div>
+                    <div className="divide-y divide-slate-700/50 max-h-80 overflow-y-auto">
+                      {ollamaSuggestion.palabra && (
+                        <label className="flex items-start gap-2.5 px-3 py-2.5 hover:bg-slate-700/40 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={ollamaChecks['palabra'] ?? true}
+                            onChange={(e) => setOllamaChecks((c) => ({ ...c, palabra: e.target.checked }))}
+                            className="mt-0.5 shrink-0 accent-purple-500"
+                          />
+                          <div className="min-w-0">
+                            <p className="text-xs text-slate-400 uppercase tracking-wide mb-0.5">{t('wordEdit.ollamaFieldPalabra')}</p>
+                            <p className="text-sm text-slate-100 font-mono break-all">{ollamaSuggestion.palabra}</p>
+                          </div>
+                        </label>
+                      )}
+                      {ollamaSuggestion.significado && (
+                        <label className="flex items-start gap-2.5 px-3 py-2.5 hover:bg-slate-700/40 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={ollamaChecks['significado'] ?? true}
+                            onChange={(e) => setOllamaChecks((c) => ({ ...c, significado: e.target.checked }))}
+                            className="mt-0.5 shrink-0 accent-purple-500"
+                          />
+                          <div className="min-w-0">
+                            <p className="text-xs text-slate-400 uppercase tracking-wide mb-0.5">{t('wordEdit.ollamaFieldSignificado')}</p>
+                            <p className="text-sm text-slate-100">{ollamaSuggestion.significado}</p>
+                          </div>
+                        </label>
+                      )}
+                      {ollamaSuggestion.category && (
+                        <label className="flex items-start gap-2.5 px-3 py-2.5 hover:bg-slate-700/40 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={ollamaChecks['category'] ?? true}
+                            onChange={(e) => setOllamaChecks((c) => ({ ...c, category: e.target.checked }))}
+                            className="mt-0.5 shrink-0 accent-purple-500"
+                          />
+                          <div className="min-w-0">
+                            <p className="text-xs text-slate-400 uppercase tracking-wide mb-0.5">{t('wordEdit.ollamaFieldCategory')}</p>
+                            <p className="text-sm text-slate-100">{ollamaSuggestion.category}</p>
+                          </div>
+                        </label>
+                      )}
+                      {ollamaSuggestion.extra_translations?.map((et) => (
+                        <label key={et.idioma} className="flex items-start gap-2.5 px-3 py-2.5 hover:bg-slate-700/40 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={ollamaChecks[`extra_${et.idioma}`] ?? true}
+                            onChange={(e) => setOllamaChecks((c) => ({ ...c, [`extra_${et.idioma}`]: e.target.checked }))}
+                            className="mt-0.5 shrink-0 accent-purple-500"
+                          />
+                          <div className="min-w-0 flex items-center gap-2 flex-1">
+                            <span className="text-xs font-mono bg-slate-700 text-slate-300 rounded px-1.5 py-0.5 uppercase shrink-0">
+                              {et.idioma}
+                            </span>
+                            <p className="text-sm text-slate-100 truncate">{et.texto}</p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                    <div className="px-3 py-2 border-t border-slate-700">
+                      <button
+                        type="button"
+                        onClick={handleApplyOllama}
+                        className="w-full py-1.5 text-xs font-medium rounded-lg bg-purple-700 hover:bg-purple-600 text-white transition-colors"
+                      >
+                        {t('wordEdit.ollamaApply')}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         </div>
       </div>
 

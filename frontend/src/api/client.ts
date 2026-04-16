@@ -140,6 +140,8 @@ export const audioReviewApi = {
     extraLanguages: string[] = [],
     ollamaModel = '',
     completeWithTts = true,
+    ollamaTimeout = 60,
+    ollamaPromptTranslate = '',
   ) =>
     api.post('/audio-review/generate', {
       word_ids: wordIds,
@@ -153,6 +155,8 @@ export const audioReviewApi = {
       extra_languages: extraLanguages,
       ollama_model: ollamaModel,
       complete_with_tts: completeWithTts,
+      ollama_timeout: ollamaTimeout,
+      ollama_prompt_translate: ollamaPromptTranslate,
     }),
   list: () => api.get('/audio-review/list'),
   getFile: (filename: string) =>
@@ -175,4 +179,15 @@ export const audioReviewApi = {
 
 export const ollamaApi = {
   getStatus: () => api.get('/ollama/status'),
+  getDefaultPrompts: () => api.get<{ translate: string; enhance: string }>('/ollama/default-prompts'),
+  enhanceWord: (data: {
+    palabra: string
+    significado: string
+    idioma_origen: string
+    idioma_destino: string
+    model: string
+    extra_langs?: string[]
+    timeout?: number
+    prompt_override?: string
+  }) => api.post('/ollama/enhance-word', data),
 }

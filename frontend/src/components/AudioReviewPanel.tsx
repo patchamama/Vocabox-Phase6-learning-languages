@@ -49,7 +49,7 @@ const GAP_OPTIONS = [0.5, 1, 2, 3, 5]
 
 export default function AudioReviewPanel({ filteredWords, onClose }: Props) {
   const { t } = useTranslation()
-  const { useTtsInAudioReview, ttsVoices, ttsRate, audioReviewExtraLangs, leoExtraLangs, ollamaTranslationModel, completeWithTts, setCompleteWithTts } = useSettingsStore()
+  const { useTtsInAudioReview, ttsVoices, ttsRate, audioReviewExtraLangs, leoExtraLangs, ollamaTranslationModel, completeWithTts, setCompleteWithTts, ollamaTimeout, ollamaPromptTranslate } = useSettingsStore()
 
   const [order, setOrder] = useState<'word_first' | 'translation_first' | 'both'>('word_first')
   const [gapSeconds, setGapSeconds] = useState(2)
@@ -148,6 +148,8 @@ export default function AudioReviewPanel({ filteredWords, onClose }: Props) {
         localExtraLangs,
         localExtraLangs.length > 0 ? ollamaTranslationModel : '',
         completeWithTts,
+        ollamaTimeout,
+        ollamaPromptTranslate,
       )
       const jobId: string = res.data.job_id
 

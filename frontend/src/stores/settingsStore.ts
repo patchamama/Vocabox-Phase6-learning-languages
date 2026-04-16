@@ -47,6 +47,12 @@ interface SettingsState {
   audioReviewExtraLangs: boolean
   /** Ollama model to use for auto-translating missing entries (empty = disabled) */
   ollamaTranslationModel: string
+  /** Timeout in seconds for Ollama requests (10–300) */
+  ollamaTimeout: number
+  /** Custom prompt template for Ollama translation (empty = use default) */
+  ollamaPromptTranslate: string
+  /** Custom prompt template for Ollama word enhancement (empty = use default) */
+  ollamaPromptEnhance: string
   /** Complete existing MP3 with TTS for text not covered by the original recording */
   completeWithTts: boolean
 
@@ -69,6 +75,9 @@ interface SettingsState {
   setLeoExtraLangs: (langs: string[]) => void
   setAudioReviewExtraLangs: (v: boolean) => void
   setOllamaTranslationModel: (model: string) => void
+  setOllamaTimeout: (n: number) => void
+  setOllamaPromptTranslate: (p: string) => void
+  setOllamaPromptEnhance: (p: string) => void
   setCompleteWithTts: (v: boolean) => void
 }
 
@@ -94,8 +103,11 @@ export const useSettingsStore = create<SettingsState>()(
       ttsRate: 0.9,
       leoAutoFetchExtras: false,
       leoExtraLangs: [],
-      audioReviewExtraLangs: false,
+      audioReviewExtraLangs: true,
       ollamaTranslationModel: '',
+      ollamaTimeout: 60,
+      ollamaPromptTranslate: '',
+      ollamaPromptEnhance: '',
       completeWithTts: true,
 
       setReviewMode: (reviewMode) => set({ reviewMode }),
@@ -128,6 +140,9 @@ export const useSettingsStore = create<SettingsState>()(
       setLeoExtraLangs: (leoExtraLangs) => set({ leoExtraLangs }),
       setAudioReviewExtraLangs: (audioReviewExtraLangs) => set({ audioReviewExtraLangs }),
       setOllamaTranslationModel: (ollamaTranslationModel) => set({ ollamaTranslationModel }),
+      setOllamaTimeout: (ollamaTimeout) => set({ ollamaTimeout: Math.max(10, Math.min(300, ollamaTimeout)) }),
+      setOllamaPromptTranslate: (ollamaPromptTranslate) => set({ ollamaPromptTranslate }),
+      setOllamaPromptEnhance: (ollamaPromptEnhance) => set({ ollamaPromptEnhance }),
       setCompleteWithTts: (completeWithTts) => set({ completeWithTts }),
     }),
     { name: 'vocabox-settings' }
