@@ -44,9 +44,16 @@ def get_review_words(
 
     due = query.all()
 
-    # Filter to words-only (≤2 tokens in both fields) if requested
+    # Filter to words-only (≤2 tokens in both fields) if requested.
+    # Words with audio_url or audio_url_translation (e.g. from LEO) are always
+    # treated as real words regardless of token count.
     if words_only:
-        due = [uw for uw in due if len(uw.word.palabra.split()) <= 2 and len(uw.word.significado.split()) <= 2]
+        due = [
+            uw for uw in due
+            if uw.word.audio_url
+            or uw.word.audio_url_translation
+            or (len(uw.word.palabra.split()) <= 2 and len(uw.word.significado.split()) <= 2)
+        ]
 
     due = due[:limit]
 

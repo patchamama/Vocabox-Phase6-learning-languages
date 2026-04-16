@@ -227,7 +227,19 @@
     "statsReviewed": "{{n}} révision",
     "statsNever": "Jamais révisé",
     "collapse": "Replier",
-    "lastErrors": "Dernières erreurs"
+    "lastErrors": "Dernières erreurs",
+    "noTheme": "Sans thème",
+    "allCategories": "Toutes les catégories",
+    "bulkAssignTema": "Attribuer thème aux filtrés",
+    "bulkAssignTemaDesc": "Le thème sera attribué aux {{count}} mots filtrés.",
+    "bulkAssignNewTema": "Nouveau thème…",
+    "bulkAssignNewTemaName": "Nom du thème",
+    "bulkAssignNewTemaColor": "Couleur",
+    "bulkAssignApply": "Attribuer",
+    "bulkAssigning": "Attribution…",
+    "bulkAssigned": "Thème attribué à {{count}} mots",
+    "bulkRemoveTema": "Supprimer thème",
+    "bulkCancel": "Annuler"
   },
   "stats": {
     "title": "Statistiques",

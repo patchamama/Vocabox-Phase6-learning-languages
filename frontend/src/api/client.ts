@@ -55,6 +55,9 @@ export const wordsApi = {
   deleteAll: () => api.delete('/words/all'),
   exportCsv: () => api.get('/words/export', { responseType: 'blob' }),
   myWords: () => api.get('/words/my'),
+  categories: () => api.get<string[]>('/words/categories'),
+  bulkAssignTema: (wordIds: number[], temaId: number | null) =>
+    api.post('/words/bulk-tema', { word_ids: wordIds, tema_id: temaId }),
 }
 
 export const languagesApi = {

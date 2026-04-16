@@ -214,11 +214,16 @@ export default function Words() {
     const p = searchParams.get('box')
     return p !== null ? parseInt(p) : null
   })
-  const [filterTema, setFilterTema] = useState<number | null>(null)
+  // 'none' = show words without any tema
+  const [filterTema, setFilterTema] = useState<number | 'none' | null>(null)
+  const [filterCategory, setFilterCategory] = useState<string | null>(null)
   const [filterLastErrors, setFilterLastErrors] = useState(() =>
     searchParams.get('filter') === 'lastErrors'
   )
   const lastErrorIds = getLastErrors()
+
+  // ── Categories (fetched once) ─────────────────────────────────────────────
+  const [categories, setCategories] = useState<string[]>([])
 
   // ── Sort (persistent) ────────────────────────────────────────────────────────
   const [sortField, setSortField] = useLocalStorage<SortField>('words:sortField', 'added')
@@ -229,6 +234,14 @@ export default function Words() {
   const [showAudioPanel, setShowAudioPanel] = useState(false)
   const [showStats, setShowStats] = useLocalStorage<boolean>('words:showStats', false)
   const [expandAll, setExpandAll] = useLocalStorage<boolean>('words:expandAll', false)
+
+  // ── Bulk tema assignment ──────────────────────────────────────────────────────
+  const [showBulkTema, setShowBulkTema] = useState(false)
+  const [bulkTemaId, setBulkTemaId] = useState<number | 'none' | null>(null)
+  const [bulkNewTemaName, setBulkNewTemaName] = useState('')
+  const [bulkNewTemaColor, setBulkNewTemaColor] = useState('#6366f1')
+  const [isBulkAssigning, setIsBulkAssigning] = useState(false)
+  const [bulkAssignedMsg, setBulkAssignedMsg] = useState('')
 
   // ── View ─────────────────────────────────────────────────────────────────────
   const [viewMode, setViewMode] = useState<'list' | 'flashcard'>('list')
@@ -247,12 +260,14 @@ export default function Words() {
   // ── Load ─────────────────────────────────────────────────────────────────────
   const load = async () => {
     setIsLoading(true)
-    const [wRes, tRes] = await Promise.all([
+    const [wRes, tRes, cRes] = await Promise.all([
       wordsApi.myWords(),
       temasApi.list(),
+      wordsApi.categories(),
     ])
     setUserWords(wRes.data)
     setTemas(tRes.data)
+    setCategories(cRes.data)
     setIsLoading(false)
   }
 
@@ -265,15 +280,31 @@ export default function Words() {
 
   // ── Derived ──────────────────────────────────────────────────────────────────
   const filtered = userWords.filter((uw) => {
-    if (wordsOnly && (uw.word.palabra.split(' ').length > 2 || uw.word.significado.split(' ').length > 2)) return false
+    // Words with audio (from LEO) are NEVER treated as phrases
+    const hasAudio = !!(uw.word.audio_url || uw.word.audio_url_translation)
+    if (wordsOnly && !hasAudio) {
+      const tooLong =
+        uw.word.palabra.split(' ').length > 2 ||
+        uw.word.significado.split(' ').length > 2
+      if (tooLong) return false
+    }
     if (filterLastErrors) return lastErrorIds.includes(uw.id)
     if (filterBox !== null && uw.box_level !== filterBox) return false
-    if (filterTema !== null && uw.word.tema_id !== filterTema) return false
+    if (filterTema === 'none') {
+      if (uw.word.tema_id !== null) return false
+    } else if (filterTema !== null && uw.word.tema_id !== filterTema) {
+      return false
+    }
+    if (filterCategory !== null && uw.word.category !== filterCategory) return false
     if (filterSearch) {
       const q = filterSearch.toLowerCase()
+      const inTranslations = uw.word.translations?.some(
+        (tr) => tr.texto.toLowerCase().includes(q)
+      ) ?? false
       return (
         uw.word.palabra.toLowerCase().includes(q) ||
-        uw.word.significado.toLowerCase().includes(q)
+        uw.word.significado.toLowerCase().includes(q) ||
+        inTranslations
       )
     }
     return true
@@ -341,6 +372,33 @@ export default function Words() {
     a.download = 'vocabox_export.csv'
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  // ── Bulk tema assign ─────────────────────────────────────────────────────────
+  const handleBulkAssignTema = async () => {
+    setIsBulkAssigning(true)
+    try {
+      let temaId: number | null = null
+      if (bulkTemaId === 'none') {
+        temaId = null
+      } else if (bulkTemaId !== null) {
+        temaId = bulkTemaId
+      } else if (bulkNewTemaName.trim()) {
+        const res = await temasApi.create(bulkNewTemaName.trim(), bulkNewTemaColor)
+        temaId = res.data.id
+      } else {
+        return
+      }
+      const wordIds = filtered.map((uw) => uw.word.id)
+      await wordsApi.bulkAssignTema(wordIds, temaId)
+      setBulkAssignedMsg(t('words.bulkAssigned', { count: wordIds.length }))
+      setBulkNewTemaName('')
+      setBulkTemaId(null)
+      setShowBulkTema(false)
+      await load()
+    } finally {
+      setIsBulkAssigning(false)
+    }
   }
 
   // ── Sort indicator ────────────────────────────────────────────────────────────
@@ -417,20 +475,37 @@ export default function Words() {
         </select>
         {temas.length > 0 && (
           <select
-            value={filterTema ?? ''}
-            onChange={(e) => { setFilterTema(e.target.value !== '' ? Number(e.target.value) : null); resetPage() }}
+            value={filterTema === 'none' ? 'none' : (filterTema ?? '')}
+            onChange={(e) => {
+              const v = e.target.value
+              setFilterTema(v === '' ? null : v === 'none' ? 'none' : Number(v))
+              resetPage()
+            }}
             className={SELECT_CLASS}
           >
             <option value="">{t('words.allThemes')}</option>
+            <option value="none">{t('words.noTheme')}</option>
             {temas.map((tm) => (
               <option key={tm.id} value={tm.id}>{tm.nombre}</option>
+            ))}
+          </select>
+        )}
+        {categories.length > 0 && (
+          <select
+            value={filterCategory ?? ''}
+            onChange={(e) => { setFilterCategory(e.target.value !== '' ? e.target.value : null); resetPage() }}
+            className={SELECT_CLASS}
+          >
+            <option value="">{t('words.allCategories')}</option>
+            {categories.map((cat) => (
+              <option key={cat} value={cat}>{cat}</option>
             ))}
           </select>
         )}
         {/* Last errors chip */}
         {lastErrorIds.length > 0 && (
           <button
-            onClick={() => { setFilterLastErrors((v) => !v); setFilterBox(null); setFilterTema(null); setFilterSearch(''); resetPage() }}
+            onClick={() => { setFilterLastErrors((v) => !v); setFilterBox(null); setFilterTema(null); setFilterCategory(null); setFilterSearch(''); resetPage() }}
             className={`flex items-center gap-1.5 py-2 px-3 text-sm rounded-xl border transition-colors ${
               filterLastErrors
                 ? 'border-red-500 bg-red-500/15 text-red-300'
@@ -438,6 +513,16 @@ export default function Words() {
             }`}
           >
             ✗ {t('words.lastErrors')}
+          </button>
+        )}
+        {/* Bulk assign tema */}
+        {filtered.length > 0 && (filterTema !== null || filterCategory !== null || filterSearch || filterBox !== null) && (
+          <button
+            onClick={() => { setShowBulkTema((v) => !v); setBulkAssignedMsg('') }}
+            className={`btn-secondary py-2 px-3 text-sm flex items-center gap-1 ${showBulkTema ? 'border-indigo-500 text-indigo-300' : ''}`}
+            title={t('words.bulkAssignTema')}
+          >
+            🏷
           </button>
         )}
         {/* More options toggle */}
@@ -456,6 +541,73 @@ export default function Words() {
           🎧
         </button>
       </div>
+
+      {/* Bulk tema assignment panel */}
+      {showBulkTema && (
+        <div className="card space-y-3 animate-slide-up border border-indigo-500/30">
+          <p className="text-sm text-slate-300">
+            {t('words.bulkAssignTema')}
+            <span className="ml-2 text-xs text-slate-500">
+              {t('words.bulkAssignTemaDesc', { count: filtered.length })}
+            </span>
+          </p>
+          {bulkAssignedMsg && (
+            <p className="text-xs text-green-400">{bulkAssignedMsg}</p>
+          )}
+          <div className="flex flex-wrap gap-2 items-center">
+            <select
+              value={bulkTemaId === 'none' ? 'none' : (bulkTemaId ?? '')}
+              onChange={(e) => {
+                const v = e.target.value
+                setBulkTemaId(v === '' ? null : v === 'none' ? 'none' : Number(v))
+                setBulkNewTemaName('')
+              }}
+              className={`${SELECT_CLASS} flex-1 min-w-[160px]`}
+            >
+              <option value="">{t('words.bulkAssignNewTema')}</option>
+              <option value="none">{t('words.bulkRemoveTema')}</option>
+              {temas.map((tm) => (
+                <option key={tm.id} value={tm.id}>{tm.nombre}</option>
+              ))}
+            </select>
+            {bulkTemaId === null && (
+              <>
+                <input
+                  type="text"
+                  placeholder={t('words.bulkAssignNewTemaName')}
+                  value={bulkNewTemaName}
+                  onChange={(e) => setBulkNewTemaName(e.target.value)}
+                  className="flex-1 min-w-[140px] bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                />
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400">{t('words.bulkAssignNewTemaColor')}</span>
+                  <input
+                    type="color"
+                    value={bulkNewTemaColor}
+                    onChange={(e) => setBulkNewTemaColor(e.target.value)}
+                    className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
+                  />
+                </div>
+              </>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setShowBulkTema(false); setBulkTemaId(null); setBulkNewTemaName('') }}
+              className="btn-secondary flex-1 text-sm"
+            >
+              {t('words.bulkCancel')}
+            </button>
+            <button
+              onClick={handleBulkAssignTema}
+              disabled={isBulkAssigning || (bulkTemaId === null && !bulkNewTemaName.trim())}
+              className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl px-4 py-2 font-medium text-sm transition-colors"
+            >
+              {isBulkAssigning ? t('words.bulkAssigning') : t('words.bulkAssignApply')}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Advanced options panel */}
       {showAdvanced && (
@@ -546,7 +698,7 @@ export default function Words() {
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <p className="text-xs text-slate-500">
             {t('words.word', { count: filtered.length })}
-            {(filterBox !== null || filterSearch || filterTema !== null) && ` · ${t('words.filtered')}`}
+            {(filterBox !== null || filterSearch || filterTema !== null || filterCategory !== null) && ` · ${t('words.filtered')}`}
           </p>
           {filtered.length > pageSizeOptions[0] && (
             <div className="flex items-center gap-2">
@@ -616,7 +768,7 @@ export default function Words() {
           </p>
           {userWords.length > 0 && (
             <button
-              onClick={() => { setFilterSearch(''); setFilterBox(null); setFilterTema(null); setFilterLastErrors(false) }}
+              onClick={() => { setFilterSearch(''); setFilterBox(null); setFilterTema(null); setFilterCategory(null); setFilterLastErrors(false) }}
               className="mt-3 text-sm text-blue-400 hover:text-blue-300 transition-colors"
             >
               {t('words.clearFilters')}

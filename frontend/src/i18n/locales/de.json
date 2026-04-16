@@ -227,7 +227,19 @@
     "statsReviewed": "{{n}}× wiederholt",
     "statsNever": "Noch nicht geübt",
     "collapse": "Einklappen",
-    "lastErrors": "Letzte Fehler"
+    "lastErrors": "Letzte Fehler",
+    "noTheme": "Kein Thema",
+    "allCategories": "Alle Kategorien",
+    "bulkAssignTema": "Thema zuweisen",
+    "bulkAssignTemaDesc": "Das Thema wird den {{count}} gefilterten Wörtern zugewiesen.",
+    "bulkAssignNewTema": "Neues Thema…",
+    "bulkAssignNewTemaName": "Themenname",
+    "bulkAssignNewTemaColor": "Farbe",
+    "bulkAssignApply": "Zuweisen",
+    "bulkAssigning": "Wird zugewiesen…",
+    "bulkAssigned": "Thema {{count}} Wörtern zugewiesen",
+    "bulkRemoveTema": "Thema entfernen",
+    "bulkCancel": "Abbrechen"
   },
   "stats": {
     "title": "Statistik",

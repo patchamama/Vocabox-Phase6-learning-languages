@@ -31,7 +31,9 @@ def get_stats(
     if words_only:
         all_uw = [
             uw for uw in all_uw
-            if len(uw.word.palabra.split()) <= 2 and len(uw.word.significado.split()) <= 2
+            if uw.word.audio_url
+            or uw.word.audio_url_translation
+            or (len(uw.word.palabra.split()) <= 2 and len(uw.word.significado.split()) <= 2)
         ]
 
     total_words = len(all_uw)

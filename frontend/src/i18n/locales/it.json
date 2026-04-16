@@ -227,7 +227,19 @@
     "statsReviewed": "{{n}} ripasso",
     "statsNever": "Mai ripetuta",
     "collapse": "Comprimi",
-    "lastErrors": "Ultimi errori"
+    "lastErrors": "Ultimi errori",
+    "noTheme": "Senza tema",
+    "allCategories": "Tutte le categorie",
+    "bulkAssignTema": "Assegna tema ai filtrati",
+    "bulkAssignTemaDesc": "Il tema sarà assegnato alle {{count}} parole filtrate.",
+    "bulkAssignNewTema": "Nuovo tema…",
+    "bulkAssignNewTemaName": "Nome tema",
+    "bulkAssignNewTemaColor": "Colore",
+    "bulkAssignApply": "Assegna",
+    "bulkAssigning": "Assegnando…",
+    "bulkAssigned": "Tema assegnato a {{count}} parole",
+    "bulkRemoveTema": "Rimuovi tema",
+    "bulkCancel": "Annulla"
   },
   "stats": {
     "title": "Statistiche",

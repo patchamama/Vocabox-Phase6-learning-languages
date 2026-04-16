@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 
@@ -83,9 +84,61 @@ def get_my_words(
     return (
         db.query(UserWord)
         .filter(UserWord.user_id == current_user.id)
-        .options(joinedload(UserWord.word).joinedload(Word.tema))
+        .options(
+            joinedload(UserWord.word).joinedload(Word.tema),
+            joinedload(UserWord.word).joinedload(Word.translations),
+        )
         .all()
     )
+
+
+@router.get("/categories", response_model=List[str])
+def get_word_categories(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return distinct non-null categories for the current user's words."""
+    subq = (
+        db.query(UserWord.word_id)
+        .filter(UserWord.user_id == current_user.id)
+        .subquery()
+    )
+    rows = (
+        db.query(Word.category)
+        .filter(Word.id.in_(subq), Word.category.isnot(None), Word.category != "")
+        .distinct()
+        .order_by(Word.category)
+        .all()
+    )
+    return [r.category for r in rows]
+
+
+class BulkTemaRequest(BaseModel):
+    word_ids: List[int]
+    tema_id: Optional[int]
+
+
+@router.post("/bulk-tema", status_code=status.HTTP_204_NO_CONTENT)
+def bulk_assign_tema(
+    data: BulkTemaRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Assign a tema (or None to remove) to multiple words owned by the user."""
+    owned_ids = {
+        row.word_id
+        for row in db.query(UserWord.word_id)
+        .filter(
+            UserWord.user_id == current_user.id,
+            UserWord.word_id.in_(data.word_ids),
+        )
+        .all()
+    }
+    if owned_ids:
+        db.query(Word).filter(Word.id.in_(owned_ids)).update(
+            {Word.tema_id: data.tema_id}, synchronize_session=False
+        )
+        db.commit()
 
 
 @router.post("", response_model=WordOut, status_code=status.HTTP_201_CREATED)
