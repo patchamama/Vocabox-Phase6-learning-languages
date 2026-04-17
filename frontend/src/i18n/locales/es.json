@@ -247,6 +247,8 @@
     "statsNever": "Sin repasar",
     "collapse": "Replegar",
     "lastErrors": "Últimos errores",
+    "subtitleSearch": "Subtítulos",
+    "subtitleSearchDesc": "Buscar el texto escrito también en los subtítulos y mostrar los clips encontrados antes de los resultados de palabras.",
     "videoRefs": "Ver clips de video",
     "videoRefsLoading": "Cargando clips...",
     "videoRefsNone": "Sin clips disponibles para esta palabra",

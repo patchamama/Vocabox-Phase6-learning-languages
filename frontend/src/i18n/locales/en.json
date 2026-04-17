@@ -247,6 +247,8 @@
     "statsNever": "Never reviewed",
     "collapse": "Collapse",
     "lastErrors": "Last errors",
+    "subtitleSearch": "Subtitles",
+    "subtitleSearchDesc": "Also search the typed text in subtitles and show found clips above the word results.",
     "videoRefs": "Watch video clips",
     "videoRefsLoading": "Loading clips...",
     "videoRefsNone": "No clips available for this word",

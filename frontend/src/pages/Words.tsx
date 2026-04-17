@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getLastErrors } from './Review'
 import { useTranslation } from 'react-i18next'
@@ -224,6 +224,13 @@ export default function Words() {
   const [wordRefCounts, setWordRefCounts] = useState<Map<number, number>>(new Map())
   const [videoRefsWord, setVideoRefsWord] = useState<UserWord | null>(null)
 
+  // ── Subtitle search in words tab ──────────────────────────────────────────────
+  const [hasSubtitleFiles, setHasSubtitleFiles] = useState(false)
+  const [subtitleSearchEnabled, setSubtitleSearchEnabled] = useState(false)
+  const [subtitleSearchResults, setSubtitleSearchResults] = useState<WordVideoRef[] | null>(null)
+  const [isSubtitleSearching, setIsSubtitleSearching] = useState(false)
+  const [subtitleSearchModal, setSubtitleSearchModal] = useState<WordVideoRef[] | null>(null)
+
   // ── CRUD ─────────────────────────────────────────────────────────────────────
   const [isAdding, setIsAdding] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
@@ -282,16 +289,18 @@ export default function Words() {
   // ── Load ─────────────────────────────────────────────────────────────────────
   const load = async () => {
     setIsLoading(true)
-    const [wRes, tRes, cRes, rRes] = await Promise.all([
+    const [wRes, tRes, cRes, rRes, sRes] = await Promise.all([
       wordsApi.myWords(),
       temasApi.list(),
       wordsApi.categories(),
       subtitlesApi.getWordIdsWithRefs(),
+      subtitlesApi.list(),
     ])
     setUserWords(wRes.data)
     setTemas(tRes.data)
     setCategories(cRes.data)
     setWordRefCounts(new Map(rRes.data.refs.map((r) => [r.word_id, r.count])))
+    setHasSubtitleFiles(sRes.data.length > 0)
     setIsLoading(false)
   }
 
@@ -301,6 +310,26 @@ export default function Words() {
     const p = searchParams.get('box')
     if (p !== null) setFilterBox(parseInt(p))
   }, [searchParams])
+
+  // ── Subtitle search — debounced, triggered by filterSearch ───────────────────
+  useEffect(() => {
+    if (!subtitleSearchEnabled || filterSearch.trim().length < 2) {
+      setSubtitleSearchResults(null)
+      return
+    }
+    setIsSubtitleSearching(true)
+    const timer = setTimeout(async () => {
+      try {
+        const res = await subtitlesApi.searchSegments(filterSearch.trim())
+        setSubtitleSearchResults(subtitlesApi.segmentsToVideoRefs(res.data.results))
+      } catch {
+        setSubtitleSearchResults([])
+      } finally {
+        setIsSubtitleSearching(false)
+      }
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [filterSearch, subtitleSearchEnabled])
 
   // ── Derived ──────────────────────────────────────────────────────────────────
   const filtered = userWords.filter((uw) => {
@@ -539,6 +568,20 @@ export default function Words() {
             ✗ {t('words.lastErrors')}
           </button>
         )}
+        {/* Subtitle search toggle — only if subtitle files exist */}
+        {hasSubtitleFiles && (
+          <button
+            onClick={() => { setSubtitleSearchEnabled((v) => !v); setSubtitleSearchResults(null) }}
+            title={t('words.subtitleSearchDesc')}
+            className={`flex items-center gap-1.5 py-2 px-3 text-sm rounded-xl border transition-colors ${
+              subtitleSearchEnabled
+                ? 'border-purple-500 bg-purple-500/15 text-purple-300'
+                : 'border-slate-600 bg-slate-700 text-slate-400 hover:border-slate-500'
+            }`}
+          >
+            🎬 {t('words.subtitleSearch')}
+          </button>
+        )}
         {/* Bulk assign tema */}
         {filtered.length > 0 && (filterTema !== null || filterCategory !== null || filterSearch || filterBox !== null) && (
           <button
@@ -717,6 +760,56 @@ export default function Words() {
         </div>
       )}
 
+      {/* ── Subtitle search results ── */}
+      {subtitleSearchEnabled && filterSearch.trim().length >= 2 && (
+        <div className="card space-y-2 border-purple-500/30 bg-slate-800/60">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-purple-300 uppercase tracking-wide">
+              🎬 {t('words.subtitleSearch')}
+              {isSubtitleSearching && (
+                <span className="inline-block w-3 h-3 ml-2 border-2 border-purple-400/30 border-t-purple-400 rounded-full animate-spin" />
+              )}
+            </p>
+            {subtitleSearchResults !== null && subtitleSearchResults.length > 0 && (
+              <button
+                onClick={() => setSubtitleSearchModal(subtitleSearchResults)}
+                className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
+              >
+                {t('import.subtitleSearchOpenAll')} ▶
+              </button>
+            )}
+          </div>
+
+          {subtitleSearchResults === null && !isSubtitleSearching && (
+            <p className="text-xs text-slate-500">{t('import.subtitleSearchEmpty')}</p>
+          )}
+          {subtitleSearchResults !== null && subtitleSearchResults.length === 0 && (
+            <p className="text-xs text-slate-500">{t('import.subtitleSearchEmpty')}</p>
+          )}
+          {subtitleSearchResults !== null && subtitleSearchResults.length > 0 && (
+            <>
+              <p className="text-xs text-slate-500">
+                {t('import.subtitleSearchResults', { n: subtitleSearchResults.length })}
+              </p>
+              <div className="divide-y divide-slate-700/50 border border-slate-700/60 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+                {subtitleSearchResults.map((ref) => (
+                  <button
+                    key={ref.id}
+                    onClick={() => setSubtitleSearchModal([ref])}
+                    className="w-full text-left px-3 py-2 hover:bg-slate-700/50 transition-colors"
+                  >
+                    <p className="text-xs text-slate-200 line-clamp-2">{ref.segment.text}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {ref.segment.file.filename} · {Math.floor(ref.segment.start_ms / 60000)}:{String(Math.floor((ref.segment.start_ms % 60000) / 1000)).padStart(2, '0')}–{Math.floor(ref.segment.end_ms / 60000)}:{String(Math.floor((ref.segment.end_ms % 60000) / 1000)).padStart(2, '0')}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Result count + page size */}
       {!isLoading && (
         <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -877,7 +970,7 @@ export default function Words() {
         </div>
       )}
 
-      {/* Video refs modal */}
+      {/* Video refs modal — word clips */}
       {videoRefsWord && (
         <VideoRefsModal
           wordId={videoRefsWord.word.id}
@@ -885,6 +978,17 @@ export default function Words() {
           significado={videoRefsWord.word.significado}
           audioText={videoRefsWord.word.audio_text ?? undefined}
           onClose={() => setVideoRefsWord(null)}
+        />
+      )}
+
+      {/* Video refs modal — subtitle search results */}
+      {subtitleSearchModal && (
+        <VideoRefsModal
+          wordId={0}
+          palabra={filterSearch.trim()}
+          significado=""
+          overrideRefs={subtitleSearchModal}
+          onClose={() => setSubtitleSearchModal(null)}
         />
       )}
 

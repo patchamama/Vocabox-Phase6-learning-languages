@@ -247,6 +247,8 @@
     "statsNever": "Noch nicht geübt",
     "collapse": "Einklappen",
     "lastErrors": "Letzte Fehler",
+    "subtitleSearch": "Untertitel",
+    "subtitleSearchDesc": "Den eingegebenen Text auch in Untertiteln suchen und gefundene Clips über den Wortresultaten anzeigen.",
     "videoRefs": "Videoclips ansehen",
     "videoRefsLoading": "Clips werden geladen...",
     "videoRefsNone": "Keine Clips für dieses Wort verfügbar",

@@ -247,6 +247,8 @@
     "statsNever": "Mai ripetuta",
     "collapse": "Comprimi",
     "lastErrors": "Ultimi errori",
+    "subtitleSearch": "Sottotitoli",
+    "subtitleSearchDesc": "Cerca anche il testo digitato nei sottotitoli e mostra i clip trovati prima dei risultati delle parole.",
     "videoRefs": "Guarda clip video",
     "videoRefsLoading": "Caricamento clip...",
     "videoRefsNone": "Nessun clip disponibile per questa parola",

@@ -247,6 +247,8 @@
     "statsNever": "Jamais révisé",
     "collapse": "Replier",
     "lastErrors": "Dernières erreurs",
+    "subtitleSearch": "Sous-titres",
+    "subtitleSearchDesc": "Rechercher aussi le texte saisi dans les sous-titres et afficher les clips trouvés avant les résultats de mots.",
     "videoRefs": "Voir les clips vidéo",
     "videoRefsLoading": "Chargement des clips...",
     "videoRefsNone": "Aucun clip disponible pour ce mot",
