@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getLastErrors } from './Review'
 import { useTranslation } from 'react-i18next'
@@ -6,11 +6,16 @@ import { subtitlesApi, temasApi, wordsApi } from '../api/client'
 import AudioReviewPanel from '../components/AudioReviewPanel'
 import SpeakButton from '../components/SpeakButton'
 import VideoRefsModal from '../components/VideoRefsModal'
+import WordDrillModal from '../components/WordDrillModal'
+import GrammarSession from '../components/GrammarSession'
 import WordEditForm from '../components/WordEditForm'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useUserProfileStore } from '../stores/userProfileStore'
+import type { ReviewWord } from '../types'
+import type { TipLang } from '../data/germanGrammarTips'
 import { playAudio, speakUtterance } from '../utils/audioManager'
 import type { SavedPayload } from '../components/WordEditForm'
-import type { Tema, UserWord, Word } from '../types'
+import type { Tema, UserWord, Word, WordVideoRef } from '../types'
 
 // ── WordCard ──────────────────────────────────────────────────────────────────
 // Shared between list mode and flashcard revealed state.
@@ -200,10 +205,31 @@ function sortUserWords(words: UserWord[], field: SortField, dir: SortDir): UserW
   return sorted
 }
 
+function userWordToReviewWord(uw: import('../types').UserWord): ReviewWord {
+  return {
+    user_word_id: uw.id,
+    word_id: uw.word.id,
+    palabra: uw.word.palabra,
+    significado: uw.word.significado,
+    idioma_origen: uw.word.idioma_origen,
+    idioma_destino: uw.word.idioma_destino,
+    box_level: uw.box_level,
+    audio_url: uw.word.audio_url,
+    audio_url_translation: uw.word.audio_url_translation,
+    exercise_type: 'multiple_choice',
+    choices: null,
+    tema_id: uw.word.tema_id,
+    tema_nombre: uw.word.tema?.nombre ?? null,
+    tema_color: uw.word.tema?.color ?? null,
+  }
+}
+
 export default function Words() {
   const { t } = useTranslation()
   const [searchParams] = useSearchParams()
   const { autoPlayAudio, wordsOnly, pageSizeOptions, selectedPageSize, setSelectedPageSize } = useSettingsStore()
+  const { uiLanguage } = useUserProfileStore()
+  const uiLang = (uiLanguage as TipLang) ?? 'es'
 
   const speak = (palabra: string, idioma: string, audioUrl?: string | null) => {
     if (audioUrl) {
@@ -263,6 +289,10 @@ export default function Words() {
   const [showAudioPanel, setShowAudioPanel] = useState(false)
   const [showStats, setShowStats] = useLocalStorage<boolean>('words:showStats', false)
   const [expandAll, setExpandAll] = useLocalStorage<boolean>('words:expandAll', false)
+
+  // ── Drill / Grammar modals for filtered words ────────────────────────────────
+  const [showDrill, setShowDrill] = useState(false)
+  const [showGrammarWords, setShowGrammarWords] = useState(false)
 
   // ── Bulk tema assignment ──────────────────────────────────────────────────────
   const [showBulkTema, setShowBulkTema] = useState(false)
@@ -462,6 +492,7 @@ export default function Words() {
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
+    <>
     <div className="p-4 pt-8 space-y-4">
 
       {/* Header */}
@@ -582,15 +613,31 @@ export default function Words() {
             🎬 {t('words.subtitleSearch')}
           </button>
         )}
-        {/* Bulk assign tema */}
-        {filtered.length > 0 && (filterTema !== null || filterCategory !== null || filterSearch || filterBox !== null) && (
-          <button
-            onClick={() => { setShowBulkTema((v) => !v); setBulkAssignedMsg('') }}
-            className={`btn-secondary py-2 px-3 text-sm flex items-center gap-1 ${showBulkTema ? 'border-indigo-500 text-indigo-300' : ''}`}
-            title={t('words.bulkAssignTema')}
-          >
-            🏷
-          </button>
+        {/* Filtered-words actions: drill, grammar, bulk-tema */}
+        {filtered.length > 0 && (filterTema !== null || filterCategory !== null || filterSearch || filterBox !== null || filterLastErrors) && (
+          <>
+            <button
+              onClick={() => setShowDrill(true)}
+              className="btn-secondary py-2 px-3 text-sm"
+              title={uiLang === 'en' ? 'Quick review (no box changes)' : 'Repasar palabras filtradas (sin cajas)'}
+            >
+              📚
+            </button>
+            <button
+              onClick={() => setShowGrammarWords(true)}
+              className="btn-secondary py-2 px-3 text-sm"
+              title={uiLang === 'en' ? 'Grammar exercises for these words' : 'Ejercicios de gramática con estas palabras'}
+            >
+              ✏️
+            </button>
+            <button
+              onClick={() => { setShowBulkTema((v) => !v); setBulkAssignedMsg('') }}
+              className={`btn-secondary py-2 px-3 text-sm flex items-center gap-1 ${showBulkTema ? 'border-indigo-500 text-indigo-300' : ''}`}
+              title={t('words.bulkAssignTema')}
+            >
+              🏷
+            </button>
+          </>
         )}
         {/* More options toggle */}
         <button
@@ -1015,5 +1062,34 @@ export default function Words() {
         </div>
       )}
     </div>
+
+      {/* ── Word Drill Modal ── */}
+      {showDrill && (
+        <WordDrillModal
+          words={filtered}
+          uiLang={uiLang}
+          onClose={() => setShowDrill(false)}
+        />
+      )}
+
+      {/* ── Grammar Words Modal ── */}
+      {showGrammarWords && (
+        <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col">
+          <div className="flex items-center justify-between px-4 pt-5 pb-2">
+            <p className="text-sm font-medium text-slate-300">
+              ✏️ {uiLang === 'en' ? 'Grammar' : uiLang === 'de' ? 'Grammatik' : 'Gramática'} — {filtered.length} {uiLang === 'en' ? 'words' : 'palabras'}
+            </p>
+            <button onClick={() => setShowGrammarWords(false)} className="text-slate-400 hover:text-white text-xl">✕</button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 pb-4">
+            <GrammarSession
+              words={filtered.map(userWordToReviewWord)}
+              uiLang={uiLang}
+              onDone={() => setShowGrammarWords(false)}
+            />
+          </div>
+        </div>
+      )}
+    </>
   )
 }

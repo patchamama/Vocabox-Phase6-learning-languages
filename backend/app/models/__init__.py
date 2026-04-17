@@ -6,8 +6,11 @@ from .language_dict import LanguageDict
 from .word_translation import WordTranslation
 from .subtitle import SubtitleFile, SubtitleSegment
 from .word_video_ref import WordVideoRef
+from .grammar_exercise import GrammarExercise
+from .ai_provider import AIProvider
 
 __all__ = [
     "User", "Tema", "Word", "UserWord", "LanguageDict", "WordTranslation",
-    "SubtitleFile", "SubtitleSegment", "WordVideoRef",
+    "SubtitleFile", "SubtitleSegment", "WordVideoRef", "GrammarExercise",
+    "AIProvider",
 ]

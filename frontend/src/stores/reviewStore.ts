@@ -18,6 +18,14 @@ import { create } from 'zustand'
 import { reviewApi } from '../api/client'
 import type { ReviewWord } from '../types'
 import type { ReviewDirection, RoundType } from './settingsStore'
+import {
+  isGermanNounWithArticle,
+  isGermanPhraseWithGrammar,
+  detectGrammarBlank,
+  type GrammarBlank,
+} from '../utils/germanGrammar'
+
+export type { GrammarBlank }
 
 export type ExerciseType =
   | 'multiple_choice'
@@ -25,6 +33,8 @@ export type ExerciseType =
   | 'pair_match'
   | 'first_letter'
   | 'anagram'
+  | 'german_article'
+  | 'german_grammar'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -164,7 +174,7 @@ function applyDirection(words: ReviewWord[], direction: ReviewDirection): Review
 // ── Queue building ────────────────────────────────────────────────────────────
 
 type QueueItem =
-  | { kind: 'single'; userWordId: number }
+  | { kind: 'single'; userWordId: number; exerciseTypeOverride?: ExerciseType; grammarBlank?: GrammarBlank }
   | { kind: 'pair'; userWordIds: number[] }
 
 const PAIR_INTERVAL = 5 // insert a pair batch after every N singles in simple mode
@@ -329,7 +339,8 @@ interface ReviewState {
     mode?: 'simple' | 'safe',
     rounds?: [RoundType, RoundType, RoundType],
     wordsOnly?: boolean,
-    direction?: ReviewDirection
+    direction?: ReviewDirection,
+    germanArticleChoice?: boolean
   ) => Promise<void>
   handleSingleAnswer: (userWordId: number, correct: boolean) => void
   handlePairMatchComplete: (incorrectWordIds: number[]) => void
@@ -350,6 +361,8 @@ interface ReviewState {
   totalIterations: () => number
   /** Iterations already resolved (answered, not pending) */
   doneIterations: () => number
+  /** Grammar blank for the current item (only for german_grammar type) */
+  currentGrammarBlank: () => GrammarBlank | null
 }
 
 const INITIAL_DATA = {
@@ -381,6 +394,10 @@ function isItemDoneInRound(
   wordState: Record<number, WordRoundState>
 ): boolean {
   if (item.kind === 'single') {
+    // Grammar exercise items track completion by queue position, not wordState
+    if (item.exerciseTypeOverride === 'german_article' || item.exerciseTypeOverride === 'german_grammar') {
+      return false
+    }
     const ws = wordState[item.userWordId]
     return !ws || ws.roundDone[round] || ws.inErrorQueue
   }
@@ -564,7 +581,7 @@ function findFirstItemOfRound(round: number, items: QueueItem[], totalRounds: nu
 export const useReviewStore = create<ReviewState>((set, get) => ({
   ...INITIAL_DATA,
 
-  loadReview: async (boxes, limit = 20, mode = 'simple', rounds = ['pair_match', 'first_letter', 'random'], wordsOnly = false, direction = 'forward') => {
+  loadReview: async (boxes, limit = 20, mode = 'simple', rounds = ['pair_match', 'first_letter', 'random'], wordsOnly = false, direction = 'forward', germanArticleChoice = false) => {
     log('loadReview: limit=', limit, 'mode=', mode, 'wordsOnly=', wordsOnly, 'direction=', direction)
     // Clear last-errors so Words page filter resets
     localStorage.removeItem('vocabox:lastErrors')
@@ -582,8 +599,44 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       if (words.length !== limit) console.warn(`[review] requested ${limit} words but received ${words.length}`)
 
       const totalRounds = mode === 'safe' ? 3 : 1
-      const { items, roundWordTypes } = buildSessionQueue(words, mode, rounds)
-      log('loadReview: built', items.length, 'items across', totalRounds, 'rounds')
+      const { items: baseItems, roundWordTypes } = buildSessionQueue(words, mode, rounds)
+
+      // Inject grammar exercises for German words (educational only, no box changes)
+      const wordMap: Record<number, ReviewWord> = {}
+      words.forEach((w) => { wordMap[w.user_word_id] = w })
+
+      const items: QueueItem[] = []
+      const seenGrammarIds = new Set<string>()
+
+      for (const item of baseItems) {
+        items.push(item)
+        if (!germanArticleChoice) continue
+        if (item.kind !== 'single') continue
+        // Skip grammar-exercise items themselves (they don't have userWordId in roundWordTypes)
+        const word = wordMap[item.userWordId]
+        if (!word) continue
+
+        // Only inject once per word per session (not per round)
+        if (isGermanNounWithArticle(word.idioma_origen, null, word.palabra)) {
+          const key = `article-${item.userWordId}`
+          if (!seenGrammarIds.has(key)) {
+            seenGrammarIds.add(key)
+            items.push({ kind: 'single', userWordId: item.userWordId, exerciseTypeOverride: 'german_article' })
+          }
+        } else if (isGermanPhraseWithGrammar(word.idioma_origen, word.palabra)) {
+          const key = `grammar-${item.userWordId}`
+          if (!seenGrammarIds.has(key)) {
+            seenGrammarIds.add(key)
+            const base = word.palabra.split('|')[0].trim()
+            const blank = detectGrammarBlank(base)
+            if (blank) {
+              items.push({ kind: 'single', userWordId: item.userWordId, exerciseTypeOverride: 'german_grammar', grammarBlank: blank })
+            }
+          }
+        }
+      }
+
+      log('loadReview: built', items.length, 'items across', totalRounds, 'rounds (including grammar)')
       log('items:', items)
 
       const wordState: Record<number, WordRoundState> = {}
@@ -615,6 +668,17 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   },
 
   handleSingleAnswer: (userWordId, correct) => {
+    // Grammar exercises (article choice, grammar fill) are educational only.
+    // No box changes, no backend call — just advance the queue.
+    const currentItem = get().currentItem()
+    if (
+      currentItem?.kind === 'single' &&
+      (currentItem.exerciseTypeOverride === 'german_article' || currentItem.exerciseTypeOverride === 'german_grammar')
+    ) {
+      advance(get, set)
+      return
+    }
+
     const { wordState, currentRound, errorQueue, results, mode } = get()
     const ws = wordState[userWordId]
     if (!ws) return
@@ -832,6 +896,9 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
     if (!item) return null
     if (item.kind === 'pair') return 'pair_match'
 
+    // Grammar exercises carry their type directly on the item
+    if (item.kind === 'single' && item.exerciseTypeOverride) return item.exerciseTypeOverride
+
     if (inErrorPhase) {
       const id = errorQueue[errorQueuePos]
       const word = get().allWords.find((w) => w.user_word_id === id)
@@ -881,5 +948,13 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       }
     }
     return done
+  },
+
+  currentGrammarBlank: () => {
+    const item = get().currentItem()
+    if (item?.kind === 'single' && item.exerciseTypeOverride === 'german_grammar') {
+      return item.grammarBlank ?? null
+    }
+    return null
   },
 }))

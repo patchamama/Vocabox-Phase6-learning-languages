@@ -10,6 +10,9 @@ import logging
 import re
 import urllib.request
 import urllib.error
+from typing import Optional
+
+from .ai_client import AIClient
 
 logger = logging.getLogger(__name__)
 
@@ -190,6 +193,7 @@ def enhance_word(
     extra_langs: list[str] | None = None,
     timeout: int = 60,
     prompt_override: str | None = None,
+    ai_client: Optional[AIClient] = None,
 ) -> dict | None:
     """
     Use Ollama to analyze and enrich a vocabulary entry.
@@ -226,27 +230,27 @@ def enhance_word(
         extra_field=extra_field.strip(),
     ))
 
-    payload = json.dumps({
-        "model": model,
-        "prompt": prompt,
-        "stream": False,
-        "options": {
-            "temperature": 0.1,
-            "top_p": 0.9,
-            "num_predict": 200,
-        },
-    }).encode()
-
     try:
-        req = urllib.request.Request(
-            f"{OLLAMA_BASE}/api/generate",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode())
-            raw = data.get("response", "").strip()
+        if ai_client is not None:
+            raw = ai_client.complete(prompt, model, timeout)
+        else:
+            payload = json.dumps({
+                "model": model,
+                "prompt": prompt,
+                "stream": False,
+                "options": {"temperature": 0.1, "top_p": 0.9, "num_predict": 200},
+            }).encode()
+            req = urllib.request.Request(
+                f"{OLLAMA_BASE}/api/generate",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = json.loads(resp.read().decode())
+                raw = data.get("response", "").strip()
+
+        if raw:
             # Strip markdown code fences if present
             raw = re.sub(r"^```(?:json)?\s*", "", raw)
             raw = re.sub(r"\s*```$", "", raw)

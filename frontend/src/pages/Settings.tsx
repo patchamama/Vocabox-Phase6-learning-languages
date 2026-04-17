@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { RoundType } from '../stores/settingsStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import { ollamaApi, temasApi } from '../api/client'
+import { aiProvidersApi, grammarApi, ollamaApi, temasApi } from '../api/client'
+import type { AIProviderInfo } from '../api/client'
+import AIProvidersModal from '../components/AIProvidersModal'
 import type { Tema } from '../types'
 import { TtsVoiceSettings } from '../components/TtsVoiceSettings'
 import { TtsFiltersEditor } from '../components/TtsFiltersEditor'
@@ -386,15 +388,19 @@ function PromptField({
 }
 
 function OllamaPromptsEditor({
-  promptTranslate, promptEnhance, onChangeTranslate, onChangeEnhance,
-  defaultTranslate, defaultEnhance,
+  promptTranslate, promptEnhance, promptGrammar,
+  onChangeTranslate, onChangeEnhance, onChangeGrammar,
+  defaultTranslate, defaultEnhance, defaultGrammar,
 }: {
   promptTranslate: string
   promptEnhance: string
+  promptGrammar: string
   onChangeTranslate: (v: string) => void
   onChangeEnhance: (v: string) => void
+  onChangeGrammar: (v: string) => void
   defaultTranslate: string
   defaultEnhance: string
+  defaultGrammar: string
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -425,6 +431,13 @@ function OllamaPromptsEditor({
             defaultValue={defaultEnhance}
             onChange={onChangeEnhance}
           />
+          <PromptField
+            label="Prompt: ejercicios de gramática"
+            vars="{topic}, {interface_lang}, {grammar_focus}, {vocabulary_line}"
+            value={promptGrammar}
+            defaultValue={defaultGrammar}
+            onChange={onChangeGrammar}
+          />
         </div>
       )}
     </div>
@@ -446,18 +459,23 @@ export default function Settings() {
     ollamaTimeout, ollamaPromptTranslate, ollamaPromptEnhance,
     videoClipPauseSec, videoClipContext, videoClipAutoPlay, videoClipPlaybackRate, maxRefsPerWord,
     subtitleIndexPalabra, subtitleIndexAudioText, subtitleIndexSignificado,
+    germanArticleChoice, grammarReviewEnabled, grammarOptions, ollamaPromptGrammar,
     setReviewMode, setWordsPerSession, setTransitionDelay, setTransitionType,
     setSafeRound, setAutoPlayAudio, setAutoPlayAudioReversed, setWordsOnly, setReviewDirection,
     setUseTtsInAudioReview, setLeoAutoFetchExtras, setLeoExtraLangs,
     setAudioReviewExtraLangs, setOllamaTranslationModel,
-    setOllamaTimeout, setOllamaPromptTranslate, setOllamaPromptEnhance,
+    setOllamaTimeout, setOllamaPromptTranslate, setOllamaPromptEnhance, setOllamaPromptGrammar,
     setVideoClipPauseSec, setVideoClipContext, setVideoClipAutoPlay, setVideoClipPlaybackRate, setMaxRefsPerWord,
     setSubtitleIndexPalabra, setSubtitleIndexAudioText, setSubtitleIndexSignificado,
+    setGermanArticleChoice, setGrammarReviewEnabled, setGrammarOption,
   } = useSettingsStore()
 
   // Ollama status + default prompts
   const [ollamaStatus, setOllamaStatus] = useState<{ running: boolean; models: string[] } | null>(null)
   const [defaultPrompts, setDefaultPrompts] = useState<{ translate: string; enhance: string } | null>(null)
+  const [defaultGrammarPrompt, setDefaultGrammarPrompt] = useState('')
+  const [activeProvider, setActiveProvider] = useState<AIProviderInfo | null | undefined>(undefined)
+  const [showAIProviders, setShowAIProviders] = useState(false)
   const ollamaChecked = useRef(false)
   useEffect(() => {
     if (ollamaChecked.current) return
@@ -465,11 +483,17 @@ export default function Settings() {
     ollamaApi.getDefaultPrompts()
       .then((r) => setDefaultPrompts(r.data))
       .catch(() => {})
+    grammarApi.getDefaultPrompt()
+      .then((r) => setDefaultGrammarPrompt(r.data.prompt))
+      .catch(() => {})
+    aiProvidersApi.active()
+      .then((r) => setActiveProvider(r.data))
+      .catch(() => setActiveProvider(null))
     ollamaApi.getStatus()
       .then((r) => {
         setOllamaStatus(r.data)
         if (!ollamaTranslationModel && r.data.running && r.data.models.length > 0) {
-          const match = r.data.models.find((m) => m.toLowerCase().startsWith('translate'))
+          const match = r.data.models.find((m: string) => m.toLowerCase().startsWith('translate'))
           if (match) setOllamaTranslationModel(match)
         }
       })
@@ -494,6 +518,7 @@ export default function Settings() {
   }
 
   return (
+    <>
     <div className="p-4 pt-8 space-y-6">
       <h1 className="text-2xl font-bold">{t('settings.title')}</h1>
 
@@ -653,6 +678,46 @@ export default function Settings() {
         )}
       </div>
 
+      {/* AI Providers */}
+      <div className="card space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-slate-800 dark:text-slate-200">🤖 Proveedores de IA</h2>
+          <button
+            onClick={() => setShowAIProviders(true)}
+            className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+          >
+            Gestionar →
+          </button>
+        </div>
+        <div className="text-sm">
+          {activeProvider === undefined && (
+            <span className="text-slate-400 text-xs">Cargando…</span>
+          )}
+          {activeProvider === null && (
+            <span className="text-slate-400 text-xs">
+              Sin proveedor externo activo — usando Ollama (configuración abajo)
+            </span>
+          )}
+          {activeProvider && (
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-green-400 shrink-0" />
+              <span className="text-slate-300 text-xs font-medium">{activeProvider.name}</span>
+              <span className="text-slate-500 text-xs">· {activeProvider.model_name}</span>
+              <button
+                onClick={() => setShowAIProviders(true)}
+                className="ml-auto text-xs text-slate-500 hover:text-slate-300"
+              >
+                Cambiar
+              </button>
+            </div>
+          )}
+        </div>
+        <p className="text-xs text-slate-500 dark:text-slate-500">
+          El proveedor activo se usa para gramática, mejorar palabras y sugerencias de temas.
+          Si ninguno está activo, se usa Ollama.
+        </p>
+      </div>
+
       {/* Ollama */}
       <div className="card space-y-4">
         <h2 className="font-semibold text-slate-800 dark:text-slate-200">{t('settings.ollamaTitle')}</h2>
@@ -700,7 +765,7 @@ export default function Settings() {
                 </span>
                 <button
                   onClick={() => setOllamaTimeout(ollamaTimeout + 5)}
-                  disabled={ollamaTimeout >= 300}
+                  disabled={ollamaTimeout >= 900}
                   className="w-8 h-8 rounded-lg bg-slate-200 dark:bg-white/5 hover:bg-slate-300 dark:hover:bg-white/15 transition-colors text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   +
@@ -720,10 +785,13 @@ export default function Settings() {
             <OllamaPromptsEditor
               promptTranslate={ollamaPromptTranslate}
               promptEnhance={ollamaPromptEnhance}
+              promptGrammar={ollamaPromptGrammar}
               onChangeTranslate={setOllamaPromptTranslate}
               onChangeEnhance={setOllamaPromptEnhance}
+              onChangeGrammar={setOllamaPromptGrammar}
               defaultTranslate={defaultPrompts?.translate ?? ''}
               defaultEnhance={defaultPrompts?.enhance ?? ''}
+              defaultGrammar={defaultGrammarPrompt}
             />
           </>
         )}
@@ -738,6 +806,54 @@ export default function Settings() {
           label={t('settings.wordsOnly')}
           description={t('settings.wordsOnlyDesc')}
         />
+      </div>
+
+      {/* German Grammar */}
+      <div className="card space-y-4">
+        <div className="flex items-center gap-2">
+          <h2 className="font-semibold text-slate-800 dark:text-slate-200">🇩🇪 Gramática alemana</h2>
+        </div>
+        <Toggle
+          value={germanArticleChoice}
+          onChange={setGermanArticleChoice}
+          label="Elegir artículo al repasar sustantivos"
+          description="Muestra der/die/das como ejercicio inline al repasar sustantivos alemanes"
+        />
+        <Toggle
+          value={grammarReviewEnabled}
+          onChange={setGrammarReviewEnabled}
+          label="Sesión de gramática al finalizar repaso"
+          description="Ofrece practicar gramática con las palabras del repaso al terminar"
+        />
+        {grammarReviewEnabled && (
+          <div className="space-y-2 pt-1 border-t border-slate-200 dark:border-slate-600">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Tipos de gramática</p>
+            {([
+              { key: 'articleDeclension', label: 'Declinación de artículos' },
+              { key: 'adjDeclension', label: 'Declinación de adjetivos' },
+              { key: 'verbConjugation', label: 'Conjugación de verbos' },
+              { key: 'prepositions', label: 'Preposiciones con casos' },
+              { key: 'verbPrepositions', label: 'Verbos + preposición fija' },
+            ] as const).map(({ key, label }) => (
+              <label key={key} className="flex items-center gap-2 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={grammarOptions[key]}
+                  onChange={(e) => setGrammarOption(key, e.target.checked)}
+                  className="w-4 h-4 rounded accent-blue-500 cursor-pointer"
+                />
+                <span className="text-sm text-slate-600 dark:text-slate-300 group-hover:text-slate-800 dark:group-hover:text-slate-100 transition-colors">
+                  {label}
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
+        <div className="pt-1 border-t border-slate-200 dark:border-slate-600">
+          <a href="/grammar" className="text-xs text-blue-400 hover:text-blue-300 transition-colors">
+            ✏️ Abrir Taller de Gramática →
+          </a>
+        </div>
       </div>
 
       {/* Transition */}
@@ -923,5 +1039,18 @@ export default function Settings() {
         </div>
       </div>
     </div>
+
+      {/* AI Providers Modal */}
+      {showAIProviders && (
+        <AIProvidersModal
+          onClose={() => setShowAIProviders(false)}
+          onActiveChanged={() => {
+            aiProvidersApi.active()
+              .then((r) => setActiveProvider(r.data))
+              .catch(() => setActiveProvider(null))
+          }}
+        />
+      )}
+    </>
   )
 }

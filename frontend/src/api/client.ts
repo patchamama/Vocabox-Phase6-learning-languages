@@ -236,3 +236,101 @@ export const ollamaApi = {
     prompt_override?: string
   }) => api.post('/ollama/enhance-word', data),
 }
+
+export interface GrammarSegment {
+  t: 'text' | 'blank'
+  v?: string
+  id?: number
+  options?: string[]
+  correct?: number
+  rule?: string
+}
+
+export interface GrammarExerciseData {
+  title: string
+  topic: string
+  segments: GrammarSegment[]
+  grammar_notes: string[]
+  vocabulary_used: string[]
+}
+
+export interface SavedGrammarExercise extends GrammarExerciseData {
+  id: number
+  language: string
+  interface_lang: string
+  score_correct: number | null
+  score_total: number | null
+  created_at: string
+  last_attempted: string | null
+}
+
+export const grammarApi = {
+  generate: (data: {
+    topic: string
+    interface_lang: string
+    grammar_focus: string[]
+    vocabulary: string[]
+    model: string
+    timeout?: number
+    custom_prompt?: string
+  }) => api.post<GrammarExerciseData>('/grammar/generate', data),
+
+  suggestTopics: (data: { interface_lang: string; model: string; timeout?: number }) =>
+    api.post<{ topics: string[] }>('/grammar/suggest-topics', data),
+
+  getDefaultPrompt: () => api.get<{ prompt: string }>('/grammar/default-prompt'),
+
+  saveExercise: (data: {
+    title: string
+    topic: string
+    language?: string
+    interface_lang?: string
+    segments_json: string
+    grammar_notes_json?: string
+    vocabulary_used_json?: string
+    score_correct?: number
+    score_total?: number
+  }) => api.post<SavedGrammarExercise>('/grammar/exercises', data),
+
+  listExercises: () => api.get<SavedGrammarExercise[]>('/grammar/exercises'),
+
+  getExercise: (id: number) => api.get<SavedGrammarExercise>(`/grammar/exercises/${id}`),
+
+  updateScore: (id: number, correct: number, total: number) =>
+    api.patch(`/grammar/exercises/${id}/score`, { correct, total }),
+
+  deleteExercise: (id: number) => api.delete(`/grammar/exercises/${id}`),
+}
+
+// ── AI Providers ──────────────────────────────────────────────────────────────
+
+export interface AIProviderInfo {
+  id: number
+  name: string
+  provider_type: string   // ollama / openai / anthropic / gemini / azure / openai_compat
+  has_api_key: boolean
+  base_url: string | null
+  model_name: string
+  is_active: boolean
+  created_at: string | null
+}
+
+export interface AIProviderCreate {
+  name: string
+  provider_type: string
+  api_key?: string
+  base_url?: string
+  model_name: string
+  is_active?: boolean
+}
+
+export const aiProvidersApi = {
+  list: () => api.get<AIProviderInfo[]>('/ai-providers'),
+  active: () => api.get<AIProviderInfo | null>('/ai-providers/active'),
+  create: (data: AIProviderCreate) => api.post<AIProviderInfo>('/ai-providers', data),
+  update: (id: number, data: Partial<AIProviderCreate>) => api.put<AIProviderInfo>(`/ai-providers/${id}`, data),
+  delete: (id: number) => api.delete(`/ai-providers/${id}`),
+  activate: (id: number) => api.post<AIProviderInfo>(`/ai-providers/${id}/activate`),
+  deactivate: (id: number) => api.post<AIProviderInfo>(`/ai-providers/${id}/deactivate`),
+  test: (id: number) => api.post<{ ok: boolean; provider_type: string; model: string }>(`/ai-providers/${id}/test`),
+}

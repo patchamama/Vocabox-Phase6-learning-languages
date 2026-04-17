@@ -7,8 +7,8 @@ export default function NavBar() {
   const TABS = [
     { to: '/', label: t('nav.home'), icon: '🏠' },
     { to: '/review', label: t('nav.review'), icon: '📚' },
+    { to: '/grammar', label: t('nav.grammar', 'Gramática'), icon: '✏️' },
     { to: '/words', label: t('nav.words'), icon: '📝' },
-    { to: '/import', label: t('nav.import'), icon: '📥' },
     { to: '/stats', label: t('nav.stats'), icon: '📊' },
     { to: '/settings', label: t('nav.settings'), icon: '⚙️' },
   ]

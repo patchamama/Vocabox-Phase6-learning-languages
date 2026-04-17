@@ -70,6 +70,22 @@ interface SettingsState {
   subtitleIndexAudioText: boolean
   subtitleIndexSignificado: boolean
 
+  // ── German grammar features ────────────────────────────────────────────────
+  /** Inject article-choice exercise for German nouns during review */
+  germanArticleChoice: boolean
+  /** Show grammar session after review session ends */
+  grammarReviewEnabled: boolean
+  /** Which grammar types to include in post-review grammar session */
+  grammarOptions: {
+    articleDeclension: boolean
+    adjDeclension: boolean
+    verbConjugation: boolean
+    prepositions: boolean
+    verbPrepositions: boolean
+  }
+  /** Custom prompt template for Ollama grammar exercise generation (empty = use default) */
+  ollamaPromptGrammar: string
+
   setReviewMode: (mode: ReviewMode) => void
   setWordsPerSession: (n: number) => void
   setTransitionDelay: (s: number) => void
@@ -101,6 +117,10 @@ interface SettingsState {
   setSubtitleIndexPalabra: (v: boolean) => void
   setSubtitleIndexAudioText: (v: boolean) => void
   setSubtitleIndexSignificado: (v: boolean) => void
+  setGermanArticleChoice: (v: boolean) => void
+  setGrammarReviewEnabled: (v: boolean) => void
+  setGrammarOption: (key: keyof SettingsState['grammarOptions'], v: boolean) => void
+  setOllamaPromptGrammar: (p: string) => void
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -127,7 +147,7 @@ export const useSettingsStore = create<SettingsState>()(
       leoExtraLangs: [],
       audioReviewExtraLangs: true,
       ollamaTranslationModel: '',
-      ollamaTimeout: 60,
+      ollamaTimeout: 360,
       ollamaPromptTranslate: '',
       ollamaPromptEnhance: '',
       completeWithTts: true,
@@ -139,6 +159,16 @@ export const useSettingsStore = create<SettingsState>()(
       subtitleIndexPalabra: true,
       subtitleIndexAudioText: true,
       subtitleIndexSignificado: true,
+      germanArticleChoice: true,
+      grammarReviewEnabled: true,
+      grammarOptions: {
+        articleDeclension: true,
+        adjDeclension: true,
+        verbConjugation: true,
+        prepositions: true,
+        verbPrepositions: true,
+      },
+      ollamaPromptGrammar: '',
 
       setReviewMode: (reviewMode) => set({ reviewMode }),
       setWordsPerSession: (wordsPerSession) => set({ wordsPerSession }),
@@ -170,7 +200,7 @@ export const useSettingsStore = create<SettingsState>()(
       setLeoExtraLangs: (leoExtraLangs) => set({ leoExtraLangs }),
       setAudioReviewExtraLangs: (audioReviewExtraLangs) => set({ audioReviewExtraLangs }),
       setOllamaTranslationModel: (ollamaTranslationModel) => set({ ollamaTranslationModel }),
-      setOllamaTimeout: (ollamaTimeout) => set({ ollamaTimeout: Math.max(10, Math.min(300, ollamaTimeout)) }),
+      setOllamaTimeout: (ollamaTimeout) => set({ ollamaTimeout: Math.max(10, Math.min(900, ollamaTimeout)) }),
       setOllamaPromptTranslate: (ollamaPromptTranslate) => set({ ollamaPromptTranslate }),
       setOllamaPromptEnhance: (ollamaPromptEnhance) => set({ ollamaPromptEnhance }),
       setCompleteWithTts: (completeWithTts) => set({ completeWithTts }),
@@ -182,6 +212,11 @@ export const useSettingsStore = create<SettingsState>()(
       setSubtitleIndexPalabra: (subtitleIndexPalabra) => set({ subtitleIndexPalabra }),
       setSubtitleIndexAudioText: (subtitleIndexAudioText) => set({ subtitleIndexAudioText }),
       setSubtitleIndexSignificado: (subtitleIndexSignificado) => set({ subtitleIndexSignificado }),
+      setGermanArticleChoice: (germanArticleChoice) => set({ germanArticleChoice }),
+      setGrammarReviewEnabled: (grammarReviewEnabled) => set({ grammarReviewEnabled }),
+      setGrammarOption: (key, v) =>
+        set((state) => ({ grammarOptions: { ...state.grammarOptions, [key]: v } })),
+      setOllamaPromptGrammar: (ollamaPromptGrammar) => set({ ollamaPromptGrammar }),
     }),
     { name: 'vocabox-settings' }
   )

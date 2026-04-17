@@ -24,7 +24,7 @@ function ensureYTApi(cb: () => void) {
   if (_ytReady) { cb(); return }
   _ytCallbacks.push(cb)
   if (!document.getElementById('yt-iframe-api')) {
-    ;(window as Record<string, unknown>)['onYouTubeIframeAPIReady'] = () => {
+    ;(window as unknown as Record<string, unknown>)['onYouTubeIframeAPIReady'] = () => {
       _ytReady = true
       _ytCallbacks.splice(0).forEach((f) => f())
     }
@@ -229,7 +229,8 @@ export default function VideoRefsModal({ wordId, palabra, significado, audioText
         const inner = document.createElement('div')
         playerOuterRef.current.appendChild(inner)
 
-        playerRef.current = new (window as Record<string, unknown>)['YT'].Player(inner, {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        playerRef.current = new ((window as unknown as Record<string, any>)['YT']).Player(inner, {
           videoId: ytId,
           width: '100%',
           height: '100%',

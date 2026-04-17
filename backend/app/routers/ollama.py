@@ -8,9 +8,12 @@ correct, enrich, and translate vocabulary entries.
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
+from ..database import get_db
 from ..dependencies import get_current_user
 from ..models.user import User
+from ..services.ai_client import get_active_client_and_model
 from ..services.ollama_service import enhance_word, get_default_prompts, get_status
 
 router = APIRouter(prefix="/ollama", tags=["ollama"])
@@ -43,21 +46,30 @@ class EnhanceWordRequest(BaseModel):
 def ollama_enhance_word(
     req: EnhanceWordRequest,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
-    Use the local Ollama model to analyze and enrich a vocabulary entry.
+    Use the active AI provider (or Ollama fallback) to analyze and enrich a vocabulary entry.
     Returns corrected word, improved translation, category, and extra translations.
     """
+    active = get_active_client_and_model(current_user.id, db)
+    if active:
+        ai_client, model = active
+    else:
+        ai_client = None
+        model = req.model
+
     result = enhance_word(
         palabra=req.palabra,
         significado=req.significado,
         idioma_origen=req.idioma_origen,
         idioma_destino=req.idioma_destino,
-        model=req.model,
+        model=model,
         extra_langs=req.extra_langs or None,
-        timeout=max(10, min(300, req.timeout)),
+        timeout=max(10, min(900, req.timeout)),
         prompt_override=req.prompt_override or None,
+        ai_client=ai_client,
     )
     if result is None:
-        raise HTTPException(status_code=503, detail="Ollama unavailable or returned no result")
+        raise HTTPException(status_code=503, detail="AI provider unavailable or returned no result")
     return result

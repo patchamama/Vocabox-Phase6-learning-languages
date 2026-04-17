@@ -51,7 +51,47 @@ def _migrate_words_columns() -> None:
 
 _migrate_words_columns()
 
-from .routers import audio_review, auth, import_router, languages, leo, ollama, review, stats, subtitles, temas, test_mode, words
+
+def _migrate_grammar_exercises() -> None:
+    """Create grammar_exercises table and add any missing columns."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    if "grammar_exercises" not in inspector.get_table_names():
+        # Table created by create_all above; nothing to do here
+        return
+    existing = {c["name"] for c in inspector.get_columns("grammar_exercises")}
+    new_cols = [
+        ("topic", "VARCHAR(200) DEFAULT ''"),
+        ("interface_lang", "VARCHAR(10) DEFAULT 'es'"),
+        ("grammar_notes_json", "TEXT DEFAULT '[]'"),
+        ("vocabulary_used_json", "TEXT DEFAULT '[]'"),
+        ("score_correct", "INTEGER"),
+        ("score_total", "INTEGER"),
+        ("last_attempted", "DATETIME"),
+    ]
+    with engine.begin() as conn:
+        for col, typ in new_cols:
+            if col not in existing:
+                conn.execute(text(f"ALTER TABLE grammar_exercises ADD COLUMN {col} {typ}"))
+
+
+_migrate_grammar_exercises()
+
+
+def _migrate_ai_providers() -> None:
+    """Create ai_providers table if missing (create_all handles it on fresh installs)."""
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    # Table is created by create_all above; this is a no-op for fresh installs.
+    # Kept for future column additions following the same pattern.
+    if "ai_providers" not in inspector.get_table_names():
+        Base.metadata.create_all(bind=engine)
+
+
+_migrate_ai_providers()
+
+from .routers import ai_providers, audio_review, auth, grammar, import_router, languages, leo, ollama, review, stats, subtitles, temas, test_mode, words
 
 # ── Language dictionary seed data ─────────────────────────────────────────────
 
@@ -127,6 +167,8 @@ app.include_router(leo.router,           prefix="/api")
 app.include_router(ollama.router,        prefix="/api")
 app.include_router(audio_review.router,  prefix="/api")
 app.include_router(subtitles.router,     prefix="/api")
+app.include_router(grammar.router,       prefix="/api")
+app.include_router(ai_providers.router,  prefix="/api")
 
 # ── Static frontend (served from app/static after deploy) ─────────────────────
 _STATIC_DIR = Path(__file__).parent / "static"

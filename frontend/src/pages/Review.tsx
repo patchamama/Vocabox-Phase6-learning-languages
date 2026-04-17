@@ -7,9 +7,14 @@ import FirstLetterExercise from '../components/exercises/FirstLetterExercise'
 import MultipleChoiceExercise from '../components/exercises/MultipleChoiceExercise'
 import PairMatchExercise from '../components/exercises/PairMatchExercise'
 import WriteExercise from '../components/exercises/WriteExercise'
+import GermanArticleExercise from '../components/exercises/GermanArticleExercise'
+import GermanGrammarExercise from '../components/exercises/GermanGrammarExercise'
+import GrammarSession from '../components/GrammarSession'
 import WordEditForm from '../components/WordEditForm'
 import { useReviewStore } from '../stores/reviewStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useUserProfileStore } from '../stores/userProfileStore'
+import type { TipLang } from '../data/germanGrammarTips'
 import { stripAccent } from '../utils/normalize'
 import { ShortcutLabel } from '../utils/shortcutLabel'
 
@@ -114,7 +119,9 @@ export default function Review() {
   const {
     reviewMode, wordsPerSession, transitionDelay, transitionType,
     safeRound1, safeRound2, safeRound3, autoPlayAudio, autoPlayAudioReversed, wordsOnly, reviewDirection,
+    germanArticleChoice, grammarReviewEnabled,
   } = useSettingsStore()
+  const { uiLanguage } = useUserProfileStore()
 
   const {
     isLoading,
@@ -138,9 +145,11 @@ export default function Review() {
     totalIterations,
     doneIterations,
     sessionConfig,
+    currentGrammarBlank,
   } = useReviewStore()
 
   const [lastEntry, setLastEntry] = useState<LastEntry | null>(null)
+  const [showGrammarSession, setShowGrammarSession] = useState(false)
   const [pendingAdvance, setPendingAdvance] = useState(false)
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -207,7 +216,7 @@ export default function Review() {
     // Only load if not already in an active session
     const state = useReviewStore.getState()
     if (!state.isFinished && state.allWords.length === 0) {
-      loadReview(selectedBoxes, wordsPerSession, reviewMode, [safeRound1, safeRound2, safeRound3], wordsOnly, reviewDirection)
+      loadReview(selectedBoxes, wordsPerSession, reviewMode, [safeRound1, safeRound2, safeRound3], wordsOnly, reviewDirection, germanArticleChoice)
     }
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
@@ -508,8 +517,31 @@ export default function Review() {
             )
           })()}
 
+          {/* Grammar session CTA */}
+          {grammarReviewEnabled && allWords.some((w) => w.idioma_origen === 'de') && (
+            showGrammarSession ? (
+              <div className="card">
+                <GrammarSession
+                  words={allWords}
+                  onDone={() => setShowGrammarSession(false)}
+                  uiLang={(uiLanguage as TipLang) ?? 'es'}
+                />
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowGrammarSession(true)}
+                className="w-full py-3 rounded-xl border border-blue-500/40 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20 transition-colors text-sm font-medium"
+              >
+                📝 {uiLanguage === 'de' ? 'Grammatik üben →' : uiLanguage === 'en' ? 'Practice grammar →' : uiLanguage === 'fr' ? 'Pratiquer la grammaire →' : 'Practicar gramática →'}
+              </button>
+            )
+          )}
+
           <button
-            onClick={() => loadReview(selectedBoxes, wordsPerSession, reviewMode, [safeRound1, safeRound2, safeRound3], wordsOnly, reviewDirection)}
+            onClick={() => {
+              setShowGrammarSession(false)
+              loadReview(selectedBoxes, wordsPerSession, reviewMode, [safeRound1, safeRound2, safeRound3], wordsOnly, reviewDirection, germanArticleChoice)
+            }}
             className="btn-primary w-full"
           >
             {total === 0 ? t('session.refresh') : t('session.newSession')}
@@ -738,6 +770,27 @@ export default function Review() {
             word={word}
             onAnswer={(correct) => onSingleAnswer(correct)}
           />
+        ) : word && exerciseType === 'german_article' ? (
+          <GermanArticleExercise
+            key={`${word.user_word_id}-article`}
+            word={word}
+            autoPlay={shouldAutoPlay}
+            onAnswer={(correct, input) => onSingleAnswer(correct, input)}
+            uiLang={(uiLanguage as TipLang) ?? 'es'}
+          />
+        ) : word && exerciseType === 'german_grammar' ? (
+          (() => {
+            const blank = currentGrammarBlank()
+            return blank ? (
+              <GermanGrammarExercise
+                key={`${word.user_word_id}-grammar`}
+                word={word}
+                blank={blank}
+                onAnswer={(correct, input) => onSingleAnswer(correct, input)}
+                uiLang={(uiLanguage as TipLang) ?? 'es'}
+              />
+            ) : null
+          })()
         ) : null}
       </div>
 
