@@ -139,8 +139,25 @@ function ExercisePlayer({
   const [textPopupLoading, setTextPopupLoading] = useState(false)
   const [textPopupAdded, setTextPopupAdded] = useState<Set<string>>(new Set())
   const textPopupRef = useRef<HTMLDivElement | null>(null)
+  const leoDropdownRef = useRef<HTMLDivElement | null>(null)
   const [saved, setSaved] = useState(savedId !== null)
   const [currentSavedId, setCurrentSavedId] = useState<number | null>(savedId)
+
+  // Close LEO dropdowns on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (textPopupRef.current && !textPopupRef.current.contains(e.target as Node)) {
+        setTextPopupWord(null)
+        setTextPopupResults(null)
+      }
+      if (leoDropdownRef.current && !leoDropdownRef.current.contains(e.target as Node)) {
+        setLeoWord(null)
+        setLeoResults(null)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   const correctCount = blanks.filter((b) => {
     const bs = b.id !== undefined ? blankStates[b.id] : null
@@ -511,7 +528,7 @@ function ExercisePlayer({
 
           {/* LEO results dropdown */}
           {leoWord && (
-            <div className="mt-2 rounded-xl border border-slate-600 bg-slate-800 overflow-hidden">
+            <div ref={leoDropdownRef} className="mt-2 rounded-xl border border-slate-600 bg-slate-800 overflow-hidden">
               <div className="px-3 py-2 border-b border-slate-700 flex items-center justify-between">
                 <span className="text-xs text-slate-400">LEO · <span className="text-yellow-300 font-medium">{leoWord}</span></span>
                 <button onClick={() => { setLeoWord(null); setLeoResults(null) }} className="text-slate-500 hover:text-slate-300 text-xs">✕</button>
@@ -626,6 +643,7 @@ function ProseChecker({
     try {
       const res = await grammarApi.checkProse({ text: text.trim(), interface_lang: uiLang, model, timeout })
       setFeedback(res.data.feedback)
+      setShowFeedback(true)
     } catch {
       setError('Error al contactar el modelo')
     } finally {
