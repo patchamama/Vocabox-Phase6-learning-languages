@@ -189,37 +189,45 @@ Return ONLY valid JSON — no markdown, no backticks, no explanation:
 {{"title":"Short German title (3-5 words)","topic":"{topic}","blanks":[{{"word":"einen","options":["ein","eine","einen","einem"],"correct":2,"rule":"Akkusativ maskulin: direktes Objekt, maskulin → einen"}},{{"word":"die","options":["der","die","das","dem"],"correct":1,"rule":"Nominativ feminin: Subjekt, feminin → die"}}],"grammar_notes":["note1 in {interface_lang}","note2"],"vocabulary_used":["word1","word2"]}}
 """
 
-# Rolling mode — one sentence per call with accumulated context
-# Model writes the sentence WITH ___ marking the blank, plus answer + 2 wrong alternatives.
-# Python splits on ___ to build segments — no word-search needed.
-PROMPT_ROLLING_SENTENCE = """\
-Task: Write ONE German sentence for a fill-in-the-blank grammar exercise.
+# Rolling mode — Phase 1: generate all sentences as plain prose
+PROMPT_ROLLING_PROSE = """\
+You are a German language teacher writing a grammar exercise text.
 
 Topic: {topic}
+
+GRAMMAR FOCUS — you MUST use these structures in the text:
+{grammar_focus}
+
+Write exactly {num_sentences} short, natural German sentences on this topic.
+Requirements:
+- Each sentence must be grammatically correct and naturally spelled (check umlauts: ä, ö, ü, ß).
+- Each sentence introduces a NEW aspect or situation related to the topic — avoid repeating ideas.
+- Every sentence must use at least one structure from the grammar focus above.
+- Intermediate level (A2-B2): natural everyday German, no rare vocabulary.
+- Write ONLY the {num_sentences} sentences separated by newlines — no numbering, no explanations, no JSON.
+
+German sentences:
+"""
+
+# Rolling mode — Phase 2: for each sentence, choose ONE word to blank
+PROMPT_ROLLING_BLANK = """\
+You are creating a German fill-in-the-blank exercise.
+
+German sentence: {sentence}
 Grammar focus: {grammar_focus}
 
-Sentences so far (plain text — continue the story naturally):
-{context}
+Choose ONE word from this sentence to turn into a blank. Prefer: articles, prepositions, pronouns, adjective endings, modal verbs.
 
-INSTRUCTIONS:
-1. Write ONE natural German sentence with exactly ONE blank marked as ___.
-2. "answer" = the correct word that goes in the blank.
-3. "wrong" = exactly 2 wrong alternatives of the SAME word type (e.g. all definite articles, or all prepositions — never mix types).
-4. "rule" = the grammar rule in {interface_lang}.
+Return ONLY valid JSON — no markdown, no backticks:
+{{"answer":"<exact word from sentence>","wrong":["<wrong1>","<wrong2>"],"rule":"<grammar rule in {interface_lang}>"}}
 
-BEFORE returning your answer, verify ALL of the following:
-- The sentence (with the answer filled in) is grammatically correct German.
-- Every word is spelled correctly (check umlauts: ä, ö, ü, ß).
-- The sentence is thematically connected to the topic and context, but introduces a NEW idea or situation not already mentioned above.
-- The answer word appears nowhere in the "sentence" field — only ___ marks its position.
-- The "wrong" options are plausible but clearly incorrect in this context.
-- All three options (answer + wrong) are the SAME word type — never mix articles with prepositions, etc.
+Rules:
+- "answer" must be exactly one word as it appears in the sentence (same spelling, same case).
+- "wrong" = exactly 2 alternatives of the SAME word type (all definite articles, OR all prepositions, etc. — never mix).
+- "rule" = one sentence explaining the grammatical rule in {interface_lang}.
 
-Only after verifying, return ONLY valid JSON — no markdown, no backticks, no explanation:
-{{"sentence":"<sentence with ONE ___ >","answer":"<correct word>","wrong":["<wrong1>","<wrong2>"],"rule":"<rule in {interface_lang}>"}}
-
-EXAMPLE:
-{{"sentence":"Ich kaufe ___ roten Pullover.","answer":"einen","wrong":["ein","eine"],"rule":"Akkusativ maskulin → einen"}}
+EXAMPLE — sentence "Ich kaufe einen roten Pullover.":
+{{"answer":"einen","wrong":["ein","eine"],"rule":"Akkusativ maskulin → einen"}}
 """
 
 # Auto-correct pass after Phase 1 prose generation (used twice)
@@ -736,93 +744,102 @@ def _generate_rolling(
     timeout: int,
     client: AIClient,
     extra_kwargs: dict,
+    double_correct: bool = False,
 ) -> dict:
     """
-    Generate exercise sentence by sentence, accumulating context.
+    Rolling mode — 3 phases:
 
-    Each call: model returns {sentence (with ___), answer, wrong, rule}.
-    Python splits on ___ to build segments — no word-search, no regex ambiguity.
-    Context for next call = sentence with ___ replaced by answer (plain text).
+    Phase 1 — generate all N sentences as plain prose in one call.
+    Phase 1b — auto-correct the prose (same as two_phase).
+    Phase 2 — for each sentence independently, ask model to choose ONE word
+               to blank + provide options. Python splits on _find_word_in_text_.
+               Uses the same _build_segments_from_blanks as two_phase.
     """
     interface_lang_name = INTERFACE_LANG_NAMES.get(interface_lang, "Spanish")
+
+    # ── Phase 1: generate all sentences at once ────────────────────────────────
+    logger.info("[rolling] Phase 1: generating %d sentences", num_sentences)
+    prose_prompt = PROMPT_ROLLING_PROSE.format_map(_SafeDict(
+        topic=topic,
+        grammar_focus=grammar_focus,
+        num_sentences=num_sentences,
+    ))
+    prose_timeout = max(60, timeout // 3)
+    raw_prose = _call_client(client, prose_prompt, model, prose_timeout, extra_kwargs)
+    if not raw_prose:
+        raise ValueError("Rolling Phase 1 returned no response")
+
+    # Split into individual sentences — strip numbering/bullets if model added them
+    lines = [re.sub(r'^\s*[\d\-\*\.\)]+\s*', '', ln).strip() for ln in raw_prose.splitlines()]
+    sentences = [ln for ln in lines if len(ln) > 10]
+    if not sentences:
+        raise ValueError("Rolling Phase 1 produced no sentences")
+    logger.info("[rolling] Phase 1 got %d sentences", len(sentences))
+
+    # ── Phase 1b: auto-correct the full prose ─────────────────────────────────
+    full_prose = " ".join(sentences)
+    num_passes = 2 if double_correct else 1
+    for pass_num in range(1, num_passes + 1):
+        logger.info("[rolling] Phase 1b pass %d: correcting prose", pass_num)
+        correct_prompt = PROMPT_AUTO_CORRECT_PROSE.format_map(_SafeDict(prose=full_prose))
+        corrected = _call_client(client, correct_prompt, model, prose_timeout, extra_kwargs)
+        if corrected:
+            if corrected == full_prose:
+                logger.info("[rolling] Phase 1b pass %d: no changes, stopping", pass_num)
+                break
+            full_prose = corrected.strip()
+            logger.info("[rolling] Phase 1b pass %d done", pass_num)
+
+    # Re-split corrected prose back into sentences
+    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', full_prose) if s.strip()]
+    logger.info("[rolling] After correction: %d sentences", len(sentences))
+
+    # ── Phase 2: blank one word per sentence ──────────────────────────────────
     all_segments: list[dict] = []
-    context_plain = ""
     blank_id = 1
+    per_sentence_timeout = max(30, timeout // max(len(sentences), 1))
 
-    per_sentence_timeout = max(30, timeout // num_sentences)
-
-    for i in range(num_sentences):
-        logger.info("[rolling] Sentence %d/%d", i + 1, num_sentences)
-        prompt = PROMPT_ROLLING_SENTENCE.format_map(_SafeDict(
-            topic=topic,
-            context=context_plain.strip() or "(none yet — this is the first sentence)",
+    for i, sentence in enumerate(sentences):
+        logger.info("[rolling] Phase 2 sentence %d/%d: %r", i + 1, len(sentences), sentence[:60])
+        blank_prompt = PROMPT_ROLLING_BLANK.format_map(_SafeDict(
+            sentence=sentence,
             grammar_focus=grammar_focus,
             interface_lang=interface_lang_name,
         ))
 
-        last_err: Exception | None = None
-        sentence_data: dict | None = None
-
+        blank_data: dict | None = None
         for attempt in range(1, 3):
-            raw = _call_client(client, prompt, model, per_sentence_timeout, extra_kwargs)
+            raw = _call_client(client, blank_prompt, model, per_sentence_timeout, extra_kwargs)
             if not raw:
-                last_err = ValueError(f"Rolling sentence {i+1} returned no response")
-                continue
-            json_str = _fix_common_model_errors(_extract_json(raw))
+                break
             try:
-                parsed = json.loads(json_str)
-                sentence = parsed.get("sentence", "").strip()
+                parsed = json.loads(_fix_common_model_errors(_extract_json(raw)))
                 answer = parsed.get("answer", "").strip()
                 wrong = parsed.get("wrong", [])
                 rule = parsed.get("rule", "")
-                if not sentence or "___" not in sentence or not answer or len(wrong) < 1:
-                    raise ValueError(
-                        f"Incomplete: sentence={sentence!r} answer={answer!r} wrong={wrong}"
-                    )
-                sentence_data = {"sentence": sentence, "answer": answer, "wrong": wrong, "rule": rule}
+                if not answer or len(wrong) < 1:
+                    raise ValueError(f"Incomplete blank data: answer={answer!r} wrong={wrong}")
+                blank_data = {"word": answer, "options": wrong, "rule": rule}
                 break
             except Exception as exc:
-                logger.warning("[rolling] Parse error sentence %d attempt %d: %s\nRaw: %s", i+1, attempt, exc, raw)
-                last_err = exc
+                logger.warning("[rolling] Phase 2 parse error sentence %d attempt %d: %s", i+1, attempt, exc)
 
-        if sentence_data is None:
-            logger.warning("[rolling] Skipping sentence %d after failures: %s", i+1, last_err)
+        if blank_data is None:
+            # Fallback: include the sentence as plain text with no blank
+            logger.warning("[rolling] Sentence %d has no blank, adding as plain text", i+1)
+            all_segments.append({"t": "text", "v": sentence + " "})
             continue
 
-        # Split on ___ — guaranteed to work, no word-search needed
-        sentence = sentence_data["sentence"]
-        answer = sentence_data["answer"]
-        wrong = sentence_data["wrong"]
-        rule = sentence_data["rule"]
+        # Build segments using the robust builder (handles capitalisation etc.)
+        sentence_segs = _build_segments_from_blanks(sentence + " ", [blank_data])
 
-        parts = sentence.split("___", 1)
-        before = parts[0]  # text before blank
-        after = parts[1] if len(parts) > 1 else ""  # text after blank
+        # Re-assign blank IDs globally
+        for seg in sentence_segs:
+            if seg.get("t") == "blank":
+                seg["id"] = blank_id
+                blank_id += 1
 
-        # Build options: answer + up to 2 wrong alternatives, shuffled
-        distractors = [w for w in wrong if w != answer][:2]
-        options = [answer] + distractors
-        random.shuffle(options)
-        correct_idx = options.index(answer)
-
-        sentence_segs: list[dict] = []
-        if before:
-            sentence_segs.append({"t": "text", "v": before})
-        sentence_segs.append({
-            "t": "blank",
-            "id": blank_id,
-            "options": options,
-            "correct": correct_idx,
-            "rule": rule,
-        })
-        if after:
-            sentence_segs.append({"t": "text", "v": after})
-
-        blank_id += 1
         all_segments.extend(sentence_segs)
-
-        # Plain text for next iteration: replace ___ with answer
-        context_plain += " " + sentence.replace("___", answer)
 
     if not all_segments:
         raise ValueError("Rolling generation produced no segments")
@@ -905,6 +922,7 @@ def generate_exercise(
             timeout=timeout,
             client=client,
             extra_kwargs=extra_kwargs,
+            double_correct=double_correct,
         )
     else:
         # custom / legacy single-shot
@@ -998,5 +1016,5 @@ def get_default_grammar_prompt(mode: str = "custom") -> str:
     if mode == "two_phase":
         return PROMPT_ANALYZE_TO_EXERCISE
     if mode == "rolling":
-        return PROMPT_ROLLING_SENTENCE
+        return PROMPT_ROLLING_PROSE + "\n\n---\n\nPhase 2 (per sentence):\n\n" + PROMPT_ROLLING_BLANK
     return DEFAULT_PROMPT_GRAMMAR
