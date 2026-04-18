@@ -246,26 +246,20 @@ You are a German language teacher. Check the following German text strictly for:
 2. Spelling errors (including umlauts: ä, ö, ü, ß)
 
 Do NOT comment on style, naturalness, vocabulary choice, or phrasing — only hard grammar and spelling errors.
+Do NOT rewrite or reproduce the full text.
 
 ---
 {text}
 ---
 
-Your response must have TWO sections, written in {interface_lang}:
+Write your response in {interface_lang}.
 
-SECTION 1 — CORRECTED TEXT:
-Write the complete corrected version of the text.
-If the text has no errors, copy it unchanged.
-Label this section: "Texto corregido:" (or "Corrected text:" if interface_lang is English).
-
-SECTION 2 — ERRORS FOUND:
-List only the grammar and spelling errors found.
-For each error:
+List only the errors found. For each error:
 - Quote the wrong part
 - Explain the rule briefly
 - Show the correction
 
-If no errors were found, write: "No se encontraron errores gramaticales ni ortográficos." (or equivalent in the interface language).
+If no errors were found, write a single short confirmation sentence.
 """
 
 PROMPT_SUGGEST_TOPICS = """\
