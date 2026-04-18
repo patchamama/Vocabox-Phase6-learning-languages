@@ -195,7 +195,7 @@ export const useSettingsStore = create<SettingsState>()(
       grammarTopP: null,
       grammarMode: 'rolling',
       grammarRollingSentences: 6,
-      grammarDoubleCorrect: false,
+      grammarDoubleCorrect: true,
       grammarMaxBlanks: 10,
 
       setReviewMode: (reviewMode) => set({ reviewMode }),

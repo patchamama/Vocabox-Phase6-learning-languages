@@ -188,6 +188,14 @@ function ExercisePlayer({
     }
   }
 
+  const resetExercise = () => {
+    setShowSolution(false)
+    const init: Record<number, BlankState> = {}
+    blanks.forEach((b) => { if (b.id !== undefined) init[b.id] = { selected: null, locked: false } })
+    setBlankStates(init)
+    setToast(null)
+  }
+
   const revealSolution = () => {
     setShowSolution(true)
     setBlankStates((prev) => {
@@ -556,6 +564,14 @@ function ExercisePlayer({
           </button>
         )}
         <div className="flex gap-3">
+          {(allDone || showSolution) && (
+            <button
+              onClick={resetExercise}
+              className="flex-1 py-2.5 rounded-xl border border-slate-600 text-slate-300 hover:border-slate-500 hover:text-white text-sm font-medium transition-colors"
+            >
+              {uiLang === 'de' ? '↺ Neu starten' : uiLang === 'en' ? '↺ Restart' : uiLang === 'fr' ? '↺ Recommencer' : '↺ Reiniciar'}
+            </button>
+          )}
           <button
             onClick={handleSave}
             disabled={saved || saving}
@@ -962,8 +978,7 @@ export default function GrammarWorkshop() {
       </div>
 
       {/* Panel: Generate */}
-      {panel === 'generate' && (
-        <div className="space-y-5">
+      <div className={panel === 'generate' ? 'space-y-5' : 'hidden'}>
           {noModel && (
             <div className="card border border-amber-500/40 bg-amber-500/10 text-amber-300 text-sm">
               ⚠ {uiLang === 'de' ? 'Kein Ollama-Modell konfiguriert. Gehe zu Einstellungen → Ollama.' : uiLang === 'en' ? 'No Ollama model configured. Go to Settings → Ollama.' : 'No hay modelo Ollama configurado. Ve a Configuración → Ollama.'}
@@ -1207,34 +1222,34 @@ export default function GrammarWorkshop() {
               uiLang === 'de' ? 'Übung generieren →' : uiLang === 'en' ? 'Generate exercise →' : uiLang === 'fr' ? "Générer l'exercice →" : 'Generar ejercicio →'
             )}
           </button>
-        </div>
-      )}
+      </div>
 
       {/* Panel: Solve */}
-      {panel === 'solve' && exercise && (
-        <ExercisePlayer
-          exercise={exercise}
-          uiLang={uiLang}
-          savedId={currentSavedId}
-          onSave={(id) => setCurrentSavedId(id)}
-          onNew={() => setPanel('generate')}
-        />
-      )}
-
-      {panel === 'solve' && !exercise && (
-        <div className="text-center py-12">
-          <p className="text-slate-400 text-sm">
-            {uiLang === 'de' ? 'Noch keine Übung generiert.' : uiLang === 'en' ? 'No exercise generated yet.' : 'No hay ejercicio generado aún.'}
-          </p>
-          <button onClick={() => setPanel('generate')} className="btn-primary mt-4">
-            {uiLang === 'de' ? 'Generieren' : uiLang === 'en' ? 'Generate one' : 'Generar uno'}
-          </button>
-        </div>
-      )}
+      <div className={panel === 'solve' ? '' : 'hidden'}>
+        {exercise ? (
+          <ExercisePlayer
+            key={exercise.title + (exercise.segments?.length ?? 0)}
+            exercise={exercise}
+            uiLang={uiLang}
+            savedId={currentSavedId}
+            onSave={(id) => setCurrentSavedId(id)}
+            onNew={() => setPanel('generate')}
+          />
+        ) : (
+          <div className="text-center py-12">
+            <p className="text-slate-400 text-sm">
+              {uiLang === 'de' ? 'Noch keine Übung generiert.' : uiLang === 'en' ? 'No exercise generated yet.' : 'No hay ejercicio generado aún.'}
+            </p>
+            <button onClick={() => setPanel('generate')} className="btn-primary mt-4">
+              {uiLang === 'de' ? 'Generieren' : uiLang === 'en' ? 'Generate one' : 'Generar uno'}
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Panel: Saved */}
-      {panel === 'saved' && (
-        loadingSaved ? (
+      <div className={panel === 'saved' ? '' : 'hidden'}>
+        {loadingSaved ? (
           <div className="text-center py-8 text-slate-400">⏳</div>
         ) : (
           <SavedList
@@ -1243,8 +1258,8 @@ export default function GrammarWorkshop() {
             onDelete={deleteExercise}
             uiLang={uiLang}
           />
-        )
-      )}
+        )}
+      </div>
     </div>
   )
 }
