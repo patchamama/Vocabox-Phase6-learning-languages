@@ -7,16 +7,433 @@
  *   3. Saved: list of persisted exercises with score history
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { grammarApi, leoApi, wordsApi, type GrammarExerciseData, type GrammarSegment, type SavedGrammarExercise } from '../api/client'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { grammarApi, grammarQueueApi, leoApi, type CefrLevel, type GrammarExerciseData, type GrammarQueueItem, type GrammarSegment, type SavedGrammarExercise } from '../api/client'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useUserProfileStore } from '../stores/userProfileStore'
+import { useGrammarQueueStore } from '../stores/grammarQueueStore'
+import { useAddWordStore } from '../stores/addWordStore'
+import { useGrammarQueueWS } from '../hooks/useGrammarQueueWS'
 import { getTip } from '../data/germanGrammarTips'
 import GrammarTipModal from '../components/GrammarTipModal'
 import type { TipLang } from '../data/germanGrammarTips'
 import type { LeoEntry, LeoResult } from '../types'
 
-type Panel = 'generate' | 'solve' | 'saved'
+type Panel = 'generate' | 'solve' | 'saved' | 'queue' | 'explore'
+
+const CEFR_LEVELS: CefrLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
+
+const CEFR_COLORS: Record<string, string> = {
+  A1: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+  A2: 'bg-green-500/20 text-green-300 border-green-500/40',
+  B1: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
+  B2: 'bg-violet-500/20 text-violet-300 border-violet-500/40',
+  C1: 'bg-orange-500/20 text-orange-300 border-orange-500/40',
+  C2: 'bg-red-500/20 text-red-300 border-red-500/40',
+}
+
+function CefrBadge({ level }: { level?: CefrLevel | string | null }) {
+  if (!level) return null
+  const cls = CEFR_COLORS[level] ?? 'bg-slate-700 text-slate-400 border-slate-600'
+  return (
+    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${cls}`}>
+      {level}
+    </span>
+  )
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+
+interface Toast { id: number; msg: string; type?: 'ok' | 'err' }
+let _toastId = 0
+
+function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: number) => void }) {
+  return (
+    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none">
+      {toasts.map((t) => (
+        <div
+          key={t.id}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-lg text-sm font-medium pointer-events-auto animate-fade-in
+            ${t.type === 'err' ? 'bg-red-900/90 border border-red-500/40 text-red-200' : 'bg-slate-800/95 border border-indigo-500/40 text-slate-100'}`}
+          onClick={() => onRemove(t.id)}
+        >
+          <span>{t.type === 'err' ? '✗' : '✓'}</span>
+          <span>{t.msg}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── BatchPanel ────────────────────────────────────────────────────────────────
+
+function BatchPanel({
+  uiLang,
+  model,
+  timeout,
+  grammarFocus,
+  customFocusList,
+  grammarMode,
+  grammarRollingSentences,
+  grammarDoubleCorrect,
+  grammarMaxBlanks,
+  grammarTemperature,
+  grammarNumPredict,
+  grammarTopP,
+  grammarCheckEnabled,
+  onToast,
+  onQueued,
+}: {
+  uiLang: string
+  model: string
+  timeout: number
+  grammarFocus: string[]
+  customFocusList: string[]
+  grammarMode: string
+  grammarRollingSentences: number
+  grammarDoubleCorrect: boolean
+  grammarMaxBlanks: number
+  grammarTemperature: number | null
+  grammarNumPredict: number | null
+  grammarTopP: number | null
+  grammarCheckEnabled: boolean
+  onToast: (msg: string, type?: 'ok' | 'err') => void
+  onQueued: () => void
+}) {
+  const L = (es: string, en: string) => uiLang === 'en' ? en : uiLang === 'de' ? en : uiLang === 'fr' ? en : es
+
+  // Fixed topic or AI random
+  const [batchTopicMode, setBatchTopicMode] = useState<'fixed' | 'random'>('fixed')
+  const [batchFixedTopic, setBatchFixedTopic] = useState('')
+  const [aiTopics, setAiTopics] = useState<string[]>([])
+  const [loadingTopics, setLoadingTopics] = useState(false)
+  const [usedAiTopics, setUsedAiTopics] = useState(0) // how many AI topics have been used
+
+  // CEFR: fixed or random from selection
+  const [batchCefrMode, setBatchCefrMode] = useState<'fixed' | 'random'>('fixed')
+  const [batchFixedCefr, setBatchFixedCefr] = useState<CefrLevel>('')
+  const [batchRandomCefrs, setBatchRandomCefrs] = useState<CefrLevel[]>([])
+
+  // Grammar focus lines (one per task)
+  const [focusLines, setFocusLines] = useState<string[]>([''])
+
+  const [batchGlobal, setBatchGlobal] = useState(false)
+  const [adding, setAdding] = useState(false)
+
+  const fetchAiTopics = useCallback(async () => {
+    if (!model) return
+    setLoadingTopics(true)
+    try {
+      const res = await grammarApi.suggestTopics({ interface_lang: uiLang, model, timeout })
+      setAiTopics((prev) => [...prev, ...(res.data.topics ?? [])])
+    } catch { /* ignore */ } finally {
+      setLoadingTopics(false)
+    }
+  }, [model, timeout, uiLang])
+
+  // Auto-fetch when pool runs low (< 5 remaining)
+  useEffect(() => {
+    if (batchTopicMode === 'random' && aiTopics.length - usedAiTopics < 5 && !loadingTopics) {
+      fetchAiTopics()
+    }
+  }, [batchTopicMode, aiTopics.length, usedAiTopics, loadingTopics, fetchAiTopics])
+
+  const validLines = focusLines.map((l) => l.trim()).filter(Boolean)
+  const numTasks = validLines.length || 1
+
+  const toggleRandomCefr = (lvl: CefrLevel) =>
+    setBatchRandomCefrs((prev) => prev.includes(lvl) ? prev.filter((x) => x !== lvl) : [...prev, lvl])
+
+  const addBatchToQueue = async () => {
+    if (!model) return
+    setAdding(true)
+    let topicPool = [...aiTopics.slice(usedAiTopics)]
+    let topicIdx = 0
+    let usedCount = 0
+    const effectiveFocusLines = validLines.length > 0 ? validLines : ['']
+    let added = 0
+
+    try {
+      for (const focusLine of effectiveFocusLines) {
+        // Pick topic
+        let topic = batchFixedTopic.trim() || 'German grammar'
+        if (batchTopicMode === 'random') {
+          if (topicIdx >= topicPool.length) {
+            // fetch more
+            const res = await grammarApi.suggestTopics({ interface_lang: uiLang, model, timeout })
+            const newTopics = res.data.topics ?? []
+            topicPool = [...topicPool, ...newTopics]
+            setAiTopics((prev) => [...prev, ...newTopics])
+          }
+          topic = topicPool[topicIdx] ?? 'German grammar'
+          topicIdx++
+          usedCount++
+        }
+
+        // Pick CEFR
+        let cefr: CefrLevel = batchFixedCefr
+        if (batchCefrMode === 'random') {
+          const pool = batchRandomCefrs.length > 0 ? batchRandomCefrs : CEFR_LEVELS
+          cefr = pool[Math.floor(Math.random() * pool.length)]
+        }
+
+        // Merge grammar focus: global + this line's focus
+        const lineFocusItems = focusLine ? focusLine.split(',').map((s) => s.trim()).filter(Boolean) : []
+        const effectiveFocus = [...grammarFocus, ...customFocusList, ...lineFocusItems]
+
+        await grammarQueueApi.add({
+          topic,
+          interface_lang: uiLang,
+          grammar_focus: effectiveFocus,
+          vocabulary: [],
+          model,
+          timeout,
+          temperature: grammarTemperature ?? undefined,
+          num_predict: grammarNumPredict ?? undefined,
+          top_p: grammarTopP ?? undefined,
+          mode: grammarMode === 'custom' ? 'two_phase' : grammarMode as 'two_phase' | 'rolling',
+          rolling_sentences: grammarRollingSentences,
+          double_correct: grammarDoubleCorrect,
+          max_blanks: grammarMaxBlanks,
+          grammar_check_enabled: grammarCheckEnabled,
+          cefr_level: cefr || undefined,
+          is_global: batchGlobal || undefined,
+        })
+        added++
+      }
+
+      if (usedCount > 0) setUsedAiTopics((prev) => prev + usedCount)
+      onToast(
+        uiLang === 'en'
+          ? `${added} task${added !== 1 ? 's' : ''} added to queue`
+          : `${added} tarea${added !== 1 ? 's' : ''} agregada${added !== 1 ? 's' : ''} a la cola`,
+        'ok',
+      )
+      onQueued()
+    } catch {
+      onToast(L('Error al agregar tareas', 'Error adding tasks'), 'err')
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Topic mode */}
+      <div>
+        <p className="text-xs font-medium text-slate-400 mb-2">
+          {L('Tema del lote', 'Batch topic')}
+        </p>
+        <div className="flex gap-2 mb-2">
+          {(['fixed', 'random'] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setBatchTopicMode(m)}
+              className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                batchTopicMode === m
+                  ? 'border-blue-500 bg-blue-500/20 text-blue-200'
+                  : 'border-slate-600 text-slate-400 hover:border-slate-500'
+              }`}
+            >
+              {m === 'fixed'
+                ? (L('Tema fijo', 'Fixed topic'))
+                : (L('Temas aleatorios (IA)', 'Random AI topics'))}
+            </button>
+          ))}
+        </div>
+        {batchTopicMode === 'fixed' ? (
+          <input
+            value={batchFixedTopic}
+            onChange={(e) => setBatchFixedTopic(e.target.value)}
+            placeholder={L('Ej: Restaurante, viajes...', 'E.g.: Restaurant, travel...')}
+            className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+          />
+        ) : (
+          <div className="text-xs text-slate-500 flex items-center gap-2">
+            <span>
+              {loadingTopics
+                ? L('Cargando temas de la IA...', 'Loading AI topics...')
+                : `${aiTopics.length - usedAiTopics} ${L('temas disponibles', 'topics available')}`}
+            </span>
+            <button
+              onClick={fetchAiTopics}
+              disabled={loadingTopics}
+              className="text-blue-400 hover:text-blue-300 disabled:opacity-50 transition-colors"
+            >
+              {L('+ Obtener más', '+ Get more')}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* CEFR mode */}
+      <div>
+        <p className="text-xs font-medium text-slate-400 mb-2">
+          {L('Nivel CEFR del lote', 'Batch CEFR level')}
+        </p>
+        <div className="flex gap-2 mb-2">
+          {(['fixed', 'random'] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setBatchCefrMode(m)}
+              className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                batchCefrMode === m
+                  ? 'border-violet-500 bg-violet-500/20 text-violet-200'
+                  : 'border-slate-600 text-slate-400 hover:border-slate-500'
+              }`}
+            >
+              {m === 'fixed' ? L('Nivel fijo', 'Fixed level') : L('Aleatorio', 'Random')}
+            </button>
+          ))}
+        </div>
+        {batchCefrMode === 'fixed' ? (
+          <div className="flex flex-wrap gap-1.5">
+            {CEFR_LEVELS.map((lvl) => (
+              <button
+                key={lvl}
+                onClick={() => setBatchFixedCefr(batchFixedCefr === lvl ? '' : lvl)}
+                className={`text-xs px-2.5 py-1 rounded-full border font-mono font-semibold transition-colors ${
+                  batchFixedCefr === lvl ? CEFR_COLORS[lvl] : 'border-slate-600 text-slate-400 hover:border-slate-500'
+                }`}
+              >
+                {lvl}
+              </button>
+            ))}
+            {batchFixedCefr && (
+              <button onClick={() => setBatchFixedCefr('')} className="text-xs px-2 py-1 text-slate-500 hover:text-slate-300 transition-colors">
+                {L('Ninguno', 'None')}
+              </button>
+            )}
+          </div>
+        ) : (
+          <div>
+            <p className="text-[10px] text-slate-500 mb-1.5">{L('Seleccioná los niveles a sortear (vacío = todos)', 'Select levels to pick from (empty = all)')}</p>
+            <div className="flex flex-wrap gap-1.5">
+              {CEFR_LEVELS.map((lvl) => (
+                <button
+                  key={lvl}
+                  onClick={() => toggleRandomCefr(lvl)}
+                  className={`text-xs px-2.5 py-1 rounded-full border font-mono font-semibold transition-colors ${
+                    batchRandomCefrs.includes(lvl) ? CEFR_COLORS[lvl] : 'border-slate-600 text-slate-400 hover:border-slate-500'
+                  }`}
+                >
+                  {lvl}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Grammar focus lines */}
+      <div>
+        <p className="text-xs font-medium text-slate-400 mb-1">
+          {L('Enfoque gramatical por ejercicio', 'Grammar focus per exercise')}
+          <span className="text-slate-600 ml-1">— {L('1 línea = 1 tarea', '1 line = 1 task')}</span>
+        </p>
+        <p className="text-[10px] text-slate-600 mb-2">
+          {L(
+            'Cada línea es el enfoque gramatical de un ejercicio (puede incluir comas para múltiples). Se suman a los focos globales seleccionados arriba.',
+            'Each line is the grammar focus for one exercise (commas for multiple). Added on top of the global focus chips above.',
+          )}
+        </p>
+        <div className="space-y-1.5">
+          {focusLines.map((line, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              <span className="text-[10px] text-slate-600 w-5 text-right shrink-0">{idx + 1}</span>
+              <input
+                value={line}
+                onChange={(e) => setFocusLines((prev) => prev.map((x, i) => i === idx ? e.target.value : x))}
+                placeholder={L('Ej: Dativ, Präpositionen', 'E.g.: Dativ, Präpositionen')}
+                className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+              />
+              {focusLines.length > 1 && (
+                <button
+                  onClick={() => setFocusLines((prev) => prev.filter((_, i) => i !== idx))}
+                  className="text-slate-600 hover:text-red-400 transition-colors text-xs shrink-0"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center gap-3 mt-2">
+          <button
+            onClick={() => setFocusLines((prev) => [...prev, ''])}
+            className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+          >
+            + {L('Agregar línea', 'Add line')}
+          </button>
+          {focusLines.length < 20 && (
+            <button
+              onClick={() => setFocusLines((prev) => [...prev, ...Array(Math.min(5, 20 - prev.length)).fill('')])}
+              className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              +5
+            </button>
+          )}
+          {focusLines.length > 1 && (
+            <span className="text-xs text-slate-600 ml-auto">
+              {validLines.length} {L('tarea(s) válida(s)', 'valid task(s)')}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Info: generation mode (read-only, inherited from global config) */}
+      <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl px-3 py-2.5 space-y-1.5">
+        <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">
+          {L('Configuración heredada', 'Inherited config')}
+        </p>
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          <span className="text-xs text-slate-400">
+            {L('Modo', 'Mode')}:{' '}
+            <span className="text-slate-200 font-medium">
+              {grammarMode === 'two_phase'
+                ? L('Dos fases', 'Two-phase')
+                : grammarMode === 'rolling'
+                ? L(`Iterativo (${grammarRollingSentences} or.)`, `Rolling (${grammarRollingSentences} sent.)`)
+                : L('Personalizado', 'Custom')}
+            </span>
+          </span>
+          {grammarCheckEnabled && (
+            <span className="text-xs text-slate-400">
+              ✓ {L('Revisión gramatical', 'Grammar check')}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Global toggle (batch-specific) */}
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={batchGlobal}
+          onChange={(e) => setBatchGlobal(e.target.checked)}
+          className="w-3.5 h-3.5 rounded accent-indigo-500"
+        />
+        <span className="text-xs text-slate-400">
+          🌐 {uiLang === 'de' ? 'Global (für alle zugänglich)' : uiLang === 'en' ? 'Global (shared with everyone)' : uiLang === 'fr' ? 'Global (partagé avec tous)' : 'Global (compartido con todos)'}
+        </span>
+      </label>
+
+      {/* Add batch button */}
+      <button
+        onClick={addBatchToQueue}
+        disabled={adding || !model}
+        className="w-full py-2.5 rounded-xl border border-indigo-500/50 text-indigo-300 hover:bg-indigo-500/10 text-sm font-medium transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
+      >
+        {adding ? (
+          <><span className="animate-spin text-base">⏳</span> {L('Agregando...', 'Adding...')}</>
+        ) : (
+          `+ ${L('Agregar', 'Add')} ${numTasks} ${L(`tarea${numTasks !== 1 ? 's' : ''} al lote`, `task${numTasks !== 1 ? 's' : ''} to queue`)}`
+        )}
+      </button>
+    </div>
+  )
+}
 
 const GRAMMAR_FOCUS_OPTIONS = [
   { key: 'articles', label: { es: 'Artículos y declinación', en: 'Articles & declension', de: 'Artikel & Deklination', fr: 'Articles & déclinaison' } },
@@ -105,12 +522,14 @@ function ExercisePlayer({
   savedId,
   onSave,
   onNew,
+  onNext,
 }: {
   exercise: GrammarExerciseData
   uiLang: TipLang
   savedId: number | null
   onSave: (id: number) => void
   onNew: () => void
+  onNext?: () => void
 }) {
   // Shuffle options once on mount
   const shuffledSegments = useMemo(() => shuffleSegments(exercise.segments), [exercise])
@@ -123,6 +542,9 @@ function ExercisePlayer({
     return init
   })
   const [showSolution, setShowSolution] = useState(false)
+  const navigate = useNavigate()
+  const setPrefill = useAddWordStore(s => s.setPrefill)
+
   const [showTip, setShowTip] = useState<string | null>(null)
   const [toast, setToast] = useState<RuleToast | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -132,16 +554,22 @@ function ExercisePlayer({
   const [leoResults, setLeoResults] = useState<LeoResult | null>(null)
   const [leoLoading, setLeoLoading] = useState(false)
   const [leoError, setLeoError] = useState<string | null>(null)
-  const [leoAdded, setLeoAdded] = useState<Set<string>>(new Set())
+  const [leoAdded] = useState<Set<string>>(new Set())
   // LEO inline popup (click on text word)
   const [textPopupWord, setTextPopupWord] = useState<string | null>(null)
   const [textPopupResults, setTextPopupResults] = useState<LeoResult | null>(null)
   const [textPopupLoading, setTextPopupLoading] = useState(false)
-  const [textPopupAdded, setTextPopupAdded] = useState<Set<string>>(new Set())
+  const [textPopupAdded] = useState<Set<string>>(new Set())
   const textPopupRef = useRef<HTMLDivElement | null>(null)
   const leoDropdownRef = useRef<HTMLDivElement | null>(null)
   const [saved, setSaved] = useState(savedId !== null)
   const [currentSavedId, setCurrentSavedId] = useState<number | null>(savedId)
+  // Exercise metadata (AI-suggested, user-editable before saving)
+  const [editTitle, setEditTitle] = useState(exercise.title)
+  const [editDescription, setEditDescription] = useState(exercise.description ?? '')
+  const [editCefr, setEditCefr] = useState<CefrLevel>((exercise.cefr_level as CefrLevel) ?? '')
+  const [editGlobal, setEditGlobal] = useState(false)
+  const [showMeta, setShowMeta] = useState(false)
 
   // Close LEO dropdowns on outside click
   useEffect(() => {
@@ -189,13 +617,17 @@ function ExercisePlayer({
     setSaving(true)
     try {
       const res = await grammarApi.saveExercise({
-        title: exercise.title,
+        title: editTitle || exercise.title,
         topic: exercise.topic,
         segments_json: JSON.stringify(exercise.segments),
         grammar_notes_json: JSON.stringify(exercise.grammar_notes),
         vocabulary_used_json: JSON.stringify(exercise.vocabulary_used),
+        grammar_focus_json: JSON.stringify(exercise.grammar_focus ?? []),
         score_correct: allDone ? correctCount : undefined,
         score_total: allDone ? blanks.length : undefined,
+        cefr_level: editCefr || undefined,
+        description: editDescription || undefined,
+        is_global: editGlobal,
       })
       setCurrentSavedId(res.data.id)
       onSave(res.data.id)
@@ -273,25 +705,14 @@ function ExercisePlayer({
     finally { setLeoLoading(false) }
   }
 
-  const addWordFromLeo = async (entry: LeoEntry) => {
+  const addWordFromLeo = (entry: LeoEntry) => {
     const deSide = entry.sides.find((s) => s.lang === 'de') ?? entry.sides[1]
     const esSide = entry.sides.find((s) => s.lang === 'es') ?? entry.sides[0]
     if (!deSide || !esSide) return
-    try {
-      await wordsApi.create({
-        palabra: deSide.text,
-        significado: esSide.text,
-        idioma_origen: 'de',
-        idioma_destino: 'es',
-        audio_url: deSide.audio?.[0]?.mp3_url ?? null,
-        audio_url_translation: esSide.audio?.[0]?.mp3_url ?? null,
-        audio_text: deSide.audio?.[0]?.label ?? deSide.text,
-        audio_text_translation: esSide.audio?.[0]?.label ?? esSide.text,
-        category: entry.category ?? null,
-        source: 'leo',
-      })
-      setLeoAdded((prev) => new Set(prev).add(deSide.text))
-    } catch { /* ignore */ }
+    setPrefill({ palabra: deSide.text, significado: esSide.text })
+    setLeoWord(null)
+    setLeoResults(null)
+    navigate('/words')
   }
 
   // Click on a text word in the exercise
@@ -309,22 +730,14 @@ function ExercisePlayer({
     finally { setTextPopupLoading(false) }
   }
 
-  const addFromTextPopup = async (entry: LeoEntry) => {
+  const addFromTextPopup = (entry: LeoEntry) => {
     const deSide = entry.sides.find((s) => s.lang === 'de') ?? entry.sides[1]
     const esSide = entry.sides.find((s) => s.lang === 'es') ?? entry.sides[0]
     if (!deSide || !esSide) return
-    try {
-      await wordsApi.create({
-        palabra: deSide.text, significado: esSide.text,
-        idioma_origen: 'de', idioma_destino: 'es',
-        audio_url: deSide.audio?.[0]?.mp3_url ?? null,
-        audio_url_translation: esSide.audio?.[0]?.mp3_url ?? null,
-        audio_text: deSide.audio?.[0]?.label ?? deSide.text,
-        audio_text_translation: esSide.audio?.[0]?.label ?? esSide.text,
-        category: entry.category ?? null, source: 'leo',
-      })
-      setTextPopupAdded((prev) => new Set(prev).add(deSide.text))
-    } catch { /* ignore */ }
+    setPrefill({ palabra: deSide.text, significado: esSide.text })
+    setTextPopupWord(null)
+    setTextPopupResults(null)
+    navigate('/words')
   }
 
   return (
@@ -351,6 +764,16 @@ function ExercisePlayer({
         <span className="text-xs text-slate-400">{answeredCount}/{blanks.length}</span>
       </div>
 
+      {/* Topic + CEFR level */}
+      {(exercise.topic || exercise.cefr_level) && (
+        <div className="flex items-center gap-2 flex-wrap -mt-2">
+          {exercise.cefr_level && <CefrBadge level={exercise.cefr_level} />}
+          {exercise.topic && (
+            <span className="text-xs text-slate-500 italic truncate">{exercise.topic}</span>
+          )}
+        </div>
+      )}
+
       {/* Progress bar */}
       <div className="bg-slate-700 rounded-full h-1.5">
         <div
@@ -359,47 +782,48 @@ function ExercisePlayer({
         />
       </div>
 
-      {/* Exercise — one sentence per line */}
-      <div className="card space-y-5 relative">
-        {/* Text word LEO popup */}
-        {textPopupWord && (
-          <div
-            ref={textPopupRef}
-            className="absolute z-40 top-0 left-0 right-0 mx-auto max-w-xs bg-slate-800 border border-slate-600 rounded-xl shadow-xl overflow-hidden"
-          >
-            <div className="px-3 py-2 border-b border-slate-700 flex items-center justify-between">
-              <span className="text-xs text-slate-400">LEO · <span className="text-yellow-300 font-medium">{textPopupWord}</span></span>
-              <button onClick={() => { setTextPopupWord(null); setTextPopupResults(null) }} className="text-slate-500 hover:text-slate-300 text-xs">✕</button>
-            </div>
-            {textPopupLoading && <p className="text-xs text-slate-400 px-3 py-3">Buscando...</p>}
-            {!textPopupLoading && !textPopupResults && <p className="text-xs text-slate-500 px-3 py-3">Sin resultados</p>}
-            {textPopupResults && (
-              <div className="divide-y divide-slate-700/50 max-h-48 overflow-y-auto">
-                {textPopupResults.entries.map((entry, i) => {
-                  const deSide = entry.sides.find((s) => s.lang === 'de') ?? entry.sides[1]
-                  const esSide = entry.sides.find((s) => s.lang === 'es') ?? entry.sides[0]
-                  if (!deSide || !esSide) return null
-                  const added = textPopupAdded.has(deSide.text)
-                  return (
-                    <div key={entry.aiid || i} className="px-3 py-2 flex items-center gap-2 hover:bg-slate-700/50 transition-colors">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-100 truncate">{deSide.text}</p>
-                        <p className="text-xs text-slate-400 truncate">{esSide.text}</p>
-                      </div>
-                      <button
-                        onClick={() => addFromTextPopup(entry)}
-                        disabled={added}
-                        className={`text-xs px-2 py-0.5 rounded shrink-0 transition-colors ${added ? 'bg-green-900/40 text-green-400 cursor-default' : 'bg-slate-700 hover:bg-green-700 text-slate-300 hover:text-white'}`}
-                      >
-                        {added ? '✓' : '+'}
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+      {/* Text word LEO popup — fixed centered on screen */}
+      {textPopupWord && (
+        <div
+          ref={textPopupRef}
+          className="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 bg-slate-800 border border-slate-600 rounded-xl shadow-2xl overflow-hidden"
+        >
+          <div className="px-3 py-2 border-b border-slate-700 flex items-center justify-between">
+            <span className="text-xs text-slate-400">LEO · <span className="text-yellow-300 font-medium">{textPopupWord}</span></span>
+            <button onClick={() => { setTextPopupWord(null); setTextPopupResults(null) }} className="text-slate-500 hover:text-slate-300 text-xs">✕</button>
           </div>
-        )}
+          {textPopupLoading && <p className="text-xs text-slate-400 px-3 py-3">Buscando...</p>}
+          {!textPopupLoading && !textPopupResults && <p className="text-xs text-slate-500 px-3 py-3">Sin resultados</p>}
+          {textPopupResults && (
+            <div className="divide-y divide-slate-700/50 max-h-48 overflow-y-auto">
+              {textPopupResults.entries.map((entry, i) => {
+                const deSide = entry.sides.find((s) => s.lang === 'de') ?? entry.sides[1]
+                const esSide = entry.sides.find((s) => s.lang === 'es') ?? entry.sides[0]
+                if (!deSide || !esSide) return null
+                const added = textPopupAdded.has(deSide.text)
+                return (
+                  <div key={entry.aiid || i} className="px-3 py-2 flex items-center gap-2 hover:bg-slate-700/50 transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-100 truncate">{deSide.text}</p>
+                      <p className="text-xs text-slate-400 truncate">{esSide.text}</p>
+                    </div>
+                    <button
+                      onClick={() => addFromTextPopup(entry)}
+                      disabled={added}
+                      className={`text-xs px-2 py-0.5 rounded shrink-0 transition-colors ${added ? 'bg-green-900/40 text-green-400 cursor-default' : 'bg-slate-700 hover:bg-green-700 text-slate-300 hover:text-white'}`}
+                    >
+                      {added ? '✓' : '+'}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Exercise — one sentence per line */}
+      <div className="card space-y-5">
 
         {sentences.map((group, gi) => (
           <div key={gi}>
@@ -580,6 +1004,87 @@ function ExercisePlayer({
             {uiLang === 'de' ? 'Lösung anzeigen' : uiLang === 'en' ? 'Show solution' : uiLang === 'fr' ? 'Voir la solution' : 'Ver solución'}
           </button>
         )}
+
+        {/* Metadata panel (editable before saving) */}
+        {!saved && (
+          <div className="border border-slate-700/60 rounded-xl overflow-hidden">
+            <button
+              onClick={() => setShowMeta(v => !v)}
+              className="w-full flex items-center justify-between px-3 py-2 text-xs text-slate-400 hover:text-slate-300 transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                {editCefr && <CefrBadge level={editCefr} />}
+                {editGlobal && <span className="text-indigo-400">🌐</span>}
+                {uiLang === 'de' ? 'Übungsdetails' : uiLang === 'en' ? 'Exercise details' : uiLang === 'fr' ? 'Détails de l\'exercice' : 'Detalles del ejercicio'}
+              </span>
+              <span>{showMeta ? '▲' : '▼'}</span>
+            </button>
+            {showMeta && (
+              <div className="px-3 pb-3 space-y-3 border-t border-slate-700/60">
+                {/* Title */}
+                <div>
+                  <label className="text-[10px] text-slate-500 uppercase tracking-wide block mb-1">
+                    {uiLang === 'de' ? 'Titel' : uiLang === 'en' ? 'Title' : uiLang === 'fr' ? 'Titre' : 'Título'}
+                  </label>
+                  <input
+                    value={editTitle}
+                    onChange={e => setEditTitle(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                {/* Description */}
+                <div>
+                  <label className="text-[10px] text-slate-500 uppercase tracking-wide block mb-1">
+                    {uiLang === 'de' ? 'Beschreibung' : uiLang === 'en' ? 'Description' : uiLang === 'fr' ? 'Description' : 'Descripción'}
+                  </label>
+                  <textarea
+                    value={editDescription}
+                    onChange={e => setEditDescription(e.target.value)}
+                    rows={2}
+                    className="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-blue-500 resize-none"
+                  />
+                </div>
+                {/* CEFR level */}
+                <div>
+                  <label className="text-[10px] text-slate-500 uppercase tracking-wide block mb-1">
+                    {uiLang === 'de' ? 'CEFR-Niveau' : uiLang === 'en' ? 'CEFR level' : uiLang === 'fr' ? 'Niveau CECRL' : 'Nivel CEFR'}
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {CEFR_LEVELS.map(lvl => (
+                      <button
+                        key={lvl}
+                        onClick={() => setEditCefr(editCefr === lvl ? '' : lvl)}
+                        className={`text-xs px-2.5 py-1 rounded-lg border font-medium transition-colors ${
+                          editCefr === lvl
+                            ? CEFR_COLORS[lvl]
+                            : 'border-slate-600 text-slate-400 hover:border-slate-500'
+                        }`}
+                      >
+                        {lvl}
+                      </button>
+                    ))}
+                    {editCefr && (
+                      <button onClick={() => setEditCefr('')} className="text-xs text-slate-500 hover:text-slate-300 px-1">✕</button>
+                    )}
+                  </div>
+                </div>
+                {/* Global toggle */}
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editGlobal}
+                    onChange={e => setEditGlobal(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded accent-indigo-500"
+                  />
+                  <span className="text-xs text-slate-400">
+                    🌐 {uiLang === 'de' ? 'Global (für alle sichtbar)' : uiLang === 'en' ? 'Global (visible to everyone)' : uiLang === 'fr' ? 'Global (visible pour tous)' : 'Global (visible para todos)'}
+                  </span>
+                </label>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex gap-3">
           {(allDone || showSolution) && (
             <button
@@ -600,8 +1105,8 @@ function ExercisePlayer({
           >
             {saving ? '...' : saved ? `✓ ${uiLang === 'de' ? 'Gespeichert' : uiLang === 'en' ? 'Saved' : uiLang === 'fr' ? 'Enregistré' : 'Guardado'}` : uiLang === 'de' ? 'Speichern' : uiLang === 'en' ? 'Save exercise' : uiLang === 'fr' ? 'Enregistrer' : 'Guardar'}
           </button>
-          <button onClick={onNew} className="flex-1 btn-primary py-2.5 text-sm">
-            {uiLang === 'de' ? 'Neu generieren' : uiLang === 'en' ? 'New exercise' : uiLang === 'fr' ? 'Nouvel exercice' : 'Nuevo ejercicio'}
+          <button onClick={onNext ?? onNew} className="flex-1 btn-primary py-2.5 text-sm">
+            {uiLang === 'de' ? 'Nächste Übung →' : uiLang === 'en' ? 'Next exercise →' : uiLang === 'fr' ? 'Exercice suivant →' : 'Próximo ejercicio →'}
           </button>
         </div>
       </div>
@@ -717,6 +1222,89 @@ function ProseChecker({
   )
 }
 
+// ── Exercise Card ─────────────────────────────────────────────────────────────
+
+function ExerciseCard({
+  ex,
+  onLoad,
+  onDelete,
+  onAdopt,
+  onFocusTag,
+  uiLang,
+  currentUserId,
+}: {
+  ex: SavedGrammarExercise
+  onLoad: (ex: SavedGrammarExercise) => void
+  onDelete?: (id: number) => void
+  onAdopt?: (id: number) => void
+  onFocusTag?: (tag: string) => void
+  uiLang: TipLang
+  currentUserId?: number
+}) {
+  const pct = ex.score_total ? Math.round(((ex.score_correct ?? 0) / ex.score_total) * 100) : null
+  const isOwn = ex.user_id === currentUserId
+
+  return (
+    <div
+      className="card flex items-start justify-between gap-3 cursor-pointer hover:border-blue-500/40 transition-colors"
+      onClick={() => onLoad(ex)}
+    >
+      <div className="flex-1 min-w-0 space-y-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          {ex.cefr_level && <CefrBadge level={ex.cefr_level} />}
+          {ex.is_global && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded border border-indigo-500/40 bg-indigo-500/10 text-indigo-300">🌐</span>
+          )}
+          <p className="font-medium text-white text-sm truncate">{ex.title}</p>
+        </div>
+        {ex.description && (
+          <p className="text-xs text-slate-400 line-clamp-2">{ex.description}</p>
+        )}
+        {!ex.description && (
+          <p className="text-xs text-slate-500 truncate">{ex.topic}</p>
+        )}
+        {ex.grammar_focus && ex.grammar_focus.length > 0 && (
+          <div className="flex flex-wrap gap-1 pt-0.5" onClick={(e) => e.stopPropagation()}>
+            {ex.grammar_focus.map((tag) => (
+              <button
+                key={tag}
+                onClick={() => onFocusTag?.(tag)}
+                className="text-[10px] px-1.5 py-0.5 rounded border border-slate-700 text-slate-500 hover:border-blue-500/50 hover:text-blue-400 transition-colors"
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        {pct !== null && (
+          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${pct >= 80 ? 'bg-green-500/20 text-green-300' : pct >= 50 ? 'bg-yellow-500/20 text-yellow-300' : 'bg-red-500/20 text-red-300'}`}>
+            {pct}%
+          </span>
+        )}
+        {onAdopt && !isOwn && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onAdopt(ex.id) }}
+            className="text-xs px-2 py-0.5 rounded bg-indigo-700/40 hover:bg-indigo-600/50 text-indigo-300 transition-colors"
+            title={uiLang === 'en' ? 'Add to my exercises' : 'Agregar a mis ejercicios'}
+          >
+            +
+          </button>
+        )}
+        {onDelete && isOwn && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(ex.id) }}
+            className="text-slate-600 hover:text-red-400 transition-colors text-sm"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Saved Exercises List ──────────────────────────────────────────────────────
 
 function SavedList({
@@ -724,50 +1312,374 @@ function SavedList({
   onLoad,
   onDelete,
   uiLang,
+  currentUserId,
+  filter,
+  onFilterChange,
 }: {
   exercises: SavedGrammarExercise[]
   onLoad: (ex: SavedGrammarExercise) => void
   onDelete: (id: number) => void
   uiLang: TipLang
+  currentUserId?: number
+  filter: 'all' | 'private' | 'global'
+  onFilterChange: (f: 'all' | 'private' | 'global') => void
 }) {
-  if (exercises.length === 0) {
-    return (
-      <p className="text-center text-slate-500 text-sm py-8">
-        {uiLang === 'de' ? 'Noch keine gespeicherten Übungen.' : uiLang === 'en' ? 'No saved exercises yet.' : uiLang === 'fr' ? 'Aucun exercice sauvegardé.' : 'No hay ejercicios guardados.'}
-      </p>
-    )
-  }
+  const L = (es: string, en: string, de: string, fr: string) =>
+    uiLang === 'de' ? de : uiLang === 'en' ? en : uiLang === 'fr' ? fr : es
+
+  const [cefrFilter, setCefrFilter] = useState<CefrLevel>('')
+  const [focusFilter, setFocusFilter] = useState('')
+
+  const filterLabels: { key: 'all' | 'private' | 'global'; label: string }[] = [
+    { key: 'all', label: L('Todos', 'All', 'Alle', 'Tous') },
+    { key: 'private', label: L('Privados', 'Private', 'Privat', 'Privés') },
+    { key: 'global', label: L('Globales', 'Global', 'Global', 'Globaux') },
+  ]
+
+  // Collect all unique grammar_focus tags across exercises
+  const allFocusTags = useMemo(() => {
+    const set = new Set<string>()
+    exercises.forEach(ex => (ex.grammar_focus ?? []).forEach(t => set.add(t)))
+    return Array.from(set).sort()
+  }, [exercises])
+
+  const visible = exercises.filter(ex => {
+    if (cefrFilter && ex.cefr_level !== cefrFilter) return false
+    if (focusFilter && !(ex.grammar_focus ?? []).includes(focusFilter)) return false
+    return true
+  })
+
+  const handleFocusTag = (tag: string) =>
+    setFocusFilter(prev => prev === tag ? '' : tag)
 
   return (
     <div className="space-y-3">
-      {exercises.map((ex) => {
-        const pct = ex.score_total ? Math.round(((ex.score_correct ?? 0) / ex.score_total) * 100) : null
-        return (
-          <div
-            key={ex.id}
-            className="card flex items-center justify-between gap-3 cursor-pointer hover:border-blue-500/40 transition-colors"
-            onClick={() => onLoad(ex)}
+      {/* Visibility filter pills */}
+      <div className="flex gap-1.5 flex-wrap">
+        {filterLabels.map(f => (
+          <button
+            key={f.key}
+            onClick={() => onFilterChange(f.key)}
+            className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+              filter === f.key
+                ? 'border-blue-500 bg-blue-500/20 text-blue-200'
+                : 'border-slate-600 text-slate-400 hover:border-slate-500'
+            }`}
           >
-            <div className="flex-1 min-w-0">
-              <p className="font-medium text-white text-sm truncate">{ex.title}</p>
-              <p className="text-xs text-slate-400 truncate">{ex.topic}</p>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {pct !== null && (
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${pct >= 80 ? 'bg-green-500/20 text-green-300' : pct >= 50 ? 'bg-yellow-500/20 text-yellow-300' : 'bg-red-500/20 text-red-300'}`}>
-                  {pct}%
-                </span>
-              )}
-              <button
-                onClick={(e) => { e.stopPropagation(); onDelete(ex.id) }}
-                className="text-slate-600 hover:text-red-400 transition-colors text-sm"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-        )
-      })}
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* CEFR filter chips */}
+      <div className="flex gap-1.5 flex-wrap">
+        {CEFR_LEVELS.map(lvl => (
+          <button
+            key={lvl}
+            onClick={() => setCefrFilter(cefrFilter === lvl ? '' : lvl)}
+            className={`text-xs px-2.5 py-0.5 rounded-full border font-mono font-semibold transition-colors ${
+              cefrFilter === lvl
+                ? CEFR_COLORS[lvl]
+                : 'border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-400'
+            }`}
+          >
+            {lvl}
+          </button>
+        ))}
+        {cefrFilter && (
+          <button
+            onClick={() => setCefrFilter('')}
+            className="text-xs px-2 py-0.5 text-slate-600 hover:text-slate-400 transition-colors"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+
+      {/* Grammar focus filter — listbox + active tag chip */}
+      {allFocusTags.length > 0 && (
+        <div className="flex items-center gap-2">
+          <select
+            value={focusFilter}
+            onChange={e => setFocusFilter(e.target.value)}
+            className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-blue-500"
+          >
+            <option value="">
+              {L('— Enfoque gramatical —', '— Grammar focus —', '— Grammatikschwerpunkt —', '— Point de grammaire —')}
+            </option>
+            {allFocusTags.map(tag => (
+              <option key={tag} value={tag}>{tag}</option>
+            ))}
+          </select>
+          {focusFilter && (
+            <button
+              onClick={() => setFocusFilter('')}
+              className="text-slate-600 hover:text-red-400 transition-colors text-xs shrink-0"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Active focus filter badge */}
+      {focusFilter && (
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-slate-500">{L('Filtro activo', 'Active filter', 'Aktiver Filter', 'Filtre actif')}:</span>
+          <span className="text-[10px] px-2 py-0.5 rounded border border-blue-500/40 bg-blue-500/10 text-blue-300">
+            {focusFilter}
+          </span>
+        </div>
+      )}
+
+      {visible.length === 0 ? (
+        <p className="text-center text-slate-500 text-sm py-8">
+          {L('No hay ejercicios guardados.', 'No saved exercises yet.', 'Noch keine gespeicherten Übungen.', 'Aucun exercice sauvegardé.')}
+        </p>
+      ) : (
+        visible.map(ex => (
+          <ExerciseCard
+            key={ex.id}
+            ex={ex}
+            onLoad={onLoad}
+            onDelete={onDelete}
+            onFocusTag={handleFocusTag}
+            uiLang={uiLang}
+            currentUserId={currentUserId}
+          />
+        ))
+      )}
+    </div>
+  )
+}
+
+// ── Explore Panel ─────────────────────────────────────────────────────────────
+
+function ExplorePanel({
+  uiLang,
+  currentUserId,
+  onLoad,
+  onAdopt,
+}: {
+  uiLang: TipLang
+  currentUserId?: number
+  onLoad: (ex: SavedGrammarExercise) => void
+  onAdopt: (id: number) => void
+}) {
+  const [exercises, setExercises] = useState<SavedGrammarExercise[]>([])
+  const [loading, setLoading] = useState(false)
+  const [search, setSearch] = useState('')
+  const [cefrFilter, setCefrFilter] = useState<CefrLevel | ''>('')
+
+  const L = (es: string, en: string, de: string, fr: string) =>
+    uiLang === 'de' ? de : uiLang === 'en' ? en : uiLang === 'fr' ? fr : es
+
+  const fetchExercises = async () => {
+    setLoading(true)
+    try {
+      const res = await grammarApi.exploreExercises({
+        search: search || undefined,
+        cefr_level: cefrFilter || undefined,
+      })
+      setExercises(res.data)
+    } catch { /* ignore */ } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { fetchExercises() }, [])
+
+  return (
+    <div className="space-y-4">
+      {/* Search + CEFR filter */}
+      <div className="space-y-2">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') fetchExercises() }}
+            placeholder={L('Buscar ejercicios globales...', 'Search global exercises...', 'Globale Übungen suchen...', 'Rechercher des exercices globaux...')}
+            className="flex-1 input text-sm"
+          />
+          <button
+            onClick={fetchExercises}
+            disabled={loading}
+            className="btn-primary px-3 py-2 text-sm disabled:opacity-50"
+          >
+            {loading ? '⏳' : '🔍'}
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {CEFR_LEVELS.map(lvl => (
+            <button
+              key={lvl}
+              onClick={() => { setCefrFilter(cefrFilter === lvl ? '' : lvl) }}
+              className={`text-xs px-2.5 py-1 rounded-lg border font-medium transition-colors ${
+                cefrFilter === lvl ? CEFR_COLORS[lvl] : 'border-slate-600 text-slate-400 hover:border-slate-500'
+              }`}
+            >
+              {lvl}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Results */}
+      {exercises.length === 0 && !loading && (
+        <p className="text-center text-slate-500 text-sm py-8">
+          {L('No hay ejercicios globales aún.', 'No global exercises yet.', 'Noch keine globalen Übungen.', 'Aucun exercice global.')}
+        </p>
+      )}
+      <div className="space-y-3">
+        {exercises.map(ex => (
+          <ExerciseCard
+            key={ex.id}
+            ex={ex}
+            onLoad={onLoad}
+            onAdopt={onAdopt}
+            uiLang={uiLang}
+            currentUserId={currentUserId}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Queue Panel ───────────────────────────────────────────────────────────────
+
+const STATUS_LABELS: Record<string, Record<string, string>> = {
+  pending:       { es: 'Pendiente',    en: 'Pending',    de: 'Wartend',     fr: 'En attente' },
+  generating:    { es: 'Generando…',   en: 'Generating…',de: 'Generiert…',  fr: 'Génération…' },
+  grammar_check: { es: 'Revisando…',   en: 'Checking…',  de: 'Prüfen…',     fr: 'Vérification…' },
+  ready:         { es: 'Listo',        en: 'Ready',      de: 'Fertig',      fr: 'Prêt' },
+  error:         { es: 'Error',        en: 'Error',      de: 'Fehler',      fr: 'Erreur' },
+  grammar_error: { es: 'Error gram.',  en: 'Grammar err',de: 'Gram. Fehler',fr: 'Err. gram.' },
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  pending:       'text-slate-400 bg-slate-700/50',
+  generating:    'text-blue-300 bg-blue-500/20 animate-pulse',
+  grammar_check: 'text-yellow-300 bg-yellow-500/20 animate-pulse',
+  ready:         'text-green-300 bg-green-500/20',
+  error:         'text-red-300 bg-red-500/20',
+  grammar_error: 'text-orange-300 bg-orange-500/20',
+}
+
+function QueuePanel({
+  items,
+  workerRunning,
+  uiLang,
+  onResume,
+  onStop,
+  onDelete,
+  onLoadReady,
+}: {
+  items: GrammarQueueItem[]
+  workerRunning: boolean
+  uiLang: TipLang
+  onResume: () => void
+  onStop: () => void
+  onDelete: (id: number) => void
+  onLoadReady: (exerciseId: number) => void
+}) {
+  const L = (es: string, en: string, de: string, fr: string) =>
+    uiLang === 'de' ? de : uiLang === 'en' ? en : uiLang === 'fr' ? fr : es
+
+  return (
+    <div className="space-y-4">
+      {/* Worker controls */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-slate-400">
+          {workerRunning
+            ? L('Trabajador activo', 'Worker active', 'Worker aktiv', 'Travailleur actif')
+            : L('Trabajador detenido', 'Worker stopped', 'Worker gestoppt', 'Travailleur arrêté')}
+          {' '}
+          <span className={`inline-block w-2 h-2 rounded-full ${workerRunning ? 'bg-green-400 animate-pulse' : 'bg-slate-600'}`} />
+        </span>
+        <div className="flex gap-2">
+          {!workerRunning ? (
+            <button
+              onClick={onResume}
+              className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+            >
+              {L('▶ Reanudar', '▶ Resume', '▶ Fortsetzen', '▶ Reprendre')}
+            </button>
+          ) : (
+            <button
+              onClick={onStop}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-600 text-slate-300 hover:border-red-500/60 hover:text-red-300 transition-colors"
+            >
+              {L('⏹ Detener', '⏹ Stop', '⏹ Stoppen', '⏹ Arrêter')}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Queue items */}
+      {items.length === 0 ? (
+        <p className="text-center text-slate-500 text-sm py-8">
+          {L('No hay ejercicios en cola.', 'No exercises in queue.', 'Keine Übungen in der Warteschlange.', 'Aucun exercice en file.')}
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item) => {
+            const params = item.params as Record<string, unknown>
+            const statusLabel = STATUS_LABELS[item.status]?.[uiLang] ?? item.status
+            const statusColor = STATUS_COLORS[item.status] ?? 'text-slate-400'
+            const canDelete = !['generating', 'grammar_check'].includes(item.status)
+            const isReady = item.status === 'ready' || item.status === 'grammar_error'
+
+            return (
+              <div key={item.id} className="card flex items-center gap-3 py-2.5">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-white font-medium truncate">
+                    {String(params.topic ?? '—')}
+                  </p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${statusColor}`}>
+                      {statusLabel}
+                    </span>
+                    {!!params.cefr_level && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-mono font-semibold ${CEFR_COLORS[String(params.cefr_level)] ?? 'border-slate-600 text-slate-400'}`}>
+                        {String(params.cefr_level)}
+                      </span>
+                    )}
+                    {item.grammar_check_enabled && (
+                      <span className="text-[10px] text-slate-500">✓ {L('gram.', 'gram.', 'gram.', 'gram.')}</span>
+                    )}
+                    {item.grammar_check_feedback && item.status === 'grammar_error' && (
+                      <span className="text-[10px] text-orange-400" title={item.grammar_check_feedback}>⚠</span>
+                    )}
+                  </div>
+                  {item.error_message && (
+                    <p className="text-[10px] text-red-400 mt-0.5 truncate">{item.error_message}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {isReady && item.exercise_id && (
+                    <button
+                      onClick={() => onLoadReady(item.exercise_id!)}
+                      className="text-xs px-2.5 py-1 rounded-lg bg-green-700/40 hover:bg-green-600/50 text-green-300 transition-colors"
+                    >
+                      {L('Resolver', 'Solve', 'Lösen', 'Résoudre')}
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      onClick={() => onDelete(item.id)}
+                      className="text-slate-600 hover:text-red-400 transition-colors text-sm"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -784,11 +1696,30 @@ export default function GrammarWorkshop() {
   const { uiLanguage } = useUserProfileStore()
   const uiLang = (uiLanguage as TipLang) ?? 'es'
 
+  // Grammar queue state
+  const {
+    items: queueItems,
+    workerRunning,
+    grammarCheckEnabled,
+    setGrammarCheckEnabled,
+    fetchQueue,
+    resumeWorker,
+    stopWorker,
+    deleteItem: deleteQueueItem,
+  } = useGrammarQueueStore()
+
+  // Connect WS for real-time queue updates
+  useGrammarQueueWS(true)
+
   const [panel, setPanel] = useState<Panel>('generate')
+  const [toasts, setToasts] = useState<Toast[]>([])
+  const [showBatch, setShowBatch] = useState(false)
   const [topic, setTopic] = useState('')
   const [customInstructions, setCustomInstructions] = useState('')
   const [showCustom, setShowCustom] = useState(false)
   const [grammarFocus, setGrammarFocus] = useState<string[]>(['articles', 'prepositions', 'word_order'])
+  const [generateCefr, setGenerateCefr] = useState<CefrLevel>('')
+  const [generateGlobal, setGenerateGlobal] = useState(false)
   const [customFocusList, setCustomFocusList] = useState<string[]>([])
   const [customFocusInput, setCustomFocusInput] = useState('')
   const [editingCustomFocus, setEditingCustomFocus] = useState<number | null>(null)
@@ -805,10 +1736,18 @@ export default function GrammarWorkshop() {
   const [currentSavedId, setCurrentSavedId] = useState<number | null>(null)
   const [savedExercises, setSavedExercises] = useState<SavedGrammarExercise[]>([])
   const [loadingSaved, setLoadingSaved] = useState(false)
+  const [savedFilter, setSavedFilter] = useState<'all' | 'private' | 'global'>('all')
+  const [currentUserId, setCurrentUserId] = useState<number | undefined>()
 
   const model = ollamaTranslationModel
   const timeout = ollamaTimeout
   const noModel = !model
+
+  const showToast = useCallback((msg: string, type: 'ok' | 'err' = 'ok') => {
+    const id = ++_toastId
+    setToasts((prev) => [...prev, { id, msg, type }])
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500)
+  }, [])
 
   const labelFor = (option: { label: Record<string, string> }) =>
     option.label[uiLang] ?? option.label.en
@@ -850,8 +1789,12 @@ export default function GrammarWorkshop() {
         prose_override: proseOverride,
         double_correct: grammarDoubleCorrect,
         max_blanks: grammarMaxBlanks,
+        cefr_level: generateCefr || undefined,
       })
-      setExercise(res.data)
+      setExercise({
+        ...res.data,
+        grammar_focus: customFocusList.length > 0 ? [...grammarFocus, ...customFocusList] : grammarFocus,
+      })
       setLastProse(resolveSegments(res.data.segments))
       setPanel('solve')
     } catch (err: unknown) {
@@ -894,14 +1837,74 @@ export default function GrammarWorkshop() {
     }
   }
 
-  const loadSaved = async () => {
+  const loadSaved = async (filter: 'all' | 'private' | 'global' = savedFilter) => {
     setLoadingSaved(true)
     try {
-      const res = await grammarApi.listExercises()
+      const res = await grammarApi.listExercises(filter)
       setSavedExercises(res.data)
+      if (res.data.length > 0 && currentUserId === undefined) {
+        // Infer current user id from first owned exercise
+        const own = res.data.find(e => e.user_id !== undefined)
+        if (own) setCurrentUserId(own.user_id)
+      }
     } catch { /* ignore */ } finally {
       setLoadingSaved(false)
     }
+  }
+
+  const loadNextUnsolved = async () => {
+    // Ensure saved list is fresh
+    let list = savedExercises
+    if (list.length === 0) {
+      try {
+        const res = await grammarApi.listExercises('all')
+        list = res.data
+        setSavedExercises(list)
+      } catch { /* ignore */ }
+    }
+    // Pick unsolved (score_total null or 0) that isn't the current exercise
+    const candidates = list.filter(
+      ex => (!ex.score_total || ex.score_total === 0) && ex.id !== currentSavedId
+    )
+    const pick = candidates[0] ?? null
+    if (!pick) {
+      setPanel('generate')
+      return
+    }
+    try {
+      const res = await grammarApi.getExercise(pick.id)
+      const full = res.data
+      setExercise({
+        title: full.title,
+        topic: full.topic,
+        segments: full.segments ?? [],
+        grammar_notes: full.grammar_notes ?? [],
+        vocabulary_used: full.vocabulary_used ?? [],
+        description: full.description ?? '',
+        cefr_level: full.cefr_level,
+        grammar_focus: full.grammar_focus ?? [],
+      })
+      setCurrentSavedId(pick.id)
+    } catch { setPanel('generate') }
+  }
+
+  const adoptExercise = async (id: number) => {
+    try {
+      const res = await grammarApi.adoptExercise(id)
+      const full = await grammarApi.getExercise(res.data.id)
+      setExercise({
+        title: full.data.title,
+        topic: full.data.topic,
+        segments: full.data.segments ?? [],
+        grammar_notes: full.data.grammar_notes ?? [],
+        vocabulary_used: full.data.vocabulary_used ?? [],
+        description: full.data.description ?? '',
+        cefr_level: full.data.cefr_level,
+        grammar_focus: full.data.grammar_focus ?? [],
+      })
+      setCurrentSavedId(res.data.id)
+      setPanel('solve')
+    } catch { /* ignore */ }
   }
 
   const deleteExercise = async (id: number) => {
@@ -913,17 +1916,18 @@ export default function GrammarWorkshop() {
 
   const loadExerciseFromSaved = async (ex: SavedGrammarExercise) => {
     try {
-      // listExercises returns summary without segments — fetch full exercise
       const res = await grammarApi.getExercise(ex.id)
       const full = res.data
-      const parsed: GrammarExerciseData = {
+      setExercise({
         title: full.title,
         topic: full.topic,
         segments: full.segments ?? [],
         grammar_notes: full.grammar_notes ?? [],
         vocabulary_used: full.vocabulary_used ?? [],
-      }
-      setExercise(parsed)
+        description: full.description ?? '',
+        cefr_level: full.cefr_level,
+        grammar_focus: full.grammar_focus ?? [],
+      })
       setCurrentSavedId(ex.id)
       setPanel('solve')
     } catch {
@@ -932,13 +1936,57 @@ export default function GrammarWorkshop() {
   }
 
   useEffect(() => {
-    if (panel === 'saved') loadSaved()
-  }, [panel])
+    if (panel === 'saved') loadSaved(savedFilter)
+  }, [panel, savedFilter])
 
-  const tabs: { key: Panel; label: string }[] = [
+  // Initial queue fetch
+  useEffect(() => { fetchQueue() }, [])
+
+  const addToQueue = async () => {
+    if (!model || !topic.trim()) return
+    try {
+      const effectiveMode = grammarMode === 'custom' && !customInstructions.trim() ? 'two_phase' : grammarMode
+      const prompt = grammarMode === 'custom' ? (customInstructions.trim() || ollamaPromptGrammar || undefined) : undefined
+      await grammarQueueApi.add({
+        topic: topic.trim(),
+        interface_lang: uiLang,
+        grammar_focus: customFocusList.length > 0 ? [...grammarFocus, ...customFocusList] : grammarFocus,
+        vocabulary: [],
+        model,
+        timeout,
+        custom_prompt: prompt,
+        temperature: grammarTemperature ?? undefined,
+        num_predict: grammarNumPredict ?? undefined,
+        top_p: grammarTopP ?? undefined,
+        mode: effectiveMode,
+        rolling_sentences: grammarRollingSentences,
+        double_correct: grammarDoubleCorrect,
+        max_blanks: grammarMaxBlanks,
+        grammar_check_enabled: grammarCheckEnabled,
+        cefr_level: generateCefr || undefined,
+        is_global: generateGlobal || undefined,
+      })
+      await fetchQueue()
+      if (!workerRunning) await resumeWorker()
+      showToast(
+        uiLang === 'en' ? 'Exercise added to queue' :
+        uiLang === 'de' ? 'Übung zur Warteschlange hinzugefügt' :
+        uiLang === 'fr' ? 'Exercice ajouté à la file' :
+        'Ejercicio agregado a la cola',
+      )
+    } catch {
+      showToast(uiLang === 'en' ? 'Error adding to queue' : 'Error al agregar a la cola', 'err')
+    }
+  }
+
+  const pendingCount = queueItems.filter((i) => ['pending', 'generating', 'grammar_check'].includes(i.status)).length
+
+  const tabs: { key: Panel; label: string; badge?: number }[] = [
     { key: 'generate', label: uiLang === 'de' ? 'Generieren' : uiLang === 'en' ? 'Generate' : uiLang === 'fr' ? 'Générer' : 'Generar' },
     { key: 'solve', label: uiLang === 'de' ? 'Lösen' : uiLang === 'en' ? 'Solve' : uiLang === 'fr' ? 'Résoudre' : 'Resolver' },
-    { key: 'saved', label: uiLang === 'de' ? 'Gespeichert' : uiLang === 'en' ? 'Saved' : uiLang === 'fr' ? 'Sauvegardés' : 'Guardados' },
+    { key: 'queue', label: uiLang === 'de' ? 'Cola' : uiLang === 'en' ? 'Queue' : uiLang === 'fr' ? 'File' : 'Cola', badge: pendingCount > 0 ? pendingCount : undefined },
+    { key: 'saved', label: uiLang === 'de' ? 'Meine' : uiLang === 'en' ? 'Mine' : uiLang === 'fr' ? 'Mes' : 'Míos', badge: savedExercises.length > 0 ? savedExercises.length : undefined },
+    { key: 'explore', label: uiLang === 'de' ? 'Erkunden' : uiLang === 'en' ? 'Explore' : uiLang === 'fr' ? 'Explorer' : 'Explorar' },
   ]
 
   // Mode labels — Rolling first (default)
@@ -962,6 +2010,7 @@ export default function GrammarWorkshop() {
 
   return (
     <div className="p-4 pt-6 max-w-lg mx-auto min-h-screen">
+      <ToastContainer toasts={toasts} onRemove={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
       {/* Header */}
       <div className="mb-5">
         <h1 className="text-xl font-bold text-white">
@@ -991,6 +2040,9 @@ export default function GrammarWorkshop() {
             }`}
           >
             {tab.label}
+            {tab.badge !== undefined && (
+              <sup className="ml-1 text-[9px] font-bold text-blue-400">{tab.badge}</sup>
+            )}
           </button>
         ))}
       </div>
@@ -1085,6 +2137,49 @@ export default function GrammarWorkshop() {
               </div>
             )}
           </div>
+
+          {/* CEFR level selector */}
+          <div>
+            <p className="text-xs font-medium text-slate-400 mb-2">
+              {uiLang === 'de' ? 'CEFR-Niveau' : uiLang === 'en' ? 'CEFR level' : uiLang === 'fr' ? 'Niveau CECRL' : 'Nivel CEFR'}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {CEFR_LEVELS.map(lvl => (
+                <button
+                  key={lvl}
+                  onClick={() => setGenerateCefr(generateCefr === lvl ? '' : lvl)}
+                  className={`text-xs px-3 py-1 rounded-full border transition-colors font-mono font-semibold ${
+                    generateCefr === lvl
+                      ? CEFR_COLORS[lvl]
+                      : 'border-slate-600 text-slate-400 hover:border-slate-500'
+                  }`}
+                >
+                  {lvl}
+                </button>
+              ))}
+              {generateCefr && (
+                <button
+                  onClick={() => setGenerateCefr('')}
+                  className="text-xs px-3 py-1 rounded-full border border-slate-700 text-slate-500 hover:text-slate-300 transition-colors"
+                >
+                  {uiLang === 'de' ? 'Keins' : uiLang === 'en' ? 'None' : uiLang === 'fr' ? 'Aucun' : 'Ninguno'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Global toggle */}
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={generateGlobal}
+              onChange={(e) => setGenerateGlobal(e.target.checked)}
+              className="w-3.5 h-3.5 rounded accent-indigo-500"
+            />
+            <span className="text-xs text-slate-400">
+              🌐 {uiLang === 'de' ? 'Global (für alle zugänglich)' : uiLang === 'en' ? 'Global (shared with everyone)' : uiLang === 'fr' ? 'Global (partagé avec tous)' : 'Global (compartido con todos)'}
+            </span>
+          </label>
 
           {/* Grammar focus */}
           <div>
@@ -1240,6 +2335,104 @@ export default function GrammarWorkshop() {
               uiLang === 'de' ? 'Übung generieren →' : uiLang === 'en' ? 'Generate exercise →' : uiLang === 'fr' ? "Générer l'exercice →" : 'Generar ejercicio →'
             )}
           </button>
+
+          {/* Add to queue */}
+          <div className="border-t border-slate-700/60 pt-4 space-y-3">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={addToQueue}
+                disabled={!topic.trim() || noModel}
+                className="flex-1 py-2.5 rounded-xl border border-slate-600 text-slate-300 hover:border-indigo-500/60 hover:text-indigo-300 text-sm font-medium transition-colors disabled:opacity-40"
+              >
+                {uiLang === 'de' ? '+ In Warteschlange' : uiLang === 'en' ? '+ Add to queue' : uiLang === 'fr' ? '+ Ajouter à la file' : '+ Agregar a cola'}
+              </button>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={grammarCheckEnabled}
+                onChange={(e) => setGrammarCheckEnabled(e.target.checked)}
+                className="w-3.5 h-3.5 rounded accent-indigo-500"
+              />
+              <span className="text-xs text-slate-400">
+                {uiLang === 'de' ? 'Grammatik prüfen (nach Generierung)' : uiLang === 'en' ? 'Grammar check after generation' : uiLang === 'fr' ? 'Vérifier la grammaire après génération' : 'Revisar gramática al generar'}
+              </span>
+            </label>
+          </div>
+
+          {/* Mini queue preview */}
+          {queueItems.length > 0 && (
+            <div className="border-t border-slate-700/60 pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-medium text-slate-400">
+                  {uiLang === 'en' ? 'Queue' : 'Cola'}{' '}
+                  <span className="text-slate-600">({queueItems.length})</span>
+                </p>
+                <button
+                  onClick={() => setPanel('queue')}
+                  className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                >
+                  {uiLang === 'en' ? 'View all →' : 'Ver todo →'}
+                </button>
+              </div>
+              <div className="space-y-1.5">
+                {queueItems.slice(-3).map((item) => {
+                  const p = item.params as Record<string, unknown>
+                  const sc = STATUS_COLORS[item.status] ?? 'text-slate-400'
+                  return (
+                    <div key={item.id} className="flex items-center gap-2 bg-slate-800/50 rounded-lg px-2.5 py-1.5">
+                      <span className={`text-[9px] font-medium ${sc} shrink-0`}>
+                        {STATUS_LABELS[item.status]?.[uiLang] ?? item.status}
+                      </span>
+                      {!!p.cefr_level && (
+                        <CefrBadge level={String(p.cefr_level)} />
+                      )}
+                      <span className="text-xs text-slate-300 truncate">{String(p.topic ?? '—')}</span>
+                    </div>
+                  )
+                })}
+                {queueItems.length > 3 && (
+                  <p className="text-[10px] text-slate-600 text-center">
+                    +{queueItems.length - 3} {uiLang === 'en' ? 'more' : 'más'}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Batch generation (advanced) */}
+          <div className="border-t border-slate-700/60 pt-4">
+            <button
+              onClick={() => setShowBatch((v) => !v)}
+              className="w-full flex items-center justify-between text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors"
+            >
+              <span>
+                {showBatch ? '▼' : '▶'}{' '}
+                {uiLang === 'de' ? 'Lote (Erweitert)' : uiLang === 'en' ? 'Batch generation (Advanced)' : uiLang === 'fr' ? 'Lot (Avancé)' : 'Generación en lote (Avanzado)'}
+              </span>
+            </button>
+            {showBatch && (
+              <div className="mt-4">
+                <BatchPanel
+                  uiLang={uiLang}
+                  model={model ?? ''}
+                  timeout={timeout}
+                  grammarFocus={grammarFocus}
+                  customFocusList={customFocusList}
+                  grammarMode={grammarMode}
+                  grammarRollingSentences={grammarRollingSentences}
+                  grammarDoubleCorrect={grammarDoubleCorrect}
+                  grammarMaxBlanks={grammarMaxBlanks}
+                  grammarTemperature={grammarTemperature}
+                  grammarNumPredict={grammarNumPredict}
+                  grammarTopP={grammarTopP}
+                  grammarCheckEnabled={grammarCheckEnabled}
+                  onToast={showToast}
+                  onQueued={async () => { await fetchQueue(); if (!workerRunning) await resumeWorker() }}
+                />
+              </div>
+            )}
+          </div>
       </div>
 
       {/* Panel: Solve */}
@@ -1252,6 +2445,7 @@ export default function GrammarWorkshop() {
             savedId={currentSavedId}
             onSave={(id) => setCurrentSavedId(id)}
             onNew={() => setPanel('generate')}
+            onNext={loadNextUnsolved}
           />
         ) : (
           <div className="text-center py-12">
@@ -1265,6 +2459,36 @@ export default function GrammarWorkshop() {
         )}
       </div>
 
+      {/* Panel: Queue */}
+      <div className={panel === 'queue' ? 'space-y-4' : 'hidden'}>
+        <QueuePanel
+          items={queueItems}
+          workerRunning={workerRunning}
+          uiLang={uiLang}
+          onResume={resumeWorker}
+          onStop={stopWorker}
+          onDelete={deleteQueueItem}
+          onLoadReady={async (exerciseId) => {
+            try {
+              const res = await grammarApi.getExercise(exerciseId)
+              const full = res.data
+              setExercise({
+                title: full.title,
+                topic: full.topic,
+                segments: full.segments ?? [],
+                grammar_notes: full.grammar_notes ?? [],
+                vocabulary_used: full.vocabulary_used ?? [],
+                description: full.description ?? '',
+                cefr_level: full.cefr_level,
+                grammar_focus: full.grammar_focus ?? [],
+              })
+              setCurrentSavedId(exerciseId)
+              setPanel('solve')
+            } catch { /* ignore */ }
+          }}
+        />
+      </div>
+
       {/* Panel: Saved */}
       <div className={panel === 'saved' ? '' : 'hidden'}>
         {loadingSaved ? (
@@ -1275,8 +2499,21 @@ export default function GrammarWorkshop() {
             onLoad={loadExerciseFromSaved}
             onDelete={deleteExercise}
             uiLang={uiLang}
+            currentUserId={currentUserId}
+            filter={savedFilter}
+            onFilterChange={(f) => setSavedFilter(f)}
           />
         )}
+      </div>
+
+      {/* Panel: Explore */}
+      <div className={panel === 'explore' ? '' : 'hidden'}>
+        <ExplorePanel
+          uiLang={uiLang}
+          currentUserId={currentUserId}
+          onLoad={loadExerciseFromSaved}
+          onAdopt={adoptExercise}
+        />
       </div>
     </div>
   )

@@ -46,6 +46,14 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/vocabox/, ''),
         ws: true,
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            // Suppress EPIPE/ECONNRESET — normal when browser reloads or closes WS
+            if ((err as NodeJS.ErrnoException).code === 'ECONNRESET' ||
+                (err as NodeJS.ErrnoException).code === 'EPIPE') return
+            console.error('[proxy error]', err)
+          })
+        },
       },
     },
   },

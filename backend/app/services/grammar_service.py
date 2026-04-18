@@ -45,6 +45,77 @@ INTERFACE_LANG_NAMES = {
     "es": "Spanish", "en": "English", "de": "German", "fr": "French",
 }
 
+# CEFR level descriptions for prompt injection
+CEFR_LEVEL_DESCRIPTIONS = {
+    "A1": (
+        "CEFR level A1 (Beginner). Use ONLY:\n"
+        "- Very simple, short sentences (subject + verb + object)\n"
+        "- Basic everyday vocabulary: numbers, colors, family, food, greetings\n"
+        "- Present tense only (Präsens)\n"
+        "- Basic articles (der/die/das) in nominative and accusative only\n"
+        "- Common verbs: sein, haben, heißen, wohnen, kommen, gehen, essen, trinken\n"
+        "- No subordinate clauses, no complex grammar\n"
+        "- Max 8-10 words per sentence"
+    ),
+    "A2": (
+        "CEFR level A2 (Elementary). Use:\n"
+        "- Simple sentences with some coordination (und, aber, oder)\n"
+        "- Present tense, Perfekt for past events\n"
+        "- Basic prepositions with dative: mit, bei, nach, zu, von, aus, seit\n"
+        "- Accusative prepositions: durch, für, gegen, ohne, um\n"
+        "- Articles in nominative, accusative and dative (no genitive)\n"
+        "- Common adjectives without complex declension\n"
+        "- Modal verbs: können, müssen, wollen, möchten\n"
+        "- Everyday topics: shopping, travel, family, work, free time\n"
+        "- Max 12-15 words per sentence"
+    ),
+    "B1": (
+        "CEFR level B1 (Intermediate). Use:\n"
+        "- Compound sentences with subordinate clauses (weil, dass, wenn, obwohl, damit)\n"
+        "- Perfekt and Präteritum for narration\n"
+        "- All four cases including genitive\n"
+        "- All prepositions with correct cases including Wechselpräpositionen\n"
+        "- Adjective declension (strong, weak, mixed)\n"
+        "- All modal verbs including subjunctive (könnte, müsste, würde)\n"
+        "- Verb-preposition pairs (warten auf, sich freuen auf, denken an)\n"
+        "- Varied vocabulary, some idiomatic expressions\n"
+        "- 15-20 words per sentence"
+    ),
+    "B2": (
+        "CEFR level B2 (Upper-Intermediate). Use:\n"
+        "- Complex sentence structures with multiple clauses\n"
+        "- Konjunktiv II freely (würde, hätte, wäre, könnte)\n"
+        "- Passive voice (wird gemacht, wurde gebaut)\n"
+        "- Extended use of genitive and complex prepositions (wegen, trotz, aufgrund, anhand)\n"
+        "- Participial phrases and infinitive constructions (um...zu, ohne...zu, anstatt...zu)\n"
+        "- Nuanced vocabulary, collocations, fixed expressions\n"
+        "- Abstract topics: environment, society, work culture\n"
+        "- 20-25 words per sentence"
+    ),
+    "C1": (
+        "CEFR level C1 (Advanced). Use:\n"
+        "- Sophisticated, varied sentence structures with embedded clauses\n"
+        "- Konjunktiv I for reported speech (er sagte, er sei...)\n"
+        "- Complex passive constructions including modal passive\n"
+        "- Nominal style (Nominalisierungen): die Durchführung, die Entscheidung\n"
+        "- Advanced connectors: dennoch, infolgedessen, nichtsdestotrotz, einerseits...andererseits\n"
+        "- Rich idiomatic language and register variation\n"
+        "- Abstract, academic or professional topics\n"
+        "- 25+ words per sentence, complex syntax"
+    ),
+    "C2": (
+        "CEFR level C2 (Mastery). Use:\n"
+        "- Native-like precision with full grammatical complexity\n"
+        "- All Konjunktiv forms including archaic/literary uses\n"
+        "- Complex nominalization and abstract noun phrases\n"
+        "- Rare but precise vocabulary, including compound nouns\n"
+        "- Stylistic variation: formal, informal, literary registers\n"
+        "- Sophisticated rhetorical structures\n"
+        "- Topics: philosophy, politics, literature, science\n"
+        "- No length restriction — natural, flowing prose"
+    ),
+}
+
 # ── Prompts ───────────────────────────────────────────────────────────────────
 
 # Legacy / custom-mode prompt (kept as default for custom mode)
@@ -95,6 +166,8 @@ You are a German language teacher writing a grammar exercise text.
 
 Topic: {topic}
 
+{cefr_block}
+
 GRAMMAR FOCUS — you MUST use these structures multiple times in the text:
 {grammar_focus}
 
@@ -109,7 +182,6 @@ How to apply the grammar focus:
 Requirements:
 - 5-7 sentences, natural and coherent German prose or dialogue
 - EVERY sentence must contain at least one structure from the grammar focus above
-- Intermediate level (A2-B2): avoid very rare vocabulary
 - Write ONLY the German text — no explanations, no JSON, no markdown, no translation
 
 German text:
@@ -186,7 +258,10 @@ STEP 2 — For each word found, create a blank:
 STEP 3 — grammar_notes: write 2-3 summary notes in {interface_lang} about the main grammar patterns in this text.
 
 Return ONLY valid JSON — no markdown, no backticks, no explanation:
-{{"title":"Short German title (3-5 words)","topic":"{topic}","blanks":[{{"word":"einen","options":["ein","eine","einen","einem"],"correct":2,"rule":"Akkusativ maskulin: direktes Objekt, maskulin → einen"}},{{"word":"die","options":["der","die","das","dem"],"correct":1,"rule":"Nominativ feminin: Subjekt, feminin → die"}}],"grammar_notes":["note1 in {interface_lang}","note2"],"vocabulary_used":["word1","word2"]}}
+{{"title":"Short German title (3-5 words)","description":"One sentence in {interface_lang} describing what this exercise covers (grammar + topic)","cefr_level":"B1","topic":"{topic}","blanks":[{{"word":"einen","options":["ein","eine","einen","einem"],"correct":2,"rule":"Akkusativ maskulin: direktes Objekt, maskulin → einen"}},{{"word":"die","options":["der","die","das","dem"],"correct":1,"rule":"Nominativ feminin: Subjekt, feminin → die"}}],"grammar_notes":["note1 in {interface_lang}","note2"],"vocabulary_used":["word1","word2"]}}
+
+For "cefr_level": pick the ONE level that best matches the difficulty (A1/A2/B1/B2/C1/C2).
+For "description": write a single sentence in {interface_lang} summarizing the grammar focus and context of this exercise.
 """
 
 # Rolling mode — Phase 1: generate all sentences as plain prose
@@ -194,6 +269,8 @@ PROMPT_ROLLING_PROSE = """\
 You are a German language teacher writing a grammar exercise text.
 
 Topic: {topic}
+
+{cefr_block}
 
 GRAMMAR FOCUS — you MUST use these structures in the text:
 {grammar_focus}
@@ -203,7 +280,6 @@ Requirements:
 - Each sentence must be grammatically correct and naturally spelled (check umlauts: ä, ö, ü, ß).
 - Each sentence introduces a NEW aspect or situation related to the topic — avoid repeating ideas.
 - Every sentence must use at least one structure from the grammar focus above.
-- Intermediate level (A2-B2): natural everyday German, no rare vocabulary.
 - Write ONLY the {num_sentences} sentences separated by newlines — no numbering, no explanations, no JSON.
 
 German sentences:
@@ -260,6 +336,21 @@ List only the errors found. For each error:
 - Show the correction
 
 If no errors were found, write a single short confirmation sentence.
+"""
+
+PROMPT_GRAMMAR_NOTES = """\
+You are a German grammar teacher. Read this German text and write 2-3 concise grammar notes in {interface_lang} about the main grammar patterns it illustrates (cases, prepositions, verb forms, word order, etc.).
+
+Text:
+{prose}
+
+Also suggest:
+- A short German title for this exercise (3-6 words)
+- A one-sentence description in {interface_lang} of what the exercise covers (grammar + topic)
+- The CEFR level (A1/A2/B1/B2/C1/C2) that best matches the difficulty
+
+Return ONLY a valid JSON object — no markdown, no extra text:
+{{"title":"Short German title","description":"One sentence in {interface_lang}","cefr_level":"B1","notes":["note 1 in {interface_lang}","note 2 in {interface_lang}"]}}
 """
 
 PROMPT_SUGGEST_TOPICS = """\
@@ -671,6 +762,7 @@ def _generate_two_phase(
     prose_override: Optional[str] = None,
     double_correct: bool = False,
     max_blanks: int = 10,
+    cefr_block: str = "",
 ) -> dict:
     """Phase 1: generate prose. Optional Phase 1b: auto-correct (1 or 2 passes). Phase 2: analyze prose → exercise JSON."""
     interface_lang_name = INTERFACE_LANG_NAMES.get(interface_lang, "Spanish")
@@ -688,6 +780,7 @@ def _generate_two_phase(
         prose_prompt = PROMPT_GENERATE_PROSE.format_map(_SafeDict(
             topic=topic,
             grammar_focus=grammar_focus,
+            cefr_block=cefr_block,
         ))
         prose = _call_client(client, prose_prompt, model, timeout, prose_kwargs)
         if not prose:
@@ -743,6 +836,7 @@ def _generate_rolling(
     client: AIClient,
     extra_kwargs: dict,
     double_correct: bool = False,
+    cefr_block: str = "",
 ) -> dict:
     """
     Rolling mode — 3 phases:
@@ -761,6 +855,7 @@ def _generate_rolling(
         topic=topic,
         grammar_focus=grammar_focus,
         num_sentences=num_sentences,
+        cefr_block=cefr_block,
     ))
     prose_timeout = max(60, timeout // 3)
     raw_prose = _call_client(client, prose_prompt, model, prose_timeout, extra_kwargs)
@@ -845,11 +940,38 @@ def _generate_rolling(
     if not any(s.get("t") == "blank" for s in all_segments):
         raise ValueError("Rolling generation produced no blanks")
 
+    # ── Grammar notes + title + description + cefr from the corrected prose ─────
+    grammar_notes: list[str] = []
+    ai_title = topic[:40]
+    ai_description: str = ""
+    ai_cefr: str = ""
+    try:
+        notes_prompt = PROMPT_GRAMMAR_NOTES.format_map(_SafeDict(
+            prose=full_prose,
+            interface_lang=interface_lang_name,
+        ))
+        raw_notes = _call_client(client, notes_prompt, model, per_sentence_timeout, extra_kwargs)
+        if raw_notes:
+            notes_json = _fix_common_model_errors(_extract_json(raw_notes))
+            parsed_notes = json.loads(notes_json)
+            if isinstance(parsed_notes, dict):
+                ai_title = str(parsed_notes.get("title", topic[:40]) or topic[:40])
+                ai_description = str(parsed_notes.get("description", "") or "")
+                ai_cefr = str(parsed_notes.get("cefr_level", "") or "")
+                raw_list = parsed_notes.get("notes", [])
+                grammar_notes = [str(n) for n in raw_list if n]
+            elif isinstance(parsed_notes, list):
+                grammar_notes = [str(n) for n in parsed_notes if n]
+    except Exception as exc:
+        logger.warning("[rolling] Grammar notes generation failed: %s", exc)
+
     return {
-        "title": topic[:40],
+        "title": ai_title,
+        "description": ai_description,
+        "cefr_level": ai_cefr,
         "topic": topic,
         "segments": all_segments,
-        "grammar_notes": [],
+        "grammar_notes": grammar_notes,
         "vocabulary_used": [],
     }
 
@@ -873,6 +995,7 @@ def generate_exercise(
     prose_override: Optional[str] = None,
     double_correct: bool = False,
     max_blanks: int = 10,
+    cefr_level: str = "",
 ) -> dict:
     """
     Generate a fill-in-the-blank grammar exercise.
@@ -884,6 +1007,7 @@ def generate_exercise(
     """
     interface_lang_name = INTERFACE_LANG_NAMES.get(interface_lang, "Spanish")
     focus_str = ", ".join(grammar_focus) if grammar_focus else "articles, prepositions, word order"
+    cefr_block = CEFR_LEVEL_DESCRIPTIONS.get(cefr_level, "Intermediate level (A2-B2): natural everyday German vocabulary and grammar.")
 
     client = ai_client or OllamaClient(OLLAMA_BASE)
 
@@ -909,6 +1033,7 @@ def generate_exercise(
             prose_override=prose_override,
             double_correct=double_correct,
             max_blanks=max_blanks,
+            cefr_block=cefr_block,
         )
     elif mode == "rolling":
         data = _generate_rolling(
@@ -921,6 +1046,7 @@ def generate_exercise(
             client=client,
             extra_kwargs=extra_kwargs,
             double_correct=double_correct,
+            cefr_block=cefr_block,
         )
     else:
         # custom / legacy single-shot
@@ -955,6 +1081,8 @@ def generate_exercise(
     data.setdefault("grammar_notes", [])
     data.setdefault("vocabulary_used", [])
     data.setdefault("topic", topic)
+    data.setdefault("description", "")
+    data.setdefault("cefr_level", "")
 
     return data
 

@@ -1027,29 +1027,29 @@ export default function Settings() {
       {/* German Grammar */}
       <div className="card space-y-4">
         <div className="flex items-center gap-2">
-          <h2 className="font-semibold text-slate-800 dark:text-slate-200">🇩🇪 Gramática alemana</h2>
+          <h2 className="font-semibold text-slate-800 dark:text-slate-200">🇩🇪 {t('settings.germanGrammar')}</h2>
         </div>
         <Toggle
           value={germanArticleChoice}
           onChange={setGermanArticleChoice}
-          label="Elegir artículo al repasar sustantivos"
-          description="Muestra der/die/das como ejercicio inline al repasar sustantivos alemanes"
+          label={t('settings.germanGrammarArticleChoice')}
+          description={t('settings.germanGrammarArticleChoiceDesc')}
         />
         <Toggle
           value={grammarReviewEnabled}
           onChange={setGrammarReviewEnabled}
-          label="Sesión de gramática al finalizar repaso"
-          description="Ofrece practicar gramática con las palabras del repaso al terminar"
+          label={t('settings.germanGrammarSession')}
+          description={t('settings.germanGrammarSessionDesc')}
         />
         {grammarReviewEnabled && (
           <div className="space-y-2 pt-1 border-t border-slate-200 dark:border-slate-600">
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Tipos de gramática</p>
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{t('settings.germanGrammarTypes')}</p>
             {([
-              { key: 'articleDeclension', label: 'Declinación de artículos' },
-              { key: 'adjDeclension', label: 'Declinación de adjetivos' },
-              { key: 'verbConjugation', label: 'Conjugación de verbos' },
-              { key: 'prepositions', label: 'Preposiciones con casos' },
-              { key: 'verbPrepositions', label: 'Verbos + preposición fija' },
+              { key: 'articleDeclension', label: t('settings.exercises.articleDeclension') },
+              { key: 'adjDeclension', label: t('settings.exercises.adjDeclension') },
+              { key: 'verbConjugation', label: t('settings.exercises.verbConjugation') },
+              { key: 'prepositions', label: t('settings.exercises.prepositions') },
+              { key: 'verbPrepositions', label: t('settings.exercises.verbPrepositions') },
             ] as const).map(({ key, label }) => (
               <label key={key} className="flex items-center gap-2 cursor-pointer group">
                 <input
@@ -1065,10 +1065,13 @@ export default function Settings() {
             ))}
           </div>
         )}
-        <div className="pt-1 border-t border-slate-200 dark:border-slate-600">
-          <a href="/grammar" className="text-xs text-blue-400 hover:text-blue-300 transition-colors">
-            ✏️ Abrir Taller de Gramática →
+        <div className="pt-1 border-t border-slate-200 dark:border-slate-600 space-y-2">
+          <a href="/grammar" className="text-xs text-blue-400 hover:text-blue-300 transition-colors block">
+            ✏️ {t('settings.germanGrammarOpenWorkshop')}
           </a>
+          <p className="text-[10px] text-slate-500 italic">
+            🚧 {t('settings.germanGrammarModerationPending', 'Pendiente: configuración de moderación para ejercicios globales (admin-only)')}
+          </p>
         </div>
       </div>
 

@@ -246,20 +246,31 @@ export interface GrammarSegment {
   rule?: string
 }
 
+export type CefrLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2' | ''
+
 export interface GrammarExerciseData {
   title: string
   topic: string
   segments: GrammarSegment[]
   grammar_notes: string[]
   vocabulary_used: string[]
+  description?: string | null
+  cefr_level?: CefrLevel | null
+  grammar_focus?: string[]
 }
 
 export interface SavedGrammarExercise extends GrammarExerciseData {
   id: number
+  user_id: number
   language: string
   interface_lang: string
   score_correct: number | null
   score_total: number | null
+  cefr_level: CefrLevel
+  description: string | null
+  is_global: boolean
+  original_exercise_id: number | null
+  grammar_focus: string[]
   created_at: string
   last_attempted: string | null
 }
@@ -281,6 +292,7 @@ export const grammarApi = {
     prose_override?: string
     double_correct?: boolean
     max_blanks?: number
+    cefr_level?: string
   }) => api.post<GrammarExerciseData>('/grammar/generate', data),
 
   checkProse: (data: {
@@ -303,18 +315,91 @@ export const grammarApi = {
     segments_json: string
     grammar_notes_json?: string
     vocabulary_used_json?: string
+    grammar_focus_json?: string
     score_correct?: number
     score_total?: number
+    cefr_level?: string
+    description?: string
+    is_global?: boolean
   }) => api.post<SavedGrammarExercise>('/grammar/exercises', data),
 
-  listExercises: () => api.get<SavedGrammarExercise[]>('/grammar/exercises'),
+  listExercises: (filter?: 'all' | 'private' | 'global') =>
+    api.get<SavedGrammarExercise[]>('/grammar/exercises', { params: filter ? { filter } : {} }),
+
+  exploreExercises: (params?: { search?: string; cefr_level?: string; language?: string }) =>
+    api.get<SavedGrammarExercise[]>('/grammar/exercises/explore', { params }),
+
+  adoptExercise: (id: number) =>
+    api.post<SavedGrammarExercise>(`/grammar/exercises/${id}/adopt`),
 
   getExercise: (id: number) => api.get<SavedGrammarExercise>(`/grammar/exercises/${id}`),
+
+  updateMeta: (id: number, data: { title?: string; description?: string; cefr_level?: string; is_global?: boolean }) =>
+    api.patch<SavedGrammarExercise>(`/grammar/exercises/${id}/meta`, data),
 
   updateScore: (id: number, correct: number, total: number) =>
     api.patch(`/grammar/exercises/${id}/score`, { correct, total }),
 
   deleteExercise: (id: number) => api.delete(`/grammar/exercises/${id}`),
+}
+
+// ── Grammar Queue ─────────────────────────────────────────────────────────────
+
+export type GrammarQueueStatus =
+  | 'pending'
+  | 'generating'
+  | 'grammar_check'
+  | 'ready'
+  | 'error'
+  | 'grammar_error'
+
+export interface GrammarQueueItem {
+  id: number
+  status: GrammarQueueStatus
+  position: number
+  params: Record<string, unknown>
+  exercise_id: number | null
+  grammar_check_enabled: boolean
+  grammar_check_feedback: string | null
+  error_message: string | null
+  created_at: string
+  started_at: string | null
+  completed_at: string | null
+}
+
+export interface GrammarQueueAddRequest {
+  topic: string
+  interface_lang: string
+  grammar_focus: string[]
+  vocabulary: string[]
+  model: string
+  timeout?: number
+  custom_prompt?: string
+  temperature?: number
+  num_predict?: number
+  top_p?: number
+  mode?: string
+  rolling_sentences?: number
+  prose_override?: string
+  double_correct?: boolean
+  max_blanks?: number
+  grammar_check_enabled?: boolean
+  cefr_level?: string
+  is_global?: boolean
+}
+
+export const grammarQueueApi = {
+  add: (data: GrammarQueueAddRequest) =>
+    api.post<GrammarQueueItem>('/grammar/queue', data),
+
+  list: () =>
+    api.get<{ items: GrammarQueueItem[]; worker_running: boolean }>('/grammar/queue'),
+
+  delete: (id: number) => api.delete(`/grammar/queue/${id}`),
+
+  resume: () => api.post<{ started: boolean }>('/grammar/queue/resume'),
+
+  stop: () => api.post<{ stopped: boolean }>('/grammar/queue/stop'),
 }
 
 // ── AI Providers ──────────────────────────────────────────────────────────────

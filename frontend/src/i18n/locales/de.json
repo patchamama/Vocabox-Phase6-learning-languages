@@ -162,8 +162,20 @@
       "markRight": "Als richtig markieren",
       "yourAnswer": "Deine Antwort",
       "correct": "✓ Richtig",
-      "incorrect": "✗ Falsch"
-    }
+      "incorrect": "✗ Falsch",
+      "articleDeclension": "Artikeldeklination",
+      "adjDeclension": "Adjektivdeklination",
+      "verbConjugation": "Verbkonjugation",
+      "prepositions": "Präpositionen mit Kasus",
+      "verbPrepositions": "Verben + feste Präposition"
+    },
+    "germanGrammar": "Deutsche Grammatik",
+    "germanGrammarOpenWorkshop": "Grammatik-Workshop öffnen →",
+    "germanGrammarArticleChoice": "Artikel wählen beim Üben von Substantiven",
+    "germanGrammarArticleChoiceDesc": "Zeigt der/die/das als Inline-Übung beim Wiederholen deutscher Substantive",
+    "germanGrammarSession": "Grammatiksitzung nach der Wiederholung",
+    "germanGrammarSessionDesc": "Bietet Grammatikübungen mit den Wörtern nach dem Wiederholen",
+    "germanGrammarTypes": "Grammatiktypen"
   },
   "profile": {
     "title": "Profil",
@@ -449,18 +461,74 @@
     "continue": "Weiter →",
     "continuingIn": "Weiter in {{seconds}}s…",
     "motivational": [
-      { "text": "Übung macht den Meister — du beweist es gerade!", "langs": ["de"] },
-      { "text": "Wer rastet, der rostet. Weiter so — niemals aufhören!", "langs": ["de"] },
-      { "text": "Eine Sprache ist nie genug — du bist auf dem richtigen Weg!", "langs": ["de"] },
-      { "text": "C'est en forgeant qu'on devient forgeron. Du schmiedest deine Sprachkenntnisse!", "langs": ["fr"] },
-      { "text": "Vouloir c'est pouvoir — Wollen ist Können. Du zeigst es!", "langs": ["fr"] },
-      { "text": "Chi va piano va sano e va lontano. Schritt für Schritt ans Ziel.", "langs": ["it"] },
-      { "text": "Ogni lingua è una visione del mondo — deine Welt wird größer!", "langs": ["it"] },
-      { "text": "A língua é a alma de um povo — und du sprichst schon ihre Sprache!", "langs": ["pt"] },
-      { "text": "Every word learned opens a new door. Keep going!", "langs": ["en"] },
-      { "text": "Practice makes perfect — und du beweist es!", "langs": ["en"] },
-      { "text": "Repetitio est mater studiorum — Wiederholung ist die Mutter des Lernens.", "langs": [] },
-      { "text": "Fantastisch! Vokabular entsteht Wort für Wort.", "langs": [] }
+      {
+        "text": "Übung macht den Meister — du beweist es gerade!",
+        "langs": [
+          "de"
+        ]
+      },
+      {
+        "text": "Wer rastet, der rostet. Weiter so — niemals aufhören!",
+        "langs": [
+          "de"
+        ]
+      },
+      {
+        "text": "Eine Sprache ist nie genug — du bist auf dem richtigen Weg!",
+        "langs": [
+          "de"
+        ]
+      },
+      {
+        "text": "C'est en forgeant qu'on devient forgeron. Du schmiedest deine Sprachkenntnisse!",
+        "langs": [
+          "fr"
+        ]
+      },
+      {
+        "text": "Vouloir c'est pouvoir — Wollen ist Können. Du zeigst es!",
+        "langs": [
+          "fr"
+        ]
+      },
+      {
+        "text": "Chi va piano va sano e va lontano. Schritt für Schritt ans Ziel.",
+        "langs": [
+          "it"
+        ]
+      },
+      {
+        "text": "Ogni lingua è una visione del mondo — deine Welt wird größer!",
+        "langs": [
+          "it"
+        ]
+      },
+      {
+        "text": "A língua é a alma de um povo — und du sprichst schon ihre Sprache!",
+        "langs": [
+          "pt"
+        ]
+      },
+      {
+        "text": "Every word learned opens a new door. Keep going!",
+        "langs": [
+          "en"
+        ]
+      },
+      {
+        "text": "Practice makes perfect — und du beweist es!",
+        "langs": [
+          "en"
+        ]
+      },
+      {
+        "text": "Repetitio est mater studiorum — Wiederholung ist die Mutter des Lernens.",
+        "langs": []
+      },
+      {
+        "text": "Fantastisch! Vokabular entsteht Wort für Wort.",
+        "langs": []
+      }
     ]
   },
   "audioReview": {

@@ -69,6 +69,11 @@ def _migrate_grammar_exercises() -> None:
         ("score_correct", "INTEGER"),
         ("score_total", "INTEGER"),
         ("last_attempted", "DATETIME"),
+        ("cefr_level", "VARCHAR(3)"),
+        ("description", "TEXT"),
+        ("is_global", "BOOLEAN NOT NULL DEFAULT 0"),
+        ("original_exercise_id", "INTEGER REFERENCES grammar_exercises(id)"),
+        ("grammar_focus_json", "TEXT DEFAULT '[]'"),
     ]
     with engine.begin() as conn:
         for col, typ in new_cols:
@@ -91,7 +96,28 @@ def _migrate_ai_providers() -> None:
 
 _migrate_ai_providers()
 
-from .routers import ai_providers, audio_review, auth, grammar, import_router, languages, leo, ollama, review, stats, subtitles, temas, test_mode, words
+
+def _migrate_grammar_queue() -> None:
+    """Reset stale generating/grammar_check items to pending on startup."""
+    from sqlalchemy import inspect
+    from .models.grammar_queue_item import GrammarQueueItem
+
+    inspector = inspect(engine)
+    if "grammar_queue_items" not in inspector.get_table_names():
+        return
+    db = SessionLocal()
+    try:
+        db.query(GrammarQueueItem).filter(
+            GrammarQueueItem.status.in_(["generating", "grammar_check"])
+        ).update({"status": "pending", "started_at": None})
+        db.commit()
+    finally:
+        db.close()
+
+
+_migrate_grammar_queue()
+
+from .routers import ai_providers, audio_review, auth, grammar, grammar_queue, import_router, languages, leo, ollama, review, stats, subtitles, temas, test_mode, words
 
 # ── Language dictionary seed data ─────────────────────────────────────────────
 
@@ -168,6 +194,7 @@ app.include_router(ollama.router,        prefix="/api")
 app.include_router(audio_review.router,  prefix="/api")
 app.include_router(subtitles.router,     prefix="/api")
 app.include_router(grammar.router,       prefix="/api")
+app.include_router(grammar_queue.router, prefix="/api")
 app.include_router(ai_providers.router,  prefix="/api")
 
 # ── Static frontend (served from app/static after deploy) ─────────────────────

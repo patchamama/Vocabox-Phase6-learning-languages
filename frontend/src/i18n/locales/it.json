@@ -162,8 +162,20 @@
       "markRight": "Segna corretto",
       "yourAnswer": "La tua risposta",
       "correct": "✓ Corretto",
-      "incorrect": "✗ Errato"
-    }
+      "incorrect": "✗ Errato",
+      "articleDeclension": "Declinazione degli articoli",
+      "adjDeclension": "Declinazione degli aggettivi",
+      "verbConjugation": "Coniugazione dei verbi",
+      "prepositions": "Preposizioni con casi",
+      "verbPrepositions": "Verbi + preposizione fissa"
+    },
+    "germanGrammar": "Grammatica tedesca",
+    "germanGrammarOpenWorkshop": "Apri il laboratorio di grammatica →",
+    "germanGrammarArticleChoice": "Scegli articolo durante revisione nomi",
+    "germanGrammarArticleChoiceDesc": "Mostra der/die/das come esercizio durante la revisione di nomi tedeschi",
+    "germanGrammarSession": "Sessione di grammatica dopo revisione",
+    "germanGrammarSessionDesc": "Offre esercizi di grammatica con le parole della revisione",
+    "germanGrammarTypes": "Tipi di grammatica"
   },
   "profile": {
     "title": "Profilo",
@@ -449,17 +461,68 @@
     "continue": "Continua →",
     "continuingIn": "Continuando tra {{seconds}}s…",
     "motivational": [
-      { "text": "Ogni lingua è una visione del mondo — la tua si sta ampliando!", "langs": ["it"] },
-      { "text": "Chi va piano va sano e va lontano. Passo dopo passo si arriva lontano.", "langs": ["it"] },
-      { "text": "Übung macht den Meister — l'esercizio rende perfetti!", "langs": ["de"] },
-      { "text": "Wer rastet, der rostet. Non fermarti mai!", "langs": ["de"] },
-      { "text": "C'est en forgeant qu'on devient forgeron — forgi la tua fluidità!", "langs": ["fr"] },
-      { "text": "Vouloir c'est pouvoir — volere è potere. Lo stai dimostrando!", "langs": ["fr"] },
-      { "text": "A língua é a alma de um povo — e tu parli già la loro lingua!", "langs": ["pt"] },
-      { "text": "Every word learned opens a new door. Keep going!", "langs": ["en"] },
-      { "text": "Practice makes perfect — e tu lo stai dimostrando!", "langs": ["en"] },
-      { "text": "Repetitio est mater studiorum — la ripetizione è la madre dell'apprendimento.", "langs": [] },
-      { "text": "Fantastico! Il vocabolario si costruisce parola per parola.", "langs": [] }
+      {
+        "text": "Ogni lingua è una visione del mondo — la tua si sta ampliando!",
+        "langs": [
+          "it"
+        ]
+      },
+      {
+        "text": "Chi va piano va sano e va lontano. Passo dopo passo si arriva lontano.",
+        "langs": [
+          "it"
+        ]
+      },
+      {
+        "text": "Übung macht den Meister — l'esercizio rende perfetti!",
+        "langs": [
+          "de"
+        ]
+      },
+      {
+        "text": "Wer rastet, der rostet. Non fermarti mai!",
+        "langs": [
+          "de"
+        ]
+      },
+      {
+        "text": "C'est en forgeant qu'on devient forgeron — forgi la tua fluidità!",
+        "langs": [
+          "fr"
+        ]
+      },
+      {
+        "text": "Vouloir c'est pouvoir — volere è potere. Lo stai dimostrando!",
+        "langs": [
+          "fr"
+        ]
+      },
+      {
+        "text": "A língua é a alma de um povo — e tu parli già la loro lingua!",
+        "langs": [
+          "pt"
+        ]
+      },
+      {
+        "text": "Every word learned opens a new door. Keep going!",
+        "langs": [
+          "en"
+        ]
+      },
+      {
+        "text": "Practice makes perfect — e tu lo stai dimostrando!",
+        "langs": [
+          "en"
+        ]
+      },
+      {
+        "text": "Repetitio est mater studiorum — la ripetizione è la madre dell'apprendimento.",
+        "langs": []
+      },
+      {
+        "text": "Fantastico! Il vocabolario si costruisce parola per parola.",
+        "langs": []
+      }
     ]
   },
   "audioReview": {

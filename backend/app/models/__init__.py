@@ -8,9 +8,10 @@ from .subtitle import SubtitleFile, SubtitleSegment
 from .word_video_ref import WordVideoRef
 from .grammar_exercise import GrammarExercise
 from .ai_provider import AIProvider
+from .grammar_queue_item import GrammarQueueItem
 
 __all__ = [
     "User", "Tema", "Word", "UserWord", "LanguageDict", "WordTranslation",
     "SubtitleFile", "SubtitleSegment", "WordVideoRef", "GrammarExercise",
-    "AIProvider",
+    "AIProvider", "GrammarQueueItem",
 ]

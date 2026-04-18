@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from ..database import Base
@@ -18,9 +18,19 @@ class GrammarExercise(Base):
     segments_json = Column(Text, nullable=False)                       # JSON array of segments
     grammar_notes_json = Column(Text, nullable=False, default="[]")   # JSON array of strings
     vocabulary_used_json = Column(Text, nullable=False, default="[]") # JSON array of strings
+    grammar_focus_json = Column(Text, nullable=False, default="[]")   # JSON array of strings
     score_correct = Column(Integer, nullable=True)                     # null until attempted
     score_total = Column(Integer, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     last_attempted = Column(DateTime, nullable=True)
+
+    # CEFR level: A1 A2 B1 B2 C1 C2 or None
+    cefr_level = Column(String(3), nullable=True)
+    # User-facing description (AI-suggested, user-editable)
+    description = Column(Text, nullable=True)
+    # Global = visible to all users with same target language
+    is_global = Column(Boolean, nullable=False, default=False, index=True)
+    # If adopted from a global exercise, points to the original
+    original_exercise_id = Column(Integer, ForeignKey("grammar_exercises.id"), nullable=True)
 
     user = relationship("User", backref="grammar_exercises")

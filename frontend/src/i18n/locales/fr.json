@@ -162,8 +162,20 @@
       "markRight": "Marquer correct",
       "yourAnswer": "Votre réponse",
       "correct": "✓ Correct",
-      "incorrect": "✗ Incorrect"
-    }
+      "incorrect": "✗ Incorrect",
+      "articleDeclension": "Déclinaison des articles",
+      "adjDeclension": "Déclinaison des adjectifs",
+      "verbConjugation": "Conjugaison des verbes",
+      "prepositions": "Prépositions avec cas",
+      "verbPrepositions": "Verbes + préposition fixe"
+    },
+    "germanGrammar": "Grammaire allemande",
+    "germanGrammarOpenWorkshop": "Ouvrir l'atelier de grammaire →",
+    "germanGrammarArticleChoice": "Choisir l'article en révisant les noms",
+    "germanGrammarArticleChoiceDesc": "Affiche der/die/das comme exercice lors de la révision des noms allemands",
+    "germanGrammarSession": "Session de grammaire après révision",
+    "germanGrammarSessionDesc": "Propose des exercices de grammaire avec les mots révisés",
+    "germanGrammarTypes": "Types de grammaire"
   },
   "profile": {
     "title": "Profil",
@@ -449,17 +461,68 @@
     "continue": "Continuer →",
     "continuingIn": "Continuation dans {{seconds}}s…",
     "motivational": [
-      { "text": "C'est en forgeant qu'on devient forgeron — vous le prouvez !", "langs": ["fr"] },
-      { "text": "Vouloir c'est pouvoir — vous êtes en train de le démontrer !", "langs": ["fr"] },
-      { "text": "Übung macht den Meister — la pratique mène à la perfection !", "langs": ["de"] },
-      { "text": "Wer rastet, der rostet. Ne vous arrêtez jamais !", "langs": ["de"] },
-      { "text": "Chi va piano va sano e va lontano. Pas à pas, on arrive loin.", "langs": ["it"] },
-      { "text": "Ogni lingua è una visione del mondo — votre vision s'élargit !", "langs": ["it"] },
-      { "text": "A língua é a alma de um povo — et vous parlez déjà leur langue !", "langs": ["pt"] },
-      { "text": "Every word learned opens a new door. Keep going !", "langs": ["en"] },
-      { "text": "Practice makes perfect — et vous le prouvez !", "langs": ["en"] },
-      { "text": "Repetitio est mater studiorum — la répétition est la mère de l'apprentissage.", "langs": [] },
-      { "text": "Fantastique ! Le vocabulaire se construit mot après mot.", "langs": [] }
+      {
+        "text": "C'est en forgeant qu'on devient forgeron — vous le prouvez !",
+        "langs": [
+          "fr"
+        ]
+      },
+      {
+        "text": "Vouloir c'est pouvoir — vous êtes en train de le démontrer !",
+        "langs": [
+          "fr"
+        ]
+      },
+      {
+        "text": "Übung macht den Meister — la pratique mène à la perfection !",
+        "langs": [
+          "de"
+        ]
+      },
+      {
+        "text": "Wer rastet, der rostet. Ne vous arrêtez jamais !",
+        "langs": [
+          "de"
+        ]
+      },
+      {
+        "text": "Chi va piano va sano e va lontano. Pas à pas, on arrive loin.",
+        "langs": [
+          "it"
+        ]
+      },
+      {
+        "text": "Ogni lingua è una visione del mondo — votre vision s'élargit !",
+        "langs": [
+          "it"
+        ]
+      },
+      {
+        "text": "A língua é a alma de um povo — et vous parlez déjà leur langue !",
+        "langs": [
+          "pt"
+        ]
+      },
+      {
+        "text": "Every word learned opens a new door. Keep going !",
+        "langs": [
+          "en"
+        ]
+      },
+      {
+        "text": "Practice makes perfect — et vous le prouvez !",
+        "langs": [
+          "en"
+        ]
+      },
+      {
+        "text": "Repetitio est mater studiorum — la répétition est la mère de l'apprentissage.",
+        "langs": []
+      },
+      {
+        "text": "Fantastique ! Le vocabulaire se construit mot après mot.",
+        "langs": []
+      }
     ]
   },
   "audioReview": {

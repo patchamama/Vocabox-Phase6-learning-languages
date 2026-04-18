@@ -162,8 +162,20 @@
       "markRight": "Marcar bien",
       "yourAnswer": "Tu respuesta",
       "correct": "✓ Correcto",
-      "incorrect": "✗ Incorrecto"
-    }
+      "incorrect": "✗ Incorrecto",
+      "articleDeclension": "Declinación de artículos",
+      "adjDeclension": "Declinación de adjetivos",
+      "verbConjugation": "Conjugación de verbos",
+      "prepositions": "Preposiciones con casos",
+      "verbPrepositions": "Verbos + preposición fija"
+    },
+    "germanGrammar": "Gramática alemana",
+    "germanGrammarOpenWorkshop": "Abrir Taller de Gramática →",
+    "germanGrammarArticleChoice": "Elegir artículo al repasar sustantivos",
+    "germanGrammarArticleChoiceDesc": "Muestra der/die/das como ejercicio inline al repasar sustantivos alemanes",
+    "germanGrammarSession": "Sesión de gramática al finalizar repaso",
+    "germanGrammarSessionDesc": "Ofrece practicar gramática con las palabras del repaso al terminar",
+    "germanGrammarTypes": "Tipos de gramática"
   },
   "profile": {
     "title": "Perfil",
@@ -449,18 +461,74 @@
     "continue": "Continuar →",
     "continuingIn": "Continuando en {{seconds}}s…",
     "motivational": [
-      { "text": "¡Übung macht den Meister! La práctica hace al maestro.", "langs": ["de"] },
-      { "text": "Wer rastet, der rostet. ¡No pares nunca!", "langs": ["de"] },
-      { "text": "¡Ein Land, eine Sprache — und ya sabés más de una!", "langs": ["de"] },
-      { "text": "C'est en forgeant qu'on devient forgeron. ¡Seguí así!", "langs": ["fr"] },
-      { "text": "Vouloir c'est pouvoir. ¡Querés, podés y lo estás demostrando!", "langs": ["fr"] },
-      { "text": "Chi va piano va sano e va lontano. Paso a paso llegás lejos.", "langs": ["it"] },
-      { "text": "Ogni lingua è una visione del mondo — ¡ya tenés una más!", "langs": ["it"] },
-      { "text": "A língua é a alma de um povo — ¡y vos ya hablás su idioma!", "langs": ["pt"] },
-      { "text": "Every word learned is a door opened. ¡Seguí abriendo puertas!", "langs": ["en"] },
-      { "text": "Practice makes perfect — ¡y vos lo estás demostrando!", "langs": ["en"] },
-      { "text": "Repetitio est mater studiorum — la repetición es la madre del aprendizaje.", "langs": [] },
-      { "text": "¡Fantástico! El vocabulario se construye ladrillo a ladrillo.", "langs": [] }
+      {
+        "text": "¡Übung macht den Meister! La práctica hace al maestro.",
+        "langs": [
+          "de"
+        ]
+      },
+      {
+        "text": "Wer rastet, der rostet. ¡No pares nunca!",
+        "langs": [
+          "de"
+        ]
+      },
+      {
+        "text": "¡Ein Land, eine Sprache — und ya sabés más de una!",
+        "langs": [
+          "de"
+        ]
+      },
+      {
+        "text": "C'est en forgeant qu'on devient forgeron. ¡Seguí así!",
+        "langs": [
+          "fr"
+        ]
+      },
+      {
+        "text": "Vouloir c'est pouvoir. ¡Querés, podés y lo estás demostrando!",
+        "langs": [
+          "fr"
+        ]
+      },
+      {
+        "text": "Chi va piano va sano e va lontano. Paso a paso llegás lejos.",
+        "langs": [
+          "it"
+        ]
+      },
+      {
+        "text": "Ogni lingua è una visione del mondo — ¡ya tenés una más!",
+        "langs": [
+          "it"
+        ]
+      },
+      {
+        "text": "A língua é a alma de um povo — ¡y vos ya hablás su idioma!",
+        "langs": [
+          "pt"
+        ]
+      },
+      {
+        "text": "Every word learned is a door opened. ¡Seguí abriendo puertas!",
+        "langs": [
+          "en"
+        ]
+      },
+      {
+        "text": "Practice makes perfect — ¡y vos lo estás demostrando!",
+        "langs": [
+          "en"
+        ]
+      },
+      {
+        "text": "Repetitio est mater studiorum — la repetición es la madre del aprendizaje.",
+        "langs": []
+      },
+      {
+        "text": "¡Fantástico! El vocabulario se construye ladrillo a ladrillo.",
+        "langs": []
+      }
     ]
   },
   "audioReview": {

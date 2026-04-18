@@ -7,9 +7,9 @@ persistence of exercises for later replay.
 
 import json
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -41,6 +41,7 @@ class GenerateRequest(BaseModel):
     prose_override: Optional[str] = None  # skip Phase 1, use this text directly (two_phase only)
     double_correct: bool = False          # run a second auto-correction pass on Phase 1 prose
     max_blanks: int = 10                  # maximum number of blanks to generate
+    cefr_level: str = ""                  # A1/A2/B1/B2/C1/C2 or "" for intermediate default
 
 
 class CheckProseRequest(BaseModel):
@@ -64,8 +65,19 @@ class SaveExerciseRequest(BaseModel):
     segments_json: str
     grammar_notes_json: str = "[]"
     vocabulary_used_json: str = "[]"
+    grammar_focus_json: str = "[]"
     score_correct: Optional[int] = None
     score_total: Optional[int] = None
+    cefr_level: Optional[str] = None
+    description: Optional[str] = None
+    is_global: bool = False
+
+
+class UpdateExerciseMetaRequest(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    cefr_level: Optional[str] = None
+    is_global: Optional[bool] = None
 
 
 class UpdateScoreRequest(BaseModel):
@@ -115,6 +127,7 @@ def generate_exercise(
             prose_override=req.prose_override or None,
             double_correct=req.double_correct,
             max_blanks=max(3, min(20, req.max_blanks)),
+            cefr_level=req.cefr_level or "",
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -208,8 +221,12 @@ def save_exercise(
         segments_json=req.segments_json,
         grammar_notes_json=req.grammar_notes_json,
         vocabulary_used_json=req.vocabulary_used_json,
+        grammar_focus_json=req.grammar_focus_json,
         score_correct=req.score_correct,
         score_total=req.score_total,
+        cefr_level=req.cefr_level or None,
+        description=req.description or None,
+        is_global=req.is_global,
         created_at=datetime.utcnow(),
         last_attempted=datetime.utcnow() if req.score_correct is not None else None,
     )
@@ -221,17 +238,84 @@ def save_exercise(
 
 @router.get("/exercises")
 def list_exercises(
+    filter: str = Query("all", regex="^(all|private|global)$"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """List all saved exercises for the current user (summary, no segments)."""
-    exercises = (
-        db.query(GrammarExercise)
-        .filter(GrammarExercise.user_id == current_user.id)
-        .order_by(GrammarExercise.created_at.desc())
-        .all()
-    )
+    """List saved exercises for the current user (summary, no segments). filter=all|private|global"""
+    q = db.query(GrammarExercise).filter(GrammarExercise.user_id == current_user.id)
+    if filter == "private":
+        q = q.filter(GrammarExercise.is_global == False)
+    elif filter == "global":
+        q = q.filter(GrammarExercise.is_global == True)
+    exercises = q.order_by(GrammarExercise.created_at.desc()).all()
     return [_exercise_summary(e) for e in exercises]
+
+
+@router.get("/exercises/explore")
+def explore_exercises(
+    search: Optional[str] = Query(None),
+    cefr_level: Optional[str] = Query(None),
+    filter: str = Query("global", regex="^(global|all)$"),
+    language: str = Query("de"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Explore global exercises from all users (excluding current user's own)."""
+    q = db.query(GrammarExercise).filter(
+        GrammarExercise.is_global == True,
+        GrammarExercise.language == language,
+    )
+    if filter == "global":
+        q = q.filter(GrammarExercise.user_id != current_user.id)
+    if search:
+        like = f"%{search}%"
+        q = q.filter(
+            (GrammarExercise.title.ilike(like)) |
+            (GrammarExercise.topic.ilike(like)) |
+            (GrammarExercise.description.ilike(like))
+        )
+    if cefr_level:
+        q = q.filter(GrammarExercise.cefr_level == cefr_level)
+    exercises = q.order_by(GrammarExercise.created_at.desc()).limit(50).all()
+    return [_exercise_summary(e) for e in exercises]
+
+
+@router.post("/exercises/{exercise_id}/adopt")
+def adopt_exercise(
+    exercise_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Copy a global exercise into the current user's library as private."""
+    original = (
+        db.query(GrammarExercise)
+        .filter(GrammarExercise.id == exercise_id, GrammarExercise.is_global == True)
+        .first()
+    )
+    if not original:
+        raise HTTPException(status_code=404, detail="Global exercise not found")
+
+    copy = GrammarExercise(
+        user_id=current_user.id,
+        title=original.title,
+        topic=original.topic,
+        language=original.language,
+        interface_lang=original.interface_lang,
+        segments_json=original.segments_json,
+        grammar_notes_json=original.grammar_notes_json,
+        vocabulary_used_json=original.vocabulary_used_json,
+        grammar_focus_json=original.grammar_focus_json,
+        cefr_level=original.cefr_level,
+        description=original.description,
+        is_global=False,
+        original_exercise_id=original.id,
+        created_at=datetime.utcnow(),
+    )
+    db.add(copy)
+    db.commit()
+    db.refresh(copy)
+    return _exercise_summary(copy)
 
 
 @router.get("/exercises/{exercise_id}")
@@ -240,9 +324,40 @@ def get_exercise(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Get a single saved exercise with full segments."""
-    exercise = _get_or_404(exercise_id, current_user.id, db)
+    """Get a single saved exercise with full segments. Also allows reading global exercises."""
+    exercise = (
+        db.query(GrammarExercise)
+        .filter(GrammarExercise.id == exercise_id)
+        .filter(
+            (GrammarExercise.user_id == current_user.id) |
+            (GrammarExercise.is_global == True)
+        )
+        .first()
+    )
+    if not exercise:
+        raise HTTPException(status_code=404, detail="Exercise not found")
     return _exercise_full(exercise)
+
+
+@router.patch("/exercises/{exercise_id}/meta")
+def update_exercise_meta(
+    exercise_id: int,
+    req: UpdateExerciseMetaRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update title, description, cefr_level, or is_global for a user's own exercise."""
+    exercise = _get_or_404(exercise_id, current_user.id, db)
+    if req.title is not None:
+        exercise.title = req.title
+    if req.description is not None:
+        exercise.description = req.description
+    if req.cefr_level is not None:
+        exercise.cefr_level = req.cefr_level or None
+    if req.is_global is not None:
+        exercise.is_global = req.is_global
+    db.commit()
+    return _exercise_summary(exercise)
 
 
 @router.patch("/exercises/{exercise_id}/score")
@@ -290,12 +405,18 @@ def _get_or_404(exercise_id: int, user_id: int, db: Session) -> GrammarExercise:
 def _exercise_summary(e: GrammarExercise) -> dict:
     return {
         "id": e.id,
+        "user_id": e.user_id,
         "title": e.title,
         "topic": e.topic,
         "language": e.language,
         "interface_lang": e.interface_lang,
         "score_correct": e.score_correct,
         "score_total": e.score_total,
+        "cefr_level": e.cefr_level,
+        "description": e.description,
+        "is_global": bool(e.is_global),
+        "original_exercise_id": e.original_exercise_id,
+        "grammar_focus": json.loads(e.grammar_focus_json or "[]"),
         "created_at": e.created_at.isoformat() if e.created_at else None,
         "last_attempted": e.last_attempted.isoformat() if e.last_attempted else None,
     }
@@ -304,6 +425,6 @@ def _exercise_summary(e: GrammarExercise) -> dict:
 def _exercise_full(e: GrammarExercise) -> dict:
     summary = _exercise_summary(e)
     summary["segments"] = json.loads(e.segments_json)
-    summary["grammar_notes"] = json.loads(e.grammar_notes_json)
-    summary["vocabulary_used"] = json.loads(e.vocabulary_used_json)
+    summary["grammar_notes"] = json.loads(e.grammar_notes_json or "[]")
+    summary["vocabulary_used"] = json.loads(e.vocabulary_used_json or "[]")
     return summary

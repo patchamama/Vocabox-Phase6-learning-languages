@@ -11,6 +11,7 @@ import GrammarSession from '../components/GrammarSession'
 import WordEditForm from '../components/WordEditForm'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useUserProfileStore } from '../stores/userProfileStore'
+import { useAddWordStore } from '../stores/addWordStore'
 import type { ReviewWord } from '../types'
 import type { TipLang } from '../data/germanGrammarTips'
 import { playAudio, speakUtterance } from '../utils/audioManager'
@@ -256,6 +257,20 @@ export default function Words() {
   const [subtitleSearchResults, setSubtitleSearchResults] = useState<WordVideoRef[] | null>(null)
   const [isSubtitleSearching, setIsSubtitleSearching] = useState(false)
   const [subtitleSearchModal, setSubtitleSearchModal] = useState<WordVideoRef[] | null>(null)
+
+  // ── Add-word prefill (from LEO in GrammarWorkshop) ───────────────────────────
+  const { prefill, clearPrefill } = useAddWordStore()
+  const [prefillData, setPrefillData] = useState<{ palabra: string; significado: string } | null>(null)
+
+  useEffect(() => {
+    if (prefill) {
+      setPrefillData(prefill)
+      setIsAdding(true)
+      clearPrefill()
+      // Scroll to top so form is visible
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }, [prefill, clearPrefill])
 
   // ── CRUD ─────────────────────────────────────────────────────────────────────
   const [isAdding, setIsAdding] = useState(false)
@@ -910,14 +925,14 @@ export default function Words() {
         <WordEditForm
           word={{
             word_id: 0,
-            palabra: '',
-            significado: '',
+            palabra: prefillData?.palabra ?? '',
+            significado: prefillData?.significado ?? '',
             idioma_origen: 'de',
             idioma_destino: 'es',
             tema_id: null,
           }}
-          onSaved={() => { setIsAdding(false); load() }}
-          onCancel={() => setIsAdding(false)}
+          onSaved={() => { setIsAdding(false); setPrefillData(null); load() }}
+          onCancel={() => { setIsAdding(false); setPrefillData(null) }}
         />
       )}
 
@@ -1077,7 +1092,7 @@ export default function Words() {
         <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col">
           <div className="flex items-center justify-between px-4 pt-5 pb-2">
             <p className="text-sm font-medium text-slate-300">
-              ✏️ {uiLang === 'en' ? 'Grammar' : uiLang === 'de' ? 'Grammatik' : 'Gramática'} — {filtered.length} {uiLang === 'en' ? 'words' : 'palabras'}
+              ✏️ {uiLang === 'en' ? 'Grammar' : uiLang === 'de' ? 'Grammatik' : uiLang === 'fr' ? 'Grammaire' : 'Gramática'} — {filtered.length} {uiLang === 'en' ? 'words' : uiLang === 'de' ? 'Wörter' : uiLang === 'fr' ? 'mots' : 'palabras'}
             </p>
             <button onClick={() => setShowGrammarWords(false)} className="text-slate-400 hover:text-white text-xl">✕</button>
           </div>
