@@ -241,27 +241,31 @@ Return ONLY the plain corrected text — no comments, no explanations, no markdo
 
 # Prose correction prompt
 PROMPT_CHECK_PROSE = """\
-You are a German language teacher. Review this German text for grammatical errors, unnatural phrasing, or spelling mistakes:
+You are a German language teacher. Check the following German text strictly for:
+1. Grammatical errors (wrong case, wrong verb form, wrong agreement, wrong word order)
+2. Spelling errors (including umlauts: ä, ö, ü, ß)
+
+Do NOT comment on style, naturalness, vocabulary choice, or phrasing — only hard grammar and spelling errors.
 
 ---
 {text}
 ---
 
-Your response must have TWO sections:
+Your response must have TWO sections, written in {interface_lang}:
 
 SECTION 1 — CORRECTED TEXT:
-Write the complete corrected version of the text. If the text is already correct, copy it unchanged.
-Label this section clearly as "Texto corregido:" (or "Corrected text:" in English).
+Write the complete corrected version of the text.
+If the text has no errors, copy it unchanged.
+Label this section: "Texto corregido:" (or "Corrected text:" if interface_lang is English).
 
-SECTION 2 — COMMENTS:
-For each error found, explain:
-1. The incorrect part (quote it)
-2. The grammar rule and why it is wrong (in {interface_lang})
-3. The correction
+SECTION 2 — ERRORS FOUND:
+List only the grammar and spelling errors found.
+For each error:
+- Quote the wrong part
+- Explain the rule briefly
+- Show the correction
 
-If the text is correct, write a brief confirmation.
-
-Write the entire response in {interface_lang}.
+If no errors were found, write: "No se encontraron errores gramaticales ni ortográficos." (or equivalent in the interface language).
 """
 
 PROMPT_SUGGEST_TOPICS = """\
