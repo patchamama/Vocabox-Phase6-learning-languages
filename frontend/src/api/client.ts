@@ -273,12 +273,27 @@ export const grammarApi = {
     model: string
     timeout?: number
     custom_prompt?: string
+    temperature?: number
+    num_predict?: number
+    top_p?: number
+    mode?: 'two_phase' | 'rolling' | 'custom'
+    rolling_sentences?: number
+    prose_override?: string
+    double_correct?: boolean
+    max_blanks?: number
   }) => api.post<GrammarExerciseData>('/grammar/generate', data),
+
+  checkProse: (data: {
+    text: string
+    interface_lang: string
+    model: string
+    timeout?: number
+  }) => api.post<{ feedback: string }>('/grammar/check-prose', data),
 
   suggestTopics: (data: { interface_lang: string; model: string; timeout?: number }) =>
     api.post<{ topics: string[] }>('/grammar/suggest-topics', data),
 
-  getDefaultPrompt: () => api.get<{ prompt: string }>('/grammar/default-prompt'),
+  getDefaultPrompt: (mode?: string) => api.get<{ prompt: string }>('/grammar/default-prompt', { params: mode ? { mode } : {} }),
 
   saveExercise: (data: {
     title: string

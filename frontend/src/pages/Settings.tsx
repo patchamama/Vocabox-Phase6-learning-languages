@@ -387,6 +387,177 @@ function PromptField({
   )
 }
 
+// ── Grammar model parameter presets ──────────────────────────────────────────
+
+const MODEL_PRESETS = [
+  {
+    id: 'small',
+    label: { es: 'Modelo pequeño', en: 'Small model', de: 'Kleines Modell', fr: 'Petit modèle' },
+    desc: { es: '≤7B params — menos creatividad, más obediente', en: '≤7B params — less creative, more obedient', de: '≤7B — weniger kreativ, gehorsamer', fr: '≤7B — moins créatif, plus obéissant' },
+    temperature: 0.2,
+    numPredict: 2048,
+    topP: 0.85,
+  },
+  {
+    id: 'medium',
+    label: { es: 'Modelo mediano', en: 'Medium model', de: 'Mittleres Modell', fr: 'Modèle moyen' },
+    desc: { es: '8–14B params — equilibrio calidad/velocidad', en: '8–14B params — quality/speed balance', de: '8–14B — Qualität/Geschwindigkeit', fr: '8–14B — équilibre qualité/vitesse' },
+    temperature: 0.4,
+    numPredict: 4096,
+    topP: 0.9,
+  },
+  {
+    id: 'large',
+    label: { es: 'Modelo grande', en: 'Large model', de: 'Großes Modell', fr: 'Grand modèle' },
+    desc: { es: '≥30B params — más creatividad, respuestas largas', en: '≥30B params — more creative, longer answers', de: '≥30B — kreativer, längere Antworten', fr: '≥30B — plus créatif, réponses longues' },
+    temperature: 0.6,
+    numPredict: 6144,
+    topP: 0.95,
+  },
+] as const
+
+function GrammarModelParams({
+  temperature, numPredict, topP,
+  onTemperature, onNumPredict, onTopP,
+}: {
+  temperature: number | null
+  numPredict: number | null
+  topP: number | null
+  onTemperature: (v: number | null) => void
+  onNumPredict: (v: number | null) => void
+  onTopP: (v: number | null) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const isCustom = temperature !== null || numPredict !== null || topP !== null
+
+  const applyPreset = (preset: typeof MODEL_PRESETS[number]) => {
+    onTemperature(preset.temperature)
+    onNumPredict(preset.numPredict)
+    onTopP(preset.topP)
+  }
+
+  const reset = () => {
+    onTemperature(null)
+    onNumPredict(null)
+    onTopP(null)
+  }
+
+  const lang = 'es' // fallback — good enough for this internal component
+
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="text-xs text-slate-500 hover:text-slate-300 transition-colors flex items-center gap-1"
+        >
+          {open ? '▼' : '▶'}
+          <span>Parámetros del modelo (gramática)</span>
+          {isCustom && <span className="ml-1 text-blue-400">●</span>}
+        </button>
+        {isCustom && (
+          <button onClick={reset} className="text-xs text-slate-500 hover:text-red-400 transition-colors">
+            Reset
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div className="mt-3 space-y-4">
+          {/* Presets */}
+          <div className="space-y-1.5">
+            <p className="text-xs text-slate-400 font-medium">Presets por tamaño</p>
+            <div className="grid grid-cols-3 gap-2">
+              {MODEL_PRESETS.map((preset) => {
+                const active =
+                  temperature === preset.temperature &&
+                  numPredict === preset.numPredict &&
+                  topP === preset.topP
+                return (
+                  <button
+                    key={preset.id}
+                    onClick={() => applyPreset(preset)}
+                    className={`text-xs px-2 py-2 rounded-xl border transition-colors text-left ${
+                      active
+                        ? 'border-blue-500 bg-blue-500/20 text-blue-200'
+                        : 'border-slate-600 text-slate-400 hover:border-slate-500'
+                    }`}
+                  >
+                    <div className="font-medium">{preset.label[lang]}</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5 leading-tight">
+                      {preset.desc[lang]}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Manual sliders */}
+          <div className="space-y-3 pt-2 border-t border-slate-700">
+            {/* Temperature */}
+            <div className="space-y-1">
+              <div className="flex justify-between items-center">
+                <p className="text-xs text-slate-400">Temperatura</p>
+                <span className="text-xs font-mono text-white">{temperature ?? '0.4 (def)'}</span>
+              </div>
+              <p className="text-[10px] text-slate-500">Creatividad. Bajo = obediente, alto = creativo pero impreciso.</p>
+              <input
+                type="range"
+                min={0} max={1} step={0.05}
+                value={temperature ?? 0.4}
+                onChange={(e) => onTemperature(parseFloat(e.target.value))}
+                className="w-full accent-blue-500"
+              />
+              <div className="flex justify-between text-[10px] text-slate-600">
+                <span>0 (obediente)</span><span>1 (creativo)</span>
+              </div>
+            </div>
+
+            {/* num_predict */}
+            <div className="space-y-1">
+              <div className="flex justify-between items-center">
+                <p className="text-xs text-slate-400">Tokens máx (num_predict)</p>
+                <span className="text-xs font-mono text-white">{numPredict ?? '4096 (def)'}</span>
+              </div>
+              <p className="text-[10px] text-slate-500">Modelos chicos necesitan menos, modelos grandes aguantan más.</p>
+              <input
+                type="range"
+                min={1024} max={8192} step={256}
+                value={numPredict ?? 4096}
+                onChange={(e) => onNumPredict(parseInt(e.target.value))}
+                className="w-full accent-blue-500"
+              />
+              <div className="flex justify-between text-[10px] text-slate-600">
+                <span>1024</span><span>8192</span>
+              </div>
+            </div>
+
+            {/* top_p */}
+            <div className="space-y-1">
+              <div className="flex justify-between items-center">
+                <p className="text-xs text-slate-400">Top-P (nucleus sampling)</p>
+                <span className="text-xs font-mono text-white">{topP ?? '0.9 (def)'}</span>
+              </div>
+              <p className="text-[10px] text-slate-500">Vocabulario considerado. Bajo = conservador, alto = diverso.</p>
+              <input
+                type="range"
+                min={0.5} max={1} step={0.05}
+                value={topP ?? 0.9}
+                onChange={(e) => onTopP(parseFloat(e.target.value))}
+                className="w-full accent-blue-500"
+              />
+              <div className="flex justify-between text-[10px] text-slate-600">
+                <span>0.5</span><span>1.0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function OllamaPromptsEditor({
   promptTranslate, promptEnhance, promptGrammar,
   onChangeTranslate, onChangeEnhance, onChangeGrammar,
@@ -460,11 +631,13 @@ export default function Settings() {
     videoClipPauseSec, videoClipContext, videoClipAutoPlay, videoClipPlaybackRate, maxRefsPerWord,
     subtitleIndexPalabra, subtitleIndexAudioText, subtitleIndexSignificado,
     germanArticleChoice, grammarReviewEnabled, grammarOptions, ollamaPromptGrammar,
+    grammarTemperature, grammarNumPredict, grammarTopP, grammarDoubleCorrect, grammarMaxBlanks,
     setReviewMode, setWordsPerSession, setTransitionDelay, setTransitionType,
     setSafeRound, setAutoPlayAudio, setAutoPlayAudioReversed, setWordsOnly, setReviewDirection,
     setUseTtsInAudioReview, setLeoAutoFetchExtras, setLeoExtraLangs,
     setAudioReviewExtraLangs, setOllamaTranslationModel,
     setOllamaTimeout, setOllamaPromptTranslate, setOllamaPromptEnhance, setOllamaPromptGrammar,
+    setGrammarTemperature, setGrammarNumPredict, setGrammarTopP, setGrammarDoubleCorrect, setGrammarMaxBlanks,
     setVideoClipPauseSec, setVideoClipContext, setVideoClipAutoPlay, setVideoClipPlaybackRate, setMaxRefsPerWord,
     setSubtitleIndexPalabra, setSubtitleIndexAudioText, setSubtitleIndexSignificado,
     setGermanArticleChoice, setGrammarReviewEnabled, setGrammarOption,
@@ -779,6 +952,49 @@ export default function Settings() {
               onChange={setAudioReviewExtraLangs}
               label={t('settings.audioReviewExtraLangs')}
               description={t('settings.audioReviewExtraLangsDesc')}
+            />
+
+            {/* Grammar: double correction pass */}
+            <div className="flex items-center justify-between py-1">
+              <div>
+                <p className="text-sm text-slate-200">Segunda pasada de corrección</p>
+                <p className="text-xs text-slate-500">Aplica una segunda corrección al texto generado antes de crear el ejercicio</p>
+              </div>
+              <button
+                onClick={() => setGrammarDoubleCorrect(!grammarDoubleCorrect)}
+                className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors ${grammarDoubleCorrect ? 'bg-blue-500' : 'bg-slate-600'}`}
+              >
+                <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${grammarDoubleCorrect ? 'translate-x-4' : 'translate-x-0'}`} />
+              </button>
+            </div>
+
+            {/* Grammar: max blanks */}
+            <div className="flex items-center justify-between py-1">
+              <div>
+                <p className="text-sm text-slate-200">Máximo de blancos por ejercicio</p>
+                <p className="text-xs text-slate-500">Número máximo de blancos que genera el ejercicio (3–20)</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min={3}
+                  max={20}
+                  value={grammarMaxBlanks}
+                  onChange={(e) => setGrammarMaxBlanks(Number(e.target.value))}
+                  className="w-24 accent-blue-500"
+                />
+                <span className="text-sm text-slate-300 w-6 text-right">{grammarMaxBlanks}</span>
+              </div>
+            </div>
+
+            {/* Grammar model parameters */}
+            <GrammarModelParams
+              temperature={grammarTemperature}
+              numPredict={grammarNumPredict}
+              topP={grammarTopP}
+              onTemperature={setGrammarTemperature}
+              onNumPredict={setGrammarNumPredict}
+              onTopP={setGrammarTopP}
             />
 
             {/* Custom prompts — collapsible */}

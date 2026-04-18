@@ -35,12 +35,20 @@ class OllamaClient(AIClient):
     def __init__(self, base_url: str = "http://localhost:11434"):
         self.base_url = base_url.rstrip("/")
 
-    def complete(self, prompt: str, model: str, timeout: int) -> str:
+    def complete(
+        self,
+        prompt: str,
+        model: str,
+        timeout: int,
+        num_predict: int = 4096,
+        temperature: float = 0.4,
+        top_p: float = 0.9,
+    ) -> str:
         payload = json.dumps({
             "model": model,
             "prompt": prompt,
             "stream": False,
-            "options": {"temperature": 0.4, "top_p": 0.9, "num_predict": 2500},
+            "options": {"temperature": temperature, "top_p": top_p, "num_predict": num_predict},
         }).encode()
         req = urllib.request.Request(
             f"{self.base_url}/api/generate",

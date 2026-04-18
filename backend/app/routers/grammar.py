@@ -33,6 +33,21 @@ class GenerateRequest(BaseModel):
     model: str
     timeout: int = 60
     custom_prompt: Optional[str] = None
+    temperature: Optional[float] = None   # 0.0–1.0; None = model default (0.4)
+    num_predict: Optional[int] = None     # max tokens; None = model default (4096)
+    top_p: Optional[float] = None         # 0.0–1.0; None = model default (0.9)
+    mode: str = "two_phase"               # "two_phase" | "rolling" | "custom"
+    rolling_sentences: int = 6            # sentences to generate in rolling mode
+    prose_override: Optional[str] = None  # skip Phase 1, use this text directly (two_phase only)
+    double_correct: bool = False          # run a second auto-correction pass on Phase 1 prose
+    max_blanks: int = 10                  # maximum number of blanks to generate
+
+
+class CheckProseRequest(BaseModel):
+    text: str
+    interface_lang: str = "es"
+    model: str
+    timeout: int = 60
 
 
 class SuggestTopicsRequest(BaseModel):
@@ -92,6 +107,14 @@ def generate_exercise(
             timeout=max(10, min(900, req.timeout)),
             custom_prompt=req.custom_prompt or "",
             ai_client=ai_client,
+            temperature=req.temperature,
+            num_predict=req.num_predict,
+            top_p=req.top_p,
+            mode=req.mode,
+            rolling_sentences=max(2, min(12, req.rolling_sentences)),
+            prose_override=req.prose_override or None,
+            double_correct=req.double_correct,
+            max_blanks=max(3, min(20, req.max_blanks)),
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -99,6 +122,36 @@ def generate_exercise(
         raise HTTPException(status_code=503, detail=f"AI provider unavailable: {exc}")
 
     return exercise
+
+
+@router.post("/check-prose")
+def check_prose(
+    req: CheckProseRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Ask the AI to review a German text for grammatical errors."""
+    active = get_active_client_and_model(current_user.id, db)
+    if active:
+        ai_client, model = active
+    else:
+        ai_client = None
+        model = req.model
+
+    try:
+        feedback = grammar_service.check_prose(
+            text=req.text,
+            interface_lang=req.interface_lang,
+            model=model,
+            timeout=max(10, min(900, req.timeout)),
+            ai_client=ai_client,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"AI provider unavailable: {exc}")
+
+    return {"feedback": feedback}
 
 
 @router.post("/suggest-topics")
@@ -125,9 +178,12 @@ def suggest_topics(
 
 
 @router.get("/default-prompt")
-def get_default_prompt(current_user: User = Depends(get_current_user)):
-    """Return the built-in grammar exercise prompt template."""
-    return {"prompt": grammar_service.get_default_grammar_prompt()}
+def get_default_prompt(
+    mode: str = "custom",
+    current_user: User = Depends(get_current_user),
+):
+    """Return the built-in prompt template for the given generation mode."""
+    return {"prompt": grammar_service.get_default_grammar_prompt(mode)}
 
 
 @router.post("/exercises")

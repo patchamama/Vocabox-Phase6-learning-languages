@@ -85,6 +85,20 @@ interface SettingsState {
   }
   /** Custom prompt template for Ollama grammar exercise generation (empty = use default) */
   ollamaPromptGrammar: string
+  /** Grammar generation: sampling temperature (0.0–1.0). null = backend default (0.4) */
+  grammarTemperature: number | null
+  /** Grammar generation: max tokens to generate. null = backend default (4096) */
+  grammarNumPredict: number | null
+  /** Grammar generation: top_p nucleus sampling (0.0–1.0). null = backend default (0.9) */
+  grammarTopP: number | null
+  /** Grammar generation mode */
+  grammarMode: 'two_phase' | 'rolling' | 'custom'
+  /** Number of sentences in rolling mode (2–12) */
+  grammarRollingSentences: number
+  /** Run a second auto-correction pass on Phase 1 prose */
+  grammarDoubleCorrect: boolean
+  /** Maximum number of blanks to generate per exercise (3–20) */
+  grammarMaxBlanks: number
 
   setReviewMode: (mode: ReviewMode) => void
   setWordsPerSession: (n: number) => void
@@ -121,6 +135,13 @@ interface SettingsState {
   setGrammarReviewEnabled: (v: boolean) => void
   setGrammarOption: (key: keyof SettingsState['grammarOptions'], v: boolean) => void
   setOllamaPromptGrammar: (p: string) => void
+  setGrammarTemperature: (v: number | null) => void
+  setGrammarNumPredict: (v: number | null) => void
+  setGrammarTopP: (v: number | null) => void
+  setGrammarMode: (v: 'two_phase' | 'rolling' | 'custom') => void
+  setGrammarRollingSentences: (v: number) => void
+  setGrammarDoubleCorrect: (v: boolean) => void
+  setGrammarMaxBlanks: (v: number) => void
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -169,6 +190,13 @@ export const useSettingsStore = create<SettingsState>()(
         verbPrepositions: true,
       },
       ollamaPromptGrammar: '',
+      grammarTemperature: null,
+      grammarNumPredict: null,
+      grammarTopP: null,
+      grammarMode: 'rolling',
+      grammarRollingSentences: 6,
+      grammarDoubleCorrect: false,
+      grammarMaxBlanks: 10,
 
       setReviewMode: (reviewMode) => set({ reviewMode }),
       setWordsPerSession: (wordsPerSession) => set({ wordsPerSession }),
@@ -217,6 +245,13 @@ export const useSettingsStore = create<SettingsState>()(
       setGrammarOption: (key, v) =>
         set((state) => ({ grammarOptions: { ...state.grammarOptions, [key]: v } })),
       setOllamaPromptGrammar: (ollamaPromptGrammar) => set({ ollamaPromptGrammar }),
+      setGrammarTemperature: (grammarTemperature) => set({ grammarTemperature }),
+      setGrammarNumPredict: (grammarNumPredict) => set({ grammarNumPredict }),
+      setGrammarTopP: (grammarTopP) => set({ grammarTopP }),
+      setGrammarMode: (grammarMode) => set({ grammarMode }),
+      setGrammarRollingSentences: (grammarRollingSentences) => set({ grammarRollingSentences: Math.max(2, Math.min(12, grammarRollingSentences)) }),
+      setGrammarDoubleCorrect: (grammarDoubleCorrect) => set({ grammarDoubleCorrect }),
+      setGrammarMaxBlanks: (grammarMaxBlanks) => set({ grammarMaxBlanks: Math.max(3, Math.min(20, grammarMaxBlanks)) }),
     }),
     { name: 'vocabox-settings' }
   )
