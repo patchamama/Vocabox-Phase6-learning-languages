@@ -5,6 +5,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { aiProvidersApi, grammarApi, ollamaApi, temasApi } from '../api/client'
 import type { AIProviderInfo } from '../api/client'
 import AIProvidersModal from '../components/AIProvidersModal'
+import Import from './Import'
 import type { Tema } from '../types'
 import { TtsVoiceSettings } from '../components/TtsVoiceSettings'
 import { TtsFiltersEditor } from '../components/TtsFiltersEditor'
@@ -649,6 +650,7 @@ export default function Settings() {
   const [defaultGrammarPrompt, setDefaultGrammarPrompt] = useState('')
   const [activeProvider, setActiveProvider] = useState<AIProviderInfo | null | undefined>(undefined)
   const [showAIProviders, setShowAIProviders] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const ollamaChecked = useRef(false)
   useEffect(() => {
     if (ollamaChecked.current) return
@@ -1258,6 +1260,27 @@ export default function Settings() {
         </div>
       </div>
     </div>
+
+      {/* ── Import ─────────────────────────────────────────────────────────── */}
+      <div className="card space-y-4">
+        <button
+          onClick={() => setShowImport(v => !v)}
+          className="w-full flex items-center justify-between text-left"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-lg">📥</span>
+            <span className="font-semibold text-slate-800 dark:text-slate-100">
+              {t('settings.import', 'Importar')}
+            </span>
+          </div>
+          <span className="text-slate-400 text-sm">{showImport ? '▲' : '▼'}</span>
+        </button>
+        {showImport && (
+          <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+            <Import />
+          </div>
+        )}
+      </div>
 
       {/* AI Providers Modal */}
       {showAIProviders && (
