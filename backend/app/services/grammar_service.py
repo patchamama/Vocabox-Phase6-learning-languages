@@ -207,7 +207,15 @@ INSTRUCTIONS:
 3. "wrong" = exactly 2 wrong alternatives of the SAME word type (e.g. all definite articles, or all prepositions — never mix types).
 4. "rule" = the grammar rule in {interface_lang}.
 
-Return ONLY valid JSON — no markdown, no backticks:
+BEFORE returning your answer, verify ALL of the following:
+- The sentence (with the answer filled in) is grammatically correct German.
+- Every word is spelled correctly (check umlauts: ä, ö, ü, ß).
+- The sentence is thematically connected to the topic and context, but introduces a NEW idea or situation not already mentioned above.
+- The answer word appears nowhere in the "sentence" field — only ___ marks its position.
+- The "wrong" options are plausible but clearly incorrect in this context.
+- All three options (answer + wrong) are the SAME word type — never mix articles with prepositions, etc.
+
+Only after verifying, return ONLY valid JSON — no markdown, no backticks, no explanation:
 {{"sentence":"<sentence with ONE ___ >","answer":"<correct word>","wrong":["<wrong1>","<wrong2>"],"rule":"<rule in {interface_lang}>"}}
 
 EXAMPLE:
