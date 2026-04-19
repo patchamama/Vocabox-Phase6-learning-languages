@@ -74,6 +74,7 @@ def _migrate_grammar_exercises() -> None:
         ("is_global", "BOOLEAN NOT NULL DEFAULT 0"),
         ("original_exercise_id", "INTEGER REFERENCES grammar_exercises(id)"),
         ("grammar_focus_json", "TEXT DEFAULT '[]'"),
+        ("share_token", "VARCHAR(32)"),
     ]
     with engine.begin() as conn:
         for col, typ in new_cols:

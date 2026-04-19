@@ -435,11 +435,16 @@ Grammar focus application guide — apply ONLY the instructions below, nothing e
 
 Format rules:
 - 5-8 sentences total. Write either coherent prose OR a dialogue — both are good.
-- If writing a DIALOGUE: put each speaker's line on a new line, starting with the speaker's name followed by a colon. Example:
+- CRITICAL: put EACH sentence on its OWN line. One sentence = one line. No sentence runs into another on the same line.
+- If writing a DIALOGUE: each speaker turn on its own line, starting with the speaker's name followed by a colon.
+  Example:
   Anna: Ich möchte einen Kaffee, bitte.
   Kellner: Mit Milch oder ohne?
   Anna: Mit Milch, aber ohne Zucker.
-- If writing PROSE: use cohesive paragraphs with clear narrative flow.
+- If writing PROSE: still one sentence per line. Example:
+  Der Zug fährt um 8 Uhr ab.
+  Maria wartet am Bahnhof auf ihren Freund.
+  Sie hat eine Tasse Kaffee in der Hand.
 - Write ONLY the German text — no explanations, no labels, no JSON, no translation, no markdown.
 
 German text:
@@ -496,10 +501,16 @@ Grammar focus application guide — apply ONLY the instructions below, nothing e
 
 Format rules:
 - Write exactly {num_sentences} sentences.
-- You may write a coherent mini-story (each sentence a new moment) OR a dialogue (speaker name + colon + line, one per row).
-- If writing a DIALOGUE: each turn on its own line. Example:
+- CRITICAL: one sentence per line. Each sentence ends and the next begins on a NEW line.
+- You may write a coherent mini-story OR a dialogue — both are good.
+- If writing a DIALOGUE: each speaker turn on its own line (speaker name + colon + sentence).
+  Example:
   Anna: Ich muss mit dem Bus fahren, weil mein Auto kaputt ist.
   Max: Kannst du nicht mit meinem Fahrrad fahren?
+- If writing PROSE: still one sentence per line.
+  Example:
+  Der Zug fährt um 8 Uhr ab.
+  Maria wartet am Bahnhof auf ihren Freund.
 - Each sentence must cover a NEW aspect — do not repeat ideas or structures.
 - Write ONLY the sentences — no numbering, no explanations, no JSON, no markdown.
 

@@ -11,6 +11,8 @@ class GrammarExercise(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    # Random token for public sharing (e.g. 12-char base62). Null = not shared yet.
+    share_token = Column(String(32), nullable=True, unique=True, index=True)
     title = Column(String(200), nullable=False)
     topic = Column(String(200), nullable=False, default="")
     language = Column(String(10), nullable=False, default="de")       # source lang

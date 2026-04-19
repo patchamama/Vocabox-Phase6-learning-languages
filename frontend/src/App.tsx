@@ -17,7 +17,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/grammar/share/:id" element={<GrammarShare />} />
+        <Route path="/grammar/share/:token" element={<GrammarShare />} />
         <Route
           path="/*"
           element={

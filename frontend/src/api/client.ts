@@ -271,6 +271,7 @@ export interface SavedGrammarExercise extends GrammarExerciseData {
   is_global: boolean
   original_exercise_id: number | null
   grammar_focus: string[]
+  share_token: string | null
   created_at: string
   last_attempted: string | null
 }
@@ -343,7 +344,9 @@ export const grammarApi = {
 
   deleteExercise: (id: number) => api.delete(`/grammar/exercises/${id}`),
 
-  getExercisePublic: (id: number) => api.get<SavedGrammarExercise>(`/grammar/exercises/${id}/public`),
+  generateShareToken: (id: number) => api.post<{ share_token: string }>(`/grammar/exercises/${id}/share-token`),
+
+  getByToken: (token: string) => api.get<SavedGrammarExercise>(`/grammar/share/${token}`),
 }
 
 // ── Grammar Queue ─────────────────────────────────────────────────────────────

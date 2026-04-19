@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { QRCodeSVG } from 'qrcode.react'
 import { grammarApi, grammarQueueApi, leoApi, type CefrLevel, type GrammarExerciseData, type GrammarQueueItem, type GrammarSegment, type SavedGrammarExercise } from '../api/client'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useUserProfileStore } from '../stores/userProfileStore'
@@ -471,6 +472,10 @@ type SentenceGroup = { segs: GrammarSegment[]; rules: string[] }
  * A sentence ends when a text segment ends with . ! ? or a newline.
  */
 function groupBySentence(segments: GrammarSegment[]): SentenceGroup[] {
+  // The backend puts \n characters INSIDE text segment values (not at start of next segment).
+  // e.g. { t:'text', v:' einem Restaurant.\nAnna sagt: "...' }
+  // Strategy: split each text segment on \n. Each piece before a \n ends the current group.
+  // Blanks are never split — they belong to the current group.
   const groups: SentenceGroup[] = []
   let current: GrammarSegment[] = []
   let rules: string[] = []
@@ -484,15 +489,25 @@ function groupBySentence(segments: GrammarSegment[]): SentenceGroup[] {
   }
 
   for (const seg of segments) {
-    current.push(seg)
-    if (seg.t === 'blank' && seg.rule) {
-      rules.push(seg.rule)
+    if (seg.t === 'blank') {
+      if (seg.rule) rules.push(seg.rule)
+      current.push(seg)
+      continue
     }
-    if (seg.t === 'text' && seg.v) {
-      const trimmed = seg.v.trimEnd()
-      if (/[.!?\n]$/.test(trimmed)) {
-        flush()
-      }
+
+    if (seg.t === 'text') {
+      const v = seg.v ?? ''
+      // Split on \n — backend places newlines between logical sentences
+      const parts = v.split('\n')
+      parts.forEach((part, i) => {
+        if (part) {
+          current.push({ ...seg, v: part })
+        }
+        // Each \n boundary = end of sentence → flush
+        if (i < parts.length - 1) {
+          flush()
+        }
+      })
     }
   }
   flush()
@@ -569,12 +584,30 @@ function ExercisePlayer({
   const leoDropdownRef = useRef<HTMLDivElement | null>(null)
   const [saved, setSaved] = useState(savedId !== null)
   const [currentSavedId, setCurrentSavedId] = useState<number | null>(savedId)
+  const [shareToken, setShareToken] = useState<string | null>(null)
+  const [shareLoading, setShareLoading] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [showQr, setShowQr] = useState(false)
 
-  const handleShare = () => {
+  const shareUrl = shareToken
+    ? `${window.location.origin}${import.meta.env.BASE_URL}grammar/share/${shareToken}`
+    : null
+
+  const handleGetShareToken = async () => {
     if (!currentSavedId) return
-    const url = `${window.location.origin}${import.meta.env.BASE_URL}grammar/share/${currentSavedId}`
-    navigator.clipboard.writeText(url).then(() => {
+    if (shareToken) { setShowQr(true); return }
+    setShareLoading(true)
+    try {
+      const { data } = await grammarApi.generateShareToken(currentSavedId)
+      setShareToken(data.share_token)
+      setShowQr(true)
+    } catch { /* silent */ }
+    finally { setShareLoading(false) }
+  }
+
+  const handleCopyLink = () => {
+    if (!shareUrl) return
+    navigator.clipboard.writeText(shareUrl).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     })
@@ -624,6 +657,26 @@ function ExercisePlayer({
       if (toastTimer.current) clearTimeout(toastTimer.current)
       setToast({ rule: blank.rule, correct: isCorrect })
       toastTimer.current = setTimeout(() => setToast(null), 4000)
+    }
+  }
+
+  const [metaSaving, setMetaSaving] = useState(false)
+  const [metaSaved, setMetaSaved] = useState(false)
+
+  const handleUpdateMeta = async () => {
+    if (!currentSavedId) return
+    setMetaSaving(true)
+    try {
+      await grammarApi.updateMeta(currentSavedId, {
+        title: editTitle || exercise.title,
+        description: editDescription || undefined,
+        cefr_level: editCefr || undefined,
+        is_global: editGlobal,
+      })
+      setMetaSaved(true)
+      setTimeout(() => setMetaSaved(false), 2000)
+    } catch { /* ignore */ } finally {
+      setMetaSaving(false)
     }
   }
 
@@ -859,8 +912,8 @@ function ExercisePlayer({
                             ) : (
                               <span
                                 key={ti}
-                                onDoubleClick={() => lookupTextWord(token)}
-                                className="italic text-slate-200 cursor-text hover:text-white select-text"
+                                onClick={() => lookupTextWord(token)}
+                                className="italic text-slate-200 cursor-pointer hover:text-white hover:underline decoration-dotted underline-offset-2 transition-colors"
                               >
                                 {token}
                               </span>
@@ -882,9 +935,8 @@ function ExercisePlayer({
                       {seg.options?.map((opt) => (
                         <button
                           key={opt}
-                          onClick={() => pick(blankId, opt, seg)}
-                          disabled={isLocked}
-                          className={`px-2 py-0.5 rounded-md border text-sm font-medium transition-all duration-200 ${chipClass(blankId, opt, seg)}`}
+                          onClick={() => isLocked ? lookupTextWord(opt) : pick(blankId, opt, seg)}
+                          className={`px-2 py-0.5 rounded-md border text-sm font-medium transition-all duration-200 ${chipClass(blankId, opt, seg)} ${isLocked ? 'cursor-pointer' : ''}`}
                         >
                           {opt}
                         </button>
@@ -1026,9 +1078,8 @@ function ExercisePlayer({
           </button>
         )}
 
-        {/* Metadata panel (editable before saving) */}
-        {!saved && (
-          <div className="border border-slate-700/60 rounded-xl overflow-hidden">
+        {/* Metadata panel (editable before AND after saving) */}
+        <div className="border border-slate-700/60 rounded-xl overflow-hidden">
             <button
               onClick={() => setShowMeta(v => !v)}
               className="w-full flex items-center justify-between px-3 py-2 text-xs text-slate-400 hover:text-slate-300 transition-colors"
@@ -1101,9 +1152,92 @@ function ExercisePlayer({
                     🌐 {uiLang === 'de' ? 'Global (für alle sichtbar)' : uiLang === 'en' ? 'Global (visible to everyone)' : uiLang === 'fr' ? 'Global (visible pour tous)' : 'Global (visible para todos)'}
                   </span>
                 </label>
+                {/* Save changes button — only when already saved */}
+                {saved && (
+                  <button
+                    onClick={handleUpdateMeta}
+                    disabled={metaSaving}
+                    className={`w-full py-2 rounded-lg border text-xs font-medium transition-colors ${
+                      metaSaved
+                        ? 'border-green-500/40 text-green-400 bg-green-500/10'
+                        : 'border-slate-600 text-slate-300 hover:border-blue-500/40 hover:text-blue-300'
+                    }`}
+                  >
+                    {metaSaving ? '...' : metaSaved
+                      ? `✓ ${uiLang === 'de' ? 'Gespeichert' : uiLang === 'en' ? 'Saved' : uiLang === 'fr' ? 'Enregistré' : 'Guardado'}`
+                      : uiLang === 'de' ? 'Änderungen speichern' : uiLang === 'en' ? 'Save changes' : uiLang === 'fr' ? 'Enregistrer les modifications' : 'Guardar cambios'}
+                  </button>
+                )}
               </div>
             )}
           </div>
+
+        {/* Share — visible after saving */}
+        {currentSavedId && (
+          <>
+            {/* QR modal */}
+            {showQr && shareUrl && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+                onClick={() => setShowQr(false)}
+              >
+                <div
+                  className="bg-slate-800 border border-slate-600 rounded-2xl p-6 w-80 space-y-4 shadow-2xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-white">
+                      {uiLang === 'de' ? 'Übung teilen' : uiLang === 'en' ? 'Share exercise' : uiLang === 'fr' ? 'Partager' : 'Compartir ejercicio'}
+                    </p>
+                    <button onClick={() => setShowQr(false)} className="text-slate-400 hover:text-white text-lg leading-none">✕</button>
+                  </div>
+                  {/* QR code */}
+                  <div className="flex justify-center bg-white rounded-xl p-4">
+                    <QRCodeSVG value={shareUrl} size={200} />
+                  </div>
+                  {/* URL + copy */}
+                  <div className="flex items-center gap-2 bg-slate-900 rounded-lg px-3 py-2">
+                    <span className="flex-1 text-xs text-slate-400 truncate select-all font-mono">{shareUrl}</span>
+                    <button
+                      onClick={handleCopyLink}
+                      className="shrink-0 text-xs px-2 py-1 rounded-lg border border-slate-600 text-slate-300 hover:border-blue-500/40 hover:text-blue-300 transition-colors"
+                    >
+                      {copied ? '✓' : uiLang === 'de' ? 'Kopieren' : uiLang === 'en' ? 'Copy' : uiLang === 'fr' ? 'Copier' : 'Copiar'}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-500 text-center">
+                    {uiLang === 'de' ? 'Kein Login erforderlich' : uiLang === 'en' ? 'No login required to solve' : uiLang === 'fr' ? 'Aucune connexion requise' : 'No requiere login para resolver'}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Share button row */}
+            <div className="flex items-center gap-2 rounded-xl border border-slate-700/60 px-3 py-2">
+              <span className="text-slate-500 text-xs shrink-0">🔗</span>
+              <span className="flex-1 text-xs text-slate-400 truncate">
+                {shareToken
+                  ? <span className="font-mono select-all">{shareUrl}</span>
+                  : <span className="italic">{uiLang === 'de' ? 'Link generieren...' : uiLang === 'en' ? 'Generate share link' : uiLang === 'fr' ? 'Générer un lien' : 'Generar enlace de compartir'}</span>
+                }
+              </span>
+              {shareToken && (
+                <button
+                  onClick={handleCopyLink}
+                  className="shrink-0 text-xs px-2 py-1 rounded-lg border border-slate-600 text-slate-300 hover:border-blue-500/40 hover:text-blue-300 transition-colors"
+                >
+                  {copied ? '✓' : uiLang === 'de' ? 'Kopieren' : uiLang === 'en' ? 'Copy' : uiLang === 'fr' ? 'Copier' : 'Copiar'}
+                </button>
+              )}
+              <button
+                onClick={handleGetShareToken}
+                disabled={shareLoading}
+                className="shrink-0 text-xs px-2 py-1 rounded-lg border border-slate-600 text-slate-300 hover:border-blue-500/40 hover:text-blue-300 transition-colors"
+              >
+                {shareLoading ? '...' : 'QR'}
+              </button>
+            </div>
+          </>
         )}
 
         <div className="flex gap-3">
@@ -1126,15 +1260,6 @@ function ExercisePlayer({
           >
             {saving ? '...' : saved ? `✓ ${uiLang === 'de' ? 'Gespeichert' : uiLang === 'en' ? 'Saved' : uiLang === 'fr' ? 'Enregistré' : 'Guardado'}` : uiLang === 'de' ? 'Speichern' : uiLang === 'en' ? 'Save exercise' : uiLang === 'fr' ? 'Enregistrer' : 'Guardar'}
           </button>
-          {currentSavedId && (
-            <button
-              onClick={handleShare}
-              title={uiLang === 'de' ? 'Link kopieren' : uiLang === 'en' ? 'Copy share link' : uiLang === 'fr' ? 'Copier le lien' : 'Copiar enlace'}
-              className="px-3 py-2.5 rounded-xl border border-slate-600 text-slate-300 hover:border-blue-500/40 hover:text-blue-300 text-sm transition-colors"
-            >
-              {copied ? '✓' : '🔗'}
-            </button>
-          )}
           <button onClick={onNext ?? onNew} className="flex-1 btn-primary py-2.5 text-sm">
             {uiLang === 'de' ? 'Nächste Übung →' : uiLang === 'en' ? 'Next exercise →' : uiLang === 'fr' ? 'Exercice suivant →' : 'Próximo ejercicio →'}
           </button>

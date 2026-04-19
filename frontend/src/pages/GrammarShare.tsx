@@ -1,6 +1,6 @@
 /**
  * GrammarShare — Public read-only view of a grammar exercise (no login required).
- * Accessed via /grammar/share/:id
+ * Accessed via /grammar/share/:token
  */
 
 import { useEffect, useState } from 'react'
@@ -9,30 +9,35 @@ import type { SavedGrammarExercise, GrammarSegment } from '../api/client'
 
 type BlankState = { selected: string | null; locked: boolean }
 
-function groupBySentence(segs: GrammarSegment[]) {
+function groupBySentence(segments: GrammarSegment[]) {
   const groups: { segs: GrammarSegment[] }[] = []
   let current: GrammarSegment[] = []
-  for (const seg of segs) {
-    current.push(seg)
-    if (seg.t === 'text' && /[.!?]\s*$/.test(seg.v ?? '')) {
-      groups.push({ segs: current })
-      current = []
+  const flush = () => { if (current.length > 0) { groups.push({ segs: current }); current = [] } }
+
+  for (const seg of segments) {
+    if (seg.t === 'blank') { current.push(seg); continue }
+    if (seg.t === 'text') {
+      const parts = (seg.v ?? '').split('\n')
+      parts.forEach((part, i) => {
+        if (part) current.push({ ...seg, v: part })
+        if (i < parts.length - 1) flush()
+      })
     }
   }
-  if (current.length > 0) groups.push({ segs: current })
+  flush()
   return groups
 }
 
 export default function GrammarShare() {
-  const { id } = useParams<{ id: string }>()
+  const { token } = useParams<{ token: string }>()
   const [exercise, setExercise] = useState<SavedGrammarExercise | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [blankStates, setBlankStates] = useState<Record<number, BlankState>>({})
   const [allDone, setAllDone] = useState(false)
 
   useEffect(() => {
-    if (!id) return
-    fetch(`${import.meta.env.BASE_URL}api/grammar/exercises/${id}/public`)
+    if (!token) return
+    fetch(`${import.meta.env.BASE_URL}api/grammar/share/${token}`)
       .then((r) => r.ok ? r.json() : Promise.reject(r.status))
       .then((ex: SavedGrammarExercise) => {
         setExercise(ex)
@@ -43,16 +48,13 @@ export default function GrammarShare() {
         setBlankStates(init)
       })
       .catch(() => setError('Exercise not found'))
-  }, [id])
+  }, [token])
 
-  const pick = (blankId: number, opt: string, seg: GrammarSegment) => {
+  const pick = (blankId: number, opt: string, _seg: GrammarSegment) => {
     setBlankStates((prev) => {
       if (prev[blankId]?.locked) return prev
-      const correct = seg.options?.[seg.correct ?? 0] ?? ''
       const next = { ...prev, [blankId]: { selected: opt, locked: true } }
-      // Check if all done
-      const allLocked = Object.values(next).every((s) => s.locked)
-      if (allLocked) setAllDone(true)
+      if (Object.values(next).every((s) => s.locked)) setAllDone(true)
       return next
     })
   }
@@ -129,16 +131,8 @@ export default function GrammarShare() {
               <p className="flex-1 text-white text-base leading-relaxed">
                 {group.segs.map((seg, si) => {
                   if (seg.t === 'text') {
-                    const lines = (seg.v ?? '').split('\n')
                     return (
-                      <span key={si}>
-                        {lines.map((line, li) => (
-                          <span key={li}>
-                            {li > 0 && <br />}
-                            <span className="italic text-slate-200">{line}</span>
-                          </span>
-                        ))}
-                      </span>
+                      <span key={si} className="italic text-slate-200">{seg.v}</span>
                     )
                   }
                   if (seg.t === 'blank' && seg.id !== undefined) {
@@ -150,8 +144,7 @@ export default function GrammarShare() {
                         {seg.options?.map((opt) => (
                           <button
                             key={opt}
-                            onClick={() => pick(blankId, opt, seg)}
-                            disabled={isLocked}
+                            onClick={() => !isLocked && pick(blankId, opt, seg)}
                             className={`px-2 py-0.5 rounded-md border text-sm font-medium transition-all duration-200 ${chipClass(blankId, opt, seg)}`}
                           >
                             {opt}
@@ -187,7 +180,6 @@ export default function GrammarShare() {
           </div>
         )}
 
-        {/* Footer */}
         <p className="text-center text-[10px] text-slate-600 pt-4">Powered by Vocabox</p>
       </div>
     </div>

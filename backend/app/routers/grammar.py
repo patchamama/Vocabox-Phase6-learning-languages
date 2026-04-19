@@ -6,6 +6,8 @@ persistence of exercises for later replay.
 """
 
 import json
+import secrets
+import string
 from datetime import datetime
 from typing import List, Optional
 
@@ -404,6 +406,13 @@ def _get_or_404(exercise_id: int, user_id: int, db: Session) -> GrammarExercise:
     return exercise
 
 
+_TOKEN_ALPHABET = string.ascii_letters + string.digits
+
+def _generate_share_token() -> str:
+    """Generate a URL-safe random token (12 chars, ~71 bits entropy)."""
+    return "".join(secrets.choice(_TOKEN_ALPHABET) for _ in range(12))
+
+
 def _exercise_summary(e: GrammarExercise) -> dict:
     return {
         "id": e.id,
@@ -419,6 +428,7 @@ def _exercise_summary(e: GrammarExercise) -> dict:
         "is_global": bool(e.is_global),
         "original_exercise_id": e.original_exercise_id,
         "grammar_focus": json.loads(e.grammar_focus_json or "[]"),
+        "share_token": e.share_token,
         "created_at": e.created_at.isoformat() if e.created_at else None,
         "last_attempted": e.last_attempted.isoformat() if e.last_attempted else None,
     }
@@ -432,13 +442,32 @@ def _exercise_full(e: GrammarExercise) -> dict:
     return summary
 
 
-@router.get("/exercises/{exercise_id}/public")
-def get_exercise_public(
+@router.post("/exercises/{exercise_id}/share-token")
+def generate_share_token(
     exercise_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Get a single saved exercise without authentication (for sharing)."""
-    exercise = db.query(GrammarExercise).filter(GrammarExercise.id == exercise_id).first()
+    """Generate (or return existing) share token for an exercise."""
+    exercise = _get_or_404(exercise_id, current_user.id, db)
+    if not exercise.share_token:
+        # Ensure uniqueness (collision probability negligible but handle it)
+        token = _generate_share_token()
+        while db.query(GrammarExercise).filter_by(share_token=token).first():
+            token = _generate_share_token()
+        exercise.share_token = token
+        db.commit()
+        db.refresh(exercise)
+    return {"share_token": exercise.share_token}
+
+
+@router.get("/share/{token}")
+def get_exercise_by_token(
+    token: str,
+    db: Session = Depends(get_db),
+):
+    """Get a single saved exercise by share token — no authentication required."""
+    exercise = db.query(GrammarExercise).filter_by(share_token=token).first()
     if not exercise:
         raise HTTPException(status_code=404, detail="Exercise not found")
     return _exercise_full(exercise)
