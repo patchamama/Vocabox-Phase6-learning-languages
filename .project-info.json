@@ -10,7 +10,7 @@
     "processPattern": "run.py",
     "type": "fullstack",
     "technology": "React + Vite + FastAPI + Python + SQLite",
-    "url": "http://backend.patchamama.com:9009/",
+    "url": "https://patchamama.com/vocabox",
     "webApp": true,
     "requiresSudo": false,
     "ports": "9009 (FastAPI API + React SPA)",

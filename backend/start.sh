@@ -2,7 +2,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VENV_DIR="$SCRIPT_DIR/.venv"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+VENV_DIR="$PROJECT_ROOT/.venv"
 
 echo "=== Vocabox Backend ==="
 
@@ -35,7 +36,7 @@ else
 fi
 
 # ── Virtual environment ───────────────────────────────────────────────────────
-if [ ! -d "$VENV_DIR" ]; then
+if [ ! -f "$VENV_DIR/bin/activate" ]; then
     echo "[1/3] Creating virtual environment..."
     python3 -m venv "$VENV_DIR"
     echo "      Done."
@@ -46,11 +47,20 @@ fi
 # ── Activate ──────────────────────────────────────────────────────────────────
 source "$VENV_DIR/bin/activate"
 
-# ── Dependencies ──────────────────────────────────────────────────────────────
-echo "[2/3] Installing / updating dependencies..."
-pip install  --upgrade pip
-pip install  -r "$SCRIPT_DIR/requirements.txt"
-echo "      Done."
+# ── Dependencies (hash-based: only install when requirements.txt changes) ─────
+echo "[2/3] Checking dependencies..."
+REQS="$SCRIPT_DIR/requirements.txt"
+HASH_FILE="$VENV_DIR/.deps_vocabox_backend"
+_hash=$(md5sum "$REQS" 2>/dev/null | cut -d' ' -f1)
+if [ "$(cat "$HASH_FILE" 2>/dev/null)" != "$_hash" ]; then
+    echo "      Installing missing dependencies..."
+    pip install --quiet --upgrade pip
+    pip install --quiet -r "$REQS"
+    echo "$_hash" > "$HASH_FILE"
+    echo "      Done."
+else
+    echo "      Dependencies up to date — skipping install."
+fi
 
 # ── Run ───────────────────────────────────────────────────────────────────────
 echo "[3/3] Starting server on port $PORT..."

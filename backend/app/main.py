@@ -179,6 +179,20 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# Rewrite /vocabox/api/* → /api/* so the built frontend (Vite base: '/vocabox/')
+# hits the correct routers regardless of HTTP method.
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+
+class StripVocaboxApiPrefix(BaseHTTPMiddleware):
+    async def dispatch(self, request: StarletteRequest, call_next):
+        if request.scope["path"].startswith("/vocabox/api/"):
+            request.scope["path"]     = request.scope["path"][len("/vocabox"):]
+            request.scope["raw_path"] = request.scope["path"].encode()
+        return await call_next(request)
+
+app.add_middleware(StripVocaboxApiPrefix)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -214,15 +228,23 @@ app.include_router(user_settings.router,  prefix="/api")
 _STATIC_DIR = Path(__file__).parent / "static"
 
 if _STATIC_DIR.is_dir():
-    # Single catch-all: serve real static files if they exist, otherwise SPA index.html.
-    # Using a single route avoids FastAPI/Starlette routing conflicts between
-    # app.mount() and @app.get("/{full_path:path}") catch-alls.
+    # Catch-all: serves the SPA under /vocabox/ (Vite base).
+    # Anything outside /vocabox/ redirects there so the PWA SW scope stays correct.
+    from fastapi.responses import RedirectResponse
+
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa_fallback(full_path: str):
         if full_path.startswith("api/"):
             from fastapi import HTTPException
             raise HTTPException(status_code=404)
-        candidate = _STATIC_DIR / full_path
+
+        # Routes outside /vocabox/ → redirect to public URL
+        if not full_path.startswith("vocabox"):
+            return RedirectResponse(url="https://patchamama.com/vocabox", status_code=302)
+
+        # Strip Vite base prefix: /vocabox/assets/x.js → assets/x.js
+        file_path = full_path[len("vocabox/"):] if full_path.startswith("vocabox/") else ""
+        candidate = _STATIC_DIR / file_path
         if candidate.is_file():
             return FileResponse(str(candidate))
         return FileResponse(str(_STATIC_DIR / "index.html"))

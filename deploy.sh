@@ -45,17 +45,26 @@ echo "      Copied → $STATIC_DIR"
 
 # ── 4. Backend dependencies ───────────────────────────────────────────────────
 cd "$BACKEND_DIR"
-VENV_DIR="$BACKEND_DIR/.venv"
+VENV_DIR="$(cd "$SCRIPT_DIR/.." && pwd)/.venv"
 
 if [ "$SKIP_INSTALL" = false ]; then
-  echo "[4/4] Installing backend dependencies..."
-  if [ ! -d "$VENV_DIR" ]; then
+  echo "[4/4] Checking backend dependencies..."
+  if [ ! -f "$VENV_DIR/bin/activate" ]; then
     python3 -m venv "$VENV_DIR"
   fi
   source "$VENV_DIR/bin/activate"
-  pip install --quiet --upgrade pip
-  pip install --quiet -r requirements.txt
-  echo "      Done."
+  REQS="$BACKEND_DIR/requirements.txt"
+  HASH_FILE="$VENV_DIR/.deps_vocabox_backend"
+  _hash=$(md5sum "$REQS" 2>/dev/null | cut -d' ' -f1)
+  if [ "$(cat "$HASH_FILE" 2>/dev/null)" != "$_hash" ]; then
+    echo "      Installing missing dependencies..."
+    pip install --quiet --upgrade pip
+    pip install --quiet -r "$REQS"
+    echo "$_hash" > "$HASH_FILE"
+    echo "      Done."
+  else
+    echo "      Dependencies up to date — skipping install."
+  fi
 else
   echo "[4/4] Skipping pip install (--skip-install)."
 fi
