@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import NavBar from './NavBar'
+import { loadSettingsFromBackend } from '../stores/settingsStore'
 import Dashboard from '../pages/Dashboard'
 import Review from '../pages/Review'
 import Words from '../pages/Words'
@@ -32,6 +33,11 @@ export default function Layout() {
   const { pathname } = useLocation()
   const scrollPositions = useRef<Map<string, number>>(new Map())
   const prevPath = useRef<string | null>(null)
+
+  // Load settings from backend once on mount (after auth)
+  useEffect(() => {
+    loadSettingsFromBackend()
+  }, [])
 
   useEffect(() => {
     // Save previous route's scroll before switching

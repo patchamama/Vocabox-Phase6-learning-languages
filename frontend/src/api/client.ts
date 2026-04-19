@@ -303,6 +303,7 @@ export const grammarApi = {
     cefr_level?: string
     force_extra_grammar?: boolean
     extra_grammar_categories?: string[]
+    max_blanks_per_sentence?: number
   }) => api.post<GrammarExerciseData>('/grammar/generate', data),
 
   checkProse: (data: {
@@ -355,6 +356,9 @@ export const grammarApi = {
   generateShareToken: (id: number) => api.post<{ share_token: string }>(`/grammar/exercises/${id}/share-token`),
 
   getByToken: (token: string) => api.get<SavedGrammarExercise>(`/grammar/share/${token}`),
+
+  injectExtra: (id: number, data: { allowed_categories?: string[]; max_blanks_per_sentence?: number; max_extra?: number }) =>
+    api.post<SavedGrammarExercise>(`/grammar/exercises/${id}/inject-extra`, data),
 }
 
 // ── Grammar Queue ─────────────────────────────────────────────────────────────
@@ -402,6 +406,7 @@ export interface GrammarQueueAddRequest {
   is_global?: boolean
   force_extra_grammar?: boolean
   extra_grammar_categories?: string[]
+  max_blanks_per_sentence?: number
 }
 
 export const grammarQueueApi = {
@@ -449,4 +454,11 @@ export const aiProvidersApi = {
   activate: (id: number) => api.post<AIProviderInfo>(`/ai-providers/${id}/activate`),
   deactivate: (id: number) => api.post<AIProviderInfo>(`/ai-providers/${id}/deactivate`),
   test: (id: number) => api.post<{ ok: boolean; provider_type: string; model: string }>(`/ai-providers/${id}/test`),
+}
+
+// ── User Settings ─────────────────────────────────────────────────────────────
+
+export const userSettingsApi = {
+  get: () => api.get<Record<string, unknown>>('/user-settings'),
+  save: (settings: Record<string, unknown>) => api.put('/user-settings', { settings }),
 }

@@ -634,14 +634,14 @@ export default function Settings() {
     subtitleIndexPalabra, subtitleIndexAudioText, subtitleIndexSignificado,
     germanArticleChoice, grammarReviewEnabled, grammarOptions, ollamaPromptGrammar,
     grammarTemperature, grammarNumPredict, grammarTopP, grammarDoubleCorrect, grammarMaxBlanks,
-    grammarForceExtraGrammar, grammarExtraCategories,
+    grammarForceExtraGrammar, grammarExtraCategories, grammarMaxBlanksPerSentence,
     setReviewMode, setWordsPerSession, setTransitionDelay, setTransitionType,
     setSafeRound, setAutoPlayAudio, setAutoPlayAudioReversed, setWordsOnly, setReviewDirection,
     setUseTtsInAudioReview, setLeoAutoFetchExtras, setLeoExtraLangs,
     setAudioReviewExtraLangs, setOllamaTranslationModel,
     setOllamaTimeout, setOllamaPromptTranslate, setOllamaPromptEnhance, setOllamaPromptGrammar,
     setGrammarTemperature, setGrammarNumPredict, setGrammarTopP, setGrammarDoubleCorrect, setGrammarMaxBlanks,
-    setGrammarForceExtraGrammar, toggleGrammarExtraCategory,
+    setGrammarForceExtraGrammar, toggleGrammarExtraCategory, setGrammarMaxBlanksPerSentence,
     setVideoClipPauseSec, setVideoClipContext, setVideoClipAutoPlay, setVideoClipPlaybackRate, setMaxRefsPerWord,
     setSubtitleIndexPalabra, setSubtitleIndexAudioText, setSubtitleIndexSignificado,
     setGermanArticleChoice, setGrammarReviewEnabled, setGrammarOption,
@@ -1013,6 +1013,25 @@ export default function Settings() {
                 >
                   <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${grammarForceExtraGrammar ? 'translate-x-4' : 'translate-x-0'}`} />
                 </button>
+              </div>
+
+              {/* Max blanks per sentence — shown when force extra is enabled */}
+              <div className="flex items-center justify-between gap-3 pt-1">
+                <div>
+                  <p className="text-sm text-slate-300">
+                    {uiLang === 'de' ? 'Max. Lücken pro Satz' : uiLang === 'en' ? 'Max blanks per sentence' : uiLang === 'fr' ? 'Blancs max par phrase' : 'Máx. blancos por oración'}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {uiLang === 'en' ? '0 = no limit' : '0 = sin límite'}
+                  </p>
+                </div>
+                <input
+                  type="number"
+                  min={0} max={20}
+                  value={grammarMaxBlanksPerSentence}
+                  onChange={(e) => setGrammarMaxBlanksPerSentence(Number(e.target.value))}
+                  className="w-16 rounded-lg border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-100 text-right focus:border-blue-500 focus:outline-none"
+                />
               </div>
 
               {grammarForceExtraGrammar && extraGrammarCategories.length > 0 && (

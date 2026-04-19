@@ -85,6 +85,7 @@ function BatchPanel({
   grammarCheckEnabled,
   grammarForceExtraGrammar,
   grammarExtraCategories,
+  grammarMaxBlanksPerSentence,
   onToast,
   onQueued,
 }: {
@@ -103,6 +104,7 @@ function BatchPanel({
   grammarCheckEnabled: boolean
   grammarForceExtraGrammar: boolean
   grammarExtraCategories: string[]
+  grammarMaxBlanksPerSentence: number
   onToast: (msg: string, type?: 'ok' | 'err') => void
   onQueued: () => void
 }) {
@@ -206,6 +208,7 @@ function BatchPanel({
           is_global: batchGlobal || undefined,
           force_extra_grammar: grammarForceExtraGrammar || undefined,
           extra_grammar_categories: grammarForceExtraGrammar && grammarExtraCategories.length > 0 ? grammarExtraCategories : undefined,
+          max_blanks_per_sentence: grammarForceExtraGrammar && grammarMaxBlanksPerSentence > 0 ? grammarMaxBlanksPerSentence : undefined,
         })
         added++
       }
@@ -546,6 +549,11 @@ function ExercisePlayer({
   onSave,
   onNew,
   onNext,
+  grammarForceExtraGrammar = false,
+  grammarExtraCategories = [],
+  grammarMaxBlanksPerSentence = 3,
+  generationMode = '',
+  onExerciseUpdated,
 }: {
   exercise: GrammarExerciseData
   uiLang: TipLang
@@ -553,9 +561,14 @@ function ExercisePlayer({
   onSave: (id: number) => void
   onNew: () => void
   onNext?: () => void
+  grammarForceExtraGrammar?: boolean
+  grammarExtraCategories?: string[]
+  grammarMaxBlanksPerSentence?: number
+  generationMode?: string
+  onExerciseUpdated?: (updated: GrammarExerciseData) => void
 }) {
-  // Shuffle options once on mount
-  const shuffledSegments = useMemo(() => shuffleSegments(exercise.segments), [exercise])
+  // Shuffle options once on mount; update when segments change (inject-extra)
+  const shuffledSegments = useMemo(() => shuffleSegments(exercise.segments), [exercise.segments])
   const blanks = shuffledSegments.filter((s) => s.t === 'blank')
   const sentences = useMemo(() => groupBySentence(shuffledSegments), [shuffledSegments])
 
@@ -564,6 +577,21 @@ function ExercisePlayer({
     blanks.forEach((b) => { if (b.id !== undefined) init[b.id] = { selected: null, locked: false } })
     return init
   })
+
+  // Re-initialize blankStates when segments change (new blanks injected)
+  useEffect(() => {
+    setBlankStates((prev) => {
+      const next: Record<number, BlankState> = {}
+      blanks.forEach((b) => {
+        if (b.id !== undefined) {
+          // Preserve existing state for already-answered blanks
+          next[b.id] = prev[b.id] ?? { selected: null, locked: false }
+        }
+      })
+      return next
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exercise.segments])
   const [showSolution, setShowSolution] = useState(false)
   const navigate = useNavigate()
   const setPrefill = useAddWordStore(s => s.setPrefill)
@@ -591,10 +619,31 @@ function ExercisePlayer({
   const [shareLoading, setShareLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [showQr, setShowQr] = useState(false)
+  // Inject-extra state
+  const [localMaxBlanksPerSentence, setLocalMaxBlanksPerSentence] = useState(grammarMaxBlanksPerSentence)
+  const [injectLoading, setInjectLoading] = useState(false)
+  const [injectDone, setInjectDone] = useState(false)
 
   const shareUrl = shareToken
     ? `${window.location.origin}${import.meta.env.BASE_URL}grammar/share/${shareToken}`
     : null
+
+  const handleInjectExtra = async () => {
+    if (!currentSavedId) return
+    setInjectLoading(true)
+    setInjectDone(false)
+    try {
+      const { data } = await grammarApi.injectExtra(currentSavedId, {
+        allowed_categories: grammarExtraCategories.length > 0 ? grammarExtraCategories : undefined,
+        max_blanks_per_sentence: localMaxBlanksPerSentence,
+        max_extra: 30,
+      })
+      onExerciseUpdated?.(data)
+      setInjectDone(true)
+      setTimeout(() => setInjectDone(false), 2500)
+    } catch { /* silent */ }
+    finally { setInjectLoading(false) }
+  }
 
   const handleGetShareToken = async () => {
     if (!currentSavedId) return
@@ -1155,6 +1204,73 @@ function ExercisePlayer({
                     🌐 {uiLang === 'de' ? 'Global (für alle sichtbar)' : uiLang === 'en' ? 'Global (visible to everyone)' : uiLang === 'fr' ? 'Global (visible pour tous)' : 'Global (visible para todos)'}
                   </span>
                 </label>
+                {/* Grammar focus tags */}
+                {exercise.grammar_focus && exercise.grammar_focus.length > 0 && (
+                  <div>
+                    <label className="text-[10px] text-slate-500 uppercase tracking-wide block mb-1.5">
+                      {uiLang === 'de' ? 'Grammatikfokus' : uiLang === 'en' ? 'Grammar focus' : uiLang === 'fr' ? 'Focus grammatical' : 'Enfoque gramatical'}
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {exercise.grammar_focus.map((f) => (
+                        <span key={f} className="text-[10px] px-2 py-0.5 rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-300">
+                          {f}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Generation mode badge */}
+                {generationMode && (
+                  <div className="flex items-center gap-2">
+                    <label className="text-[10px] text-slate-500 uppercase tracking-wide">
+                      {uiLang === 'de' ? 'Modus' : uiLang === 'en' ? 'Mode' : uiLang === 'fr' ? 'Mode' : 'Modo'}
+                    </label>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full border border-slate-600 bg-slate-700/50 text-slate-400">
+                      {generationMode === 'rolling'
+                        ? (uiLang === 'de' ? 'Iterativ' : uiLang === 'en' ? 'Iterative' : uiLang === 'fr' ? 'Itératif' : 'Iterativo')
+                        : generationMode === 'two_phase'
+                        ? (uiLang === 'de' ? 'Zwei Phasen' : uiLang === 'en' ? 'Two-phase' : uiLang === 'fr' ? 'Deux phases' : 'Dos fases')
+                        : (uiLang === 'de' ? 'Eigener Prompt' : uiLang === 'en' ? 'Custom prompt' : uiLang === 'fr' ? 'Prompt personnalisé' : 'Prompt propio')}
+                    </span>
+                  </div>
+                )}
+
+                {/* Inject extra blanks — only when force_extra is active and exercise is saved */}
+                {grammarForceExtraGrammar && currentSavedId && (
+                  <div className="border border-slate-700/60 rounded-lg p-2.5 space-y-2">
+                    <p className="text-[10px] text-slate-400 uppercase tracking-wide font-medium">
+                      {uiLang === 'de' ? 'Extra Grammatik einfügen' : uiLang === 'en' ? 'Inject extra grammar' : uiLang === 'fr' ? 'Injecter gramm. extra' : 'Inyectar gramática extra'}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400 flex-1">
+                        {uiLang === 'de' ? 'Max. Lücken/Satz' : uiLang === 'en' ? 'Max blanks/sentence' : uiLang === 'fr' ? 'Blancs max/phrase' : 'Máx. blancos/oración'}
+                      </span>
+                      <input
+                        type="number"
+                        min={0} max={20}
+                        value={localMaxBlanksPerSentence}
+                        onChange={(e) => setLocalMaxBlanksPerSentence(Number(e.target.value))}
+                        className="w-14 rounded-lg border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-slate-100 text-right focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <button
+                      onClick={handleInjectExtra}
+                      disabled={injectLoading}
+                      className={`w-full py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                        injectDone
+                          ? 'border-green-500/40 text-green-400 bg-green-500/10'
+                          : 'border-purple-500/40 text-purple-300 hover:bg-purple-500/10'
+                      }`}
+                    >
+                      {injectLoading ? '...'
+                        : injectDone
+                        ? `✓ ${uiLang === 'en' ? 'Done' : 'Listo'}`
+                        : uiLang === 'de' ? 'Lücken verbessern' : uiLang === 'en' ? 'Improve blanks' : uiLang === 'fr' ? 'Améliorer les blancs' : 'Mejorar blancos'}
+                    </button>
+                  </div>
+                )}
+
                 {/* Save changes button — only when already saved */}
                 {saved && (
                   <button
@@ -1221,7 +1337,15 @@ function ExercisePlayer({
               <span className="flex-1 text-xs text-slate-400 truncate">
                 {shareToken
                   ? <span className="font-mono select-all">{shareUrl}</span>
-                  : <span className="italic">{uiLang === 'de' ? 'Link generieren...' : uiLang === 'en' ? 'Generate share link' : uiLang === 'fr' ? 'Générer un lien' : 'Generar enlace de compartir'}</span>
+                  : (
+                    <button
+                      onClick={handleGetShareToken}
+                      disabled={shareLoading}
+                      className="italic text-blue-400 hover:text-blue-300 underline transition-colors"
+                    >
+                      {shareLoading ? '...' : uiLang === 'de' ? 'Link generieren' : uiLang === 'en' ? 'Generate share link' : uiLang === 'fr' ? 'Générer un lien' : 'Generar enlace de compartir'}
+                    </button>
+                  )
                 }
               </span>
               {shareToken && (
@@ -1232,13 +1356,15 @@ function ExercisePlayer({
                   {copied ? '✓' : uiLang === 'de' ? 'Kopieren' : uiLang === 'en' ? 'Copy' : uiLang === 'fr' ? 'Copier' : 'Copiar'}
                 </button>
               )}
-              <button
-                onClick={handleGetShareToken}
-                disabled={shareLoading}
-                className="shrink-0 text-xs px-2 py-1 rounded-lg border border-slate-600 text-slate-300 hover:border-blue-500/40 hover:text-blue-300 transition-colors"
-              >
-                {shareLoading ? '...' : 'QR'}
-              </button>
+              {shareToken && (
+                <button
+                  onClick={handleGetShareToken}
+                  disabled={shareLoading}
+                  className="shrink-0 text-xs px-2 py-1 rounded-lg border border-slate-600 text-slate-300 hover:border-blue-500/40 hover:text-blue-300 transition-colors"
+                >
+                  {shareLoading ? '...' : 'QR'}
+                </button>
+              )}
             </div>
           </>
         )}
@@ -1848,7 +1974,7 @@ export default function GrammarWorkshop() {
   const {
     ollamaTranslationModel, ollamaTimeout, ollamaPromptGrammar,
     grammarTemperature, grammarNumPredict, grammarTopP,
-    grammarMode, grammarRollingSentences, grammarDoubleCorrect, grammarMaxBlanks, grammarForceExtraGrammar, grammarExtraCategories,
+    grammarMode, grammarRollingSentences, grammarDoubleCorrect, grammarMaxBlanks, grammarForceExtraGrammar, grammarExtraCategories, grammarMaxBlanksPerSentence,
     setGrammarMode, setGrammarRollingSentences, setGrammarForceExtraGrammar,
   } = useSettingsStore()
   const { uiLanguage } = useUserProfileStore()
@@ -1891,6 +2017,7 @@ export default function GrammarWorkshop() {
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [exercise, setExercise] = useState<GrammarExerciseData | null>(null)
+  const [lastGenerationMode, setLastGenerationMode] = useState<string>('')
   const [currentSavedId, setCurrentSavedId] = useState<number | null>(null)
   const [savedExercises, setSavedExercises] = useState<SavedGrammarExercise[]>([])
   const [loadingSaved, setLoadingSaved] = useState(false)
@@ -1950,11 +2077,13 @@ export default function GrammarWorkshop() {
         cefr_level: generateCefr || undefined,
         force_extra_grammar: grammarForceExtraGrammar || undefined,
         extra_grammar_categories: grammarForceExtraGrammar && grammarExtraCategories.length > 0 ? grammarExtraCategories : undefined,
+        max_blanks_per_sentence: grammarForceExtraGrammar && grammarMaxBlanksPerSentence > 0 ? grammarMaxBlanksPerSentence : undefined,
       })
       setExercise({
         ...res.data,
         grammar_focus: customFocusList.length > 0 ? [...grammarFocus, ...customFocusList] : grammarFocus,
       })
+      setLastGenerationMode(effectiveMode)
       setLastProse(resolveSegments(res.data.segments))
       setPanel('solve')
     } catch (err: unknown) {
@@ -2127,6 +2256,7 @@ export default function GrammarWorkshop() {
         is_global: generateGlobal || undefined,
         force_extra_grammar: grammarForceExtraGrammar || undefined,
         extra_grammar_categories: grammarForceExtraGrammar && grammarExtraCategories.length > 0 ? grammarExtraCategories : undefined,
+        max_blanks_per_sentence: grammarForceExtraGrammar && grammarMaxBlanksPerSentence > 0 ? grammarMaxBlanksPerSentence : undefined,
       })
       await fetchQueue()
       if (!workerRunning) await resumeWorker()
@@ -2604,6 +2734,7 @@ export default function GrammarWorkshop() {
                   grammarCheckEnabled={grammarCheckEnabled}
                   grammarForceExtraGrammar={grammarForceExtraGrammar}
                   grammarExtraCategories={grammarExtraCategories}
+                  grammarMaxBlanksPerSentence={grammarMaxBlanksPerSentence}
                   onToast={showToast}
                   onQueued={async () => { await fetchQueue(); if (!workerRunning) await resumeWorker() }}
                 />
@@ -2616,13 +2747,18 @@ export default function GrammarWorkshop() {
       <div className={panel === 'solve' ? '' : 'hidden'}>
         {exercise ? (
           <ExercisePlayer
-            key={exercise.title + (exercise.segments?.length ?? 0)}
+            key={exercise.title}
             exercise={exercise}
             uiLang={uiLang}
             savedId={currentSavedId}
             onSave={(id) => setCurrentSavedId(id)}
             onNew={() => setPanel('generate')}
             onNext={loadNextUnsolved}
+            grammarForceExtraGrammar={grammarForceExtraGrammar}
+            grammarExtraCategories={grammarExtraCategories}
+            grammarMaxBlanksPerSentence={grammarMaxBlanksPerSentence}
+            generationMode={lastGenerationMode}
+            onExerciseUpdated={(updated) => setExercise(updated)}
           />
         ) : (
           <div className="text-center py-12">

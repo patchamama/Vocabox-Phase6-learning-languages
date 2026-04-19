@@ -75,6 +75,7 @@ class AddToQueueRequest(BaseModel):
     is_global: bool = False
     force_extra_grammar: bool = False
     extra_grammar_categories: list[str] = []
+    max_blanks_per_sentence: int = 0
 
 
 # ── Serialization ─────────────────────────────────────────────────────────────
@@ -152,6 +153,7 @@ def _process_item_sync(item_id: int, user_id: int) -> None:
             max_blanks=max(3, min(20, params.get("max_blanks", 10))),
             force_extra_grammar=params.get("force_extra_grammar", False),
             extra_grammar_categories=params.get("extra_grammar_categories") or None,
+            max_blanks_per_sentence=params.get("max_blanks_per_sentence", 0),
             cefr_level=params.get("cefr_level", "") or "",
         )
 

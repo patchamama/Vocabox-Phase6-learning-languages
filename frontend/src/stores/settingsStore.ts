@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { userSettingsApi } from '../api/client'
 
 export type ReviewMode = 'simple' | 'safe'
 export type TransitionType = 'auto' | 'button'
@@ -103,6 +104,8 @@ interface SettingsState {
   grammarForceExtraGrammar: boolean
   /** Which rule-based categories to inject (empty = all) */
   grammarExtraCategories: string[]
+  /** Maximum rule-based blanks to inject per sentence (0 = no limit) */
+  grammarMaxBlanksPerSentence: number
 
   setReviewMode: (mode: ReviewMode) => void
   setWordsPerSession: (n: number) => void
@@ -149,6 +152,7 @@ interface SettingsState {
   setGrammarForceExtraGrammar: (v: boolean) => void
   setGrammarExtraCategories: (v: string[]) => void
   toggleGrammarExtraCategory: (key: string) => void
+  setGrammarMaxBlanksPerSentence: (v: number) => void
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -206,6 +210,7 @@ export const useSettingsStore = create<SettingsState>()(
       grammarMaxBlanks: 10,
       grammarForceExtraGrammar: false,
       grammarExtraCategories: [],
+      grammarMaxBlanksPerSentence: 3,
 
       setReviewMode: (reviewMode) => set({ reviewMode }),
       setWordsPerSession: (wordsPerSession) => set({ wordsPerSession }),
@@ -269,7 +274,79 @@ export const useSettingsStore = create<SettingsState>()(
           const next = curr.includes(key) ? curr.filter((k) => k !== key) : [...curr, key]
           return { grammarExtraCategories: next }
         }),
+      setGrammarMaxBlanksPerSentence: (grammarMaxBlanksPerSentence) =>
+        set({ grammarMaxBlanksPerSentence: Math.max(0, Math.min(20, grammarMaxBlanksPerSentence)) }),
     }),
     { name: 'vocabox-settings' }
   )
 )
+
+// ── Keys that are setter functions (not serializable data) ────────────────────
+const _SETTER_KEYS = new Set([
+  'setReviewMode', 'setWordsPerSession', 'setTransitionDelay', 'setTransitionType',
+  'setSafeRound', 'setAutoPlayAudio', 'setAutoPlayAudioReversed', 'setWordsOnly',
+  'setLeitnerDay', 'setPageSizeOption', 'setSelectedPageSize', 'setReviewDirection',
+  'setUseTtsInAudioReview', 'setTtsVoice', 'setTtsRate', 'setLeoAutoFetchExtras',
+  'setLeoExtraLangs', 'setAudioReviewExtraLangs', 'setOllamaTranslationModel',
+  'setOllamaTimeout', 'setOllamaPromptTranslate', 'setOllamaPromptEnhance',
+  'setCompleteWithTts', 'setVideoClipPauseSec', 'setVideoClipContext',
+  'setVideoClipAutoPlay', 'setVideoClipPlaybackRate', 'setMaxRefsPerWord',
+  'setSubtitleIndexPalabra', 'setSubtitleIndexAudioText', 'setSubtitleIndexSignificado',
+  'setGermanArticleChoice', 'setGrammarReviewEnabled', 'setGrammarOption',
+  'setOllamaPromptGrammar', 'setGrammarTemperature', 'setGrammarNumPredict',
+  'setGrammarTopP', 'setGrammarMode', 'setGrammarRollingSentences',
+  'setGrammarDoubleCorrect', 'setGrammarMaxBlanks', 'setGrammarForceExtraGrammar',
+  'setGrammarExtraCategories', 'toggleGrammarExtraCategory', 'setGrammarMaxBlanksPerSentence',
+])
+
+function _extractData(state: SettingsState): Record<string, unknown> {
+  const data: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(state)) {
+    if (!_SETTER_KEYS.has(k)) data[k] = v
+  }
+  return data
+}
+
+// Debounced save to backend
+let _syncTimer: ReturnType<typeof setTimeout> | null = null
+let _syncEnabled = false  // only sync after loadFromBackend has been called
+
+useSettingsStore.subscribe((state) => {
+  if (!_syncEnabled) return
+  if (_syncTimer) clearTimeout(_syncTimer)
+  _syncTimer = setTimeout(() => {
+    const token = localStorage.getItem('token')
+    if (!token) return
+    userSettingsApi.save(_extractData(state)).catch(() => { /* silent — localStorage is fallback */ })
+  }, 1500)
+})
+
+/**
+ * Load settings from backend. Call this once after the user is authenticated.
+ * If the backend returns data, it merges into the store (overwriting localStorage values).
+ * If the backend returns empty or fails, localStorage values are kept.
+ */
+export async function loadSettingsFromBackend(): Promise<void> {
+  _syncEnabled = true
+  const token = localStorage.getItem('token')
+  if (!token) return
+  try {
+    const { data } = await userSettingsApi.get()
+    if (data && Object.keys(data).length > 0) {
+      // Merge: only set known data keys, skip setters and unknown keys
+      const store = useSettingsStore.getState()
+      const patch: Partial<SettingsState> = {}
+      for (const [k, v] of Object.entries(data)) {
+        if (!_SETTER_KEYS.has(k) && k in store) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (patch as any)[k] = v
+        }
+      }
+      if (Object.keys(patch).length > 0) {
+        useSettingsStore.setState(patch)
+      }
+    }
+  } catch {
+    // Backend unavailable — keep localStorage values
+  }
+}

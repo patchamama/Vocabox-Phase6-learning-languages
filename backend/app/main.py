@@ -118,7 +118,18 @@ def _migrate_grammar_queue() -> None:
 
 _migrate_grammar_queue()
 
-from .routers import ai_providers, audio_review, auth, grammar, grammar_queue, import_router, languages, leo, ollama, review, stats, subtitles, temas, test_mode, words
+
+def _migrate_user_settings() -> None:
+    """Ensure user_settings table exists (create_all handles it; this is a safety net)."""
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    if "user_settings" not in inspector.get_table_names():
+        Base.metadata.create_all(bind=engine)
+
+
+_migrate_user_settings()
+
+from .routers import ai_providers, audio_review, auth, grammar, grammar_queue, import_router, languages, leo, ollama, review, stats, subtitles, temas, test_mode, user_settings, words
 
 # ── Language dictionary seed data ─────────────────────────────────────────────
 
@@ -195,8 +206,9 @@ app.include_router(ollama.router,        prefix="/api")
 app.include_router(audio_review.router,  prefix="/api")
 app.include_router(subtitles.router,     prefix="/api")
 app.include_router(grammar.router,       prefix="/api")
-app.include_router(grammar_queue.router, prefix="/api")
-app.include_router(ai_providers.router,  prefix="/api")
+app.include_router(grammar_queue.router,  prefix="/api")
+app.include_router(ai_providers.router,   prefix="/api")
+app.include_router(user_settings.router,  prefix="/api")
 
 # ── Static frontend (served from app/static after deploy) ─────────────────────
 _STATIC_DIR = Path(__file__).parent / "static"

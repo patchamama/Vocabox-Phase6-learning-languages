@@ -9,9 +9,10 @@ from .word_video_ref import WordVideoRef
 from .grammar_exercise import GrammarExercise
 from .ai_provider import AIProvider
 from .grammar_queue_item import GrammarQueueItem
+from .user_settings import UserSettings
 
 __all__ = [
     "User", "Tema", "Word", "UserWord", "LanguageDict", "WordTranslation",
     "SubtitleFile", "SubtitleSegment", "WordVideoRef", "GrammarExercise",
-    "AIProvider", "GrammarQueueItem",
+    "AIProvider", "GrammarQueueItem", "UserSettings",
 ]

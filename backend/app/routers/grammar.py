@@ -20,6 +20,7 @@ from ..dependencies import get_current_user
 from ..models.grammar_exercise import GrammarExercise
 from ..models.user import User
 from ..services import grammar_service
+from ..services.grammar_service import inject_extra_blanks
 from ..services.ai_client import get_active_client_and_model, OllamaClient
 
 router = APIRouter(prefix="/grammar", tags=["grammar"])
@@ -46,6 +47,7 @@ class GenerateRequest(BaseModel):
     cefr_level: str = ""                  # A1/A2/B1/B2/C1/C2 or "" for intermediate default
     force_extra_grammar: bool = False     # inject additional rule-based blanks (Python, no AI)
     extra_grammar_categories: list[str] = []  # which categories to inject (empty = all)
+    max_blanks_per_sentence: int = 0      # 0 = no per-sentence limit
 
 
 class CheckProseRequest(BaseModel):
@@ -87,6 +89,12 @@ class UpdateExerciseMetaRequest(BaseModel):
 class UpdateScoreRequest(BaseModel):
     correct: int
     total: int
+
+
+class InjectExtraRequest(BaseModel):
+    allowed_categories: list[str] = []
+    max_blanks_per_sentence: int = 3
+    max_extra: int = 20
 
 
 class DefaultPromptResponse(BaseModel):
@@ -134,6 +142,7 @@ def generate_exercise(
             cefr_level=req.cefr_level or "",
             force_extra_grammar=req.force_extra_grammar,
             extra_grammar_categories=req.extra_grammar_categories or None,
+            max_blanks_per_sentence=req.max_blanks_per_sentence,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -448,6 +457,31 @@ def _exercise_full(e: GrammarExercise) -> dict:
     summary["grammar_notes"] = json.loads(e.grammar_notes_json or "[]")
     summary["vocabulary_used"] = json.loads(e.vocabulary_used_json or "[]")
     return summary
+
+
+@router.post("/exercises/{exercise_id}/inject-extra")
+def inject_extra_into_exercise(
+    exercise_id: int,
+    req: InjectExtraRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Re-inject rule-based blanks into an existing exercise without calling the AI.
+    Only adds blanks where each sentence has fewer than max_blanks_per_sentence.
+    Updates the exercise in the DB and returns the full updated exercise.
+    """
+    exercise = _get_or_404(exercise_id, current_user.id, db)
+    segments = json.loads(exercise.segments_json)
+    new_segments = inject_extra_blanks(
+        segments=segments,
+        allowed_categories=req.allowed_categories or None,
+        max_blanks_per_sentence=req.max_blanks_per_sentence,
+        max_extra=max(1, min(50, req.max_extra)),
+    )
+    exercise.segments_json = json.dumps(new_segments)
+    db.commit()
+    return _exercise_full(exercise)
 
 
 @router.post("/exercises/{exercise_id}/share-token")

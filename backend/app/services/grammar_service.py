@@ -1131,22 +1131,28 @@ def _inject_rule_based_blanks(
     existing_blank_words: set[str],
     max_extra: int = 6,
     allowed_categories: list[str] | None = None,
+    max_blanks_per_sentence: int = 0,
 ) -> list[dict]:
     """
     Post-process segments: scan text segments for words that match the rule-based
     grammar tables and turn them into additional blanks.
 
     existing_blank_words: set of lowercase words already blanked by the AI phase.
-    max_extra: maximum number of new blanks to inject.
+    max_extra: maximum number of new blanks to inject in total.
+    max_blanks_per_sentence: if > 0, limit blanks injected per sentence (sentence = chunk
+        between \\n markers). 0 = no per-sentence limit.
 
     Strategy:
     - Walk text segments left-to-right.
+    - Group segments into sentences by \\n boundaries.
+    - For each sentence, randomise the order of allowed label groups before scanning,
+      so the grammar types selected are non-deterministic.
     - Tokenise each text segment into word-tokens + surrounding punctuation/spaces.
     - For each word-token, check if it's in _FORM_TO_GROUP.
     - Skip words already blanked, skip ambiguous short prepositions if not in focus.
     - Pick 2 random distractors from the pool (excluding the actual form).
     - Replace the text segment with [text_before, blank, text_after] sub-segments.
-    - Stop after max_extra new blanks.
+    - Stop after max_extra new blanks total.
     """
     if max_extra <= 0:
         return segments
@@ -1166,85 +1172,161 @@ def _inject_rule_based_blanks(
     next_id = max((s.get("id", 0) for s in segments if s.get("t") == "blank"), default=0) + 1
     injected = 0
 
-    # Regex: split a text into (prefix, word, suffix) tokens
+    # ── Split segments into sentences (chunks between \n) ─────────────────────
+    # A sentence boundary is a \n inside a text segment value.
+    # We split so each chunk is processed with its own per-sentence counter.
+
+    def _split_into_sentences(segs: list[dict]) -> list[list[dict]]:
+        sentences: list[list[dict]] = []
+        current: list[dict] = []
+        for s in segs:
+            if s.get("t") != "text":
+                current.append(s)
+                continue
+            v = s.get("v", "")
+            parts = v.split("\n")
+            for i, part in enumerate(parts):
+                if part:
+                    current.append({"t": "text", "v": part})
+                if i < len(parts) - 1:
+                    sentences.append(current)
+                    current = []
+        if current:
+            sentences.append(current)
+        return sentences
+
+    # ── Process one sentence chunk ─────────────────────────────────────────────
+
     _TOKEN_RE = re.compile(r'(\W*)(\w+)(\W*)')
 
-    result: list[dict] = []
+    def _process_sentence(sentence_segs: list[dict], sentence_injected: int) -> list[dict]:
+        nonlocal next_id, injected
 
-    for seg in segments:
-        if seg.get("t") != "text" or injected >= max_extra:
-            result.append(seg)
-            continue
+        result: list[dict] = []
 
-        text = seg.get("v", "")
-        if not text.strip():
-            result.append(seg)
-            continue
+        # Randomise order of groups so blank selection is non-deterministic
+        shuffled_labels = list(allowed_labels)
+        random.shuffle(shuffled_labels)
+        label_priority = {lbl: i for i, lbl in enumerate(shuffled_labels)}
 
-        # Try to find a word in this text segment to blank
-        found = False
-        pos = 0
-        while pos < len(text) and injected < max_extra:
-            m = _TOKEN_RE.search(text, pos)
-            if not m:
-                break
-            prefix, word, suffix = m.group(1), m.group(2), m.group(3)
-            word_lower = word.lower()
+        for seg in sentence_segs:
+            if seg.get("t") != "text":
+                result.append(seg)
+                continue
+            if injected >= max_extra:
+                result.append(seg)
+                continue
+            if max_blanks_per_sentence > 0 and sentence_injected >= max_blanks_per_sentence:
+                result.append(seg)
+                continue
 
-            group_info = _FORM_TO_GROUP.get(word_lower)
-            if group_info and word_lower not in existing_blank_words:
-                label, pool = group_info
-                # Skip if this label is not in the allowed categories
-                if label not in allowed_labels:
-                    pos = m.end()
-                    continue
-                # Skip very short ambiguous prepositions unless they're the only option
-                if word_lower in _SKIP_AMBIGUOUS and len(word_lower) <= 3:
-                    pos = m.end()
-                    continue
+            text = seg.get("v", "")
+            if not text.strip():
+                result.append(seg)
+                continue
 
-                # Build 2 distractors from pool
-                candidates = [p for p in pool if p.lower() != word_lower]
-                if len(candidates) < 2:
-                    pos = m.end()
-                    continue
-                distractors = random.sample(candidates, 2)
-
-                options = [word] + distractors
-                random.shuffle(options)
-                correct_idx = options.index(word)
-
-                # Split the segment at this word
-                before_text = text[:m.start()] + prefix
-                after_text = suffix + text[m.end():]
-
-                if before_text:
-                    result.append({"t": "text", "v": before_text})
-
-                result.append({
-                    "t": "blank",
-                    "id": next_id,
-                    "options": options,
-                    "correct": correct_idx,
-                    "rule": f"[{label}] {word}",
-                })
-                next_id += 1
-                injected += 1
-                existing_blank_words.add(word_lower)
-
-                # Continue with the rest of the segment as a new text seg
-                if after_text:
-                    result.append({"t": "text", "v": after_text})
-
-                found = True
-                break  # one blank per text segment max (keeps flow readable)
-            else:
+            # Collect all candidate matches in this text segment, then pick by label priority
+            candidates_found: list[tuple[int, str, re.Match]] = []  # (priority, word_lower, match)
+            pos = 0
+            while pos < len(text):
+                m = _TOKEN_RE.search(text, pos)
+                if not m:
+                    break
+                word_lower = m.group(2).lower()
+                group_info = _FORM_TO_GROUP.get(word_lower)
+                if group_info and word_lower not in existing_blank_words:
+                    label, _ = group_info
+                    if label in allowed_labels and not (word_lower in _SKIP_AMBIGUOUS and len(word_lower) <= 3):
+                        prio = label_priority.get(label, 999)
+                        candidates_found.append((prio, word_lower, m))
                 pos = m.end()
 
-        if not found:
-            result.append(seg)
+            if not candidates_found:
+                result.append(seg)
+                continue
 
-    return result
+            # Pick the candidate with the highest priority (lowest prio index = first in shuffle)
+            candidates_found.sort(key=lambda x: x[0])
+            _, word_lower, m = candidates_found[0]
+            prefix, word, suffix = m.group(1), m.group(2), m.group(3)
+
+            label, pool = _FORM_TO_GROUP[word_lower]
+            dist_candidates = [p for p in pool if p.lower() != word_lower]
+            if len(dist_candidates) < 2:
+                result.append(seg)
+                continue
+            distractors = random.sample(dist_candidates, 2)
+            options = [word] + distractors
+            random.shuffle(options)
+            correct_idx = options.index(word)
+
+            before_text = text[:m.start()] + prefix
+            after_text = suffix + text[m.end():]
+
+            if before_text:
+                result.append({"t": "text", "v": before_text})
+            result.append({
+                "t": "blank",
+                "id": next_id,
+                "options": options,
+                "correct": correct_idx,
+                "rule": f"[{label}] {word}",
+            })
+            next_id += 1
+            injected += 1
+            sentence_injected += 1
+            existing_blank_words.add(word_lower)
+            if after_text:
+                result.append({"t": "text", "v": after_text})
+
+        return result
+
+    # ── Process all sentences ──────────────────────────────────────────────────
+
+    sentences = _split_into_sentences(segments)
+    final: list[dict] = []
+    first = True
+    for sent_segs in sentences:
+        if not first:
+            # Re-insert \n separator between sentences
+            if final and final[-1].get("t") == "text":
+                final[-1] = {**final[-1], "v": final[-1]["v"] + "\n"}
+            else:
+                final.append({"t": "text", "v": "\n"})
+        first = False
+        processed = _process_sentence(sent_segs, sentence_injected=0)
+        final.extend(processed)
+
+    return final
+
+
+def inject_extra_blanks(
+    segments: list[dict],
+    allowed_categories: list[str] | None = None,
+    max_blanks_per_sentence: int = 3,
+    max_extra: int = 20,
+) -> list[dict]:
+    """
+    Public function: inject rule-based blanks into existing segments.
+    Used by the /inject-extra endpoint to improve an already-generated exercise
+    without calling the AI again.
+
+    Only adds blanks where each sentence has fewer blanks than max_blanks_per_sentence.
+    """
+    # Count existing blanks
+    existing_blanked: set[str] = {
+        opt.lower()
+        for seg in segments
+        if seg.get("t") == "blank"
+        for opt in [seg["options"][seg.get("correct", 0)]]
+    }
+    return _inject_rule_based_blanks(
+        segments,
+        existing_blank_words=existing_blanked,
+        max_extra=max_extra,
+        allowed_categories=allowed_categories or None,
+        max_blanks_per_sentence=max_blanks_per_sentence,
+    )
 
 
 # ── Generation modes ──────────────────────────────────────────────────────────
@@ -1526,6 +1608,7 @@ def generate_exercise(
     cefr_level: str = "",
     force_extra_grammar: bool = False,
     extra_grammar_categories: list[str] | None = None,
+    max_blanks_per_sentence: int = 0,
 ) -> dict:
     """
     Generate a fill-in-the-blank grammar exercise.
@@ -1626,6 +1709,10 @@ def generate_exercise(
     data.setdefault("description", "")
     data.setdefault("cefr_level", "")
 
+    # If the caller specified a CEFR level, always use it — don't let the AI override it
+    if cefr_level:
+        data["cefr_level"] = cefr_level
+
     # Inject rule-based extra blanks (Python-only, no AI call)
     if force_extra_grammar:
         existing_blanked = {
@@ -1634,11 +1721,15 @@ def generate_exercise(
             if seg.get("t") == "blank"
             for opt in [seg["options"][seg.get("correct", 0)]]
         }
+        # max_extra: if per-sentence limit is set, allow up to 50 total (limited per sentence);
+        # otherwise default to 20 so force_extra doesn't go wild.
+        _max_extra = 50 if max_blanks_per_sentence > 0 else 20
         data["segments"] = _inject_rule_based_blanks(
             data["segments"],
             existing_blank_words=existing_blanked,
-            max_extra=8,
+            max_extra=_max_extra,
             allowed_categories=extra_grammar_categories or None,
+            max_blanks_per_sentence=max_blanks_per_sentence,
         )
         logger.info("[force_extra_grammar] Injected extra blanks. Total blanks: %d",
                     sum(1 for s in data["segments"] if s.get("t") == "blank"))
