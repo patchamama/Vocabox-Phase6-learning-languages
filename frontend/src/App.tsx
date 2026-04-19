@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import GrammarShare from './pages/GrammarShare'
 import { useAuthStore } from './stores/authStore'
 
 function PrivateRoute({ children }: { children: ReactNode }) {
@@ -16,6 +17,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/grammar/share/:id" element={<GrammarShare />} />
         <Route
           path="/*"
           element={

@@ -73,6 +73,7 @@ class AddToQueueRequest(BaseModel):
     grammar_check_enabled: bool = False
     cefr_level: str = ""
     is_global: bool = False
+    force_extra_grammar: bool = False
 
 
 # ── Serialization ─────────────────────────────────────────────────────────────
@@ -148,6 +149,7 @@ def _process_item_sync(item_id: int, user_id: int) -> None:
             prose_override=params.get("prose_override"),
             double_correct=params.get("double_correct", False),
             max_blanks=max(3, min(20, params.get("max_blanks", 10))),
+            force_extra_grammar=params.get("force_extra_grammar", False),
             cefr_level=params.get("cefr_level", "") or "",
         )
 

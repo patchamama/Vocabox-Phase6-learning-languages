@@ -99,6 +99,8 @@ interface SettingsState {
   grammarDoubleCorrect: boolean
   /** Maximum number of blanks to generate per exercise (3–20) */
   grammarMaxBlanks: number
+  /** Inject additional rule-based blanks after AI generation (Python, no AI) */
+  grammarForceExtraGrammar: boolean
 
   setReviewMode: (mode: ReviewMode) => void
   setWordsPerSession: (n: number) => void
@@ -142,6 +144,7 @@ interface SettingsState {
   setGrammarRollingSentences: (v: number) => void
   setGrammarDoubleCorrect: (v: boolean) => void
   setGrammarMaxBlanks: (v: number) => void
+  setGrammarForceExtraGrammar: (v: boolean) => void
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -197,6 +200,7 @@ export const useSettingsStore = create<SettingsState>()(
       grammarRollingSentences: 6,
       grammarDoubleCorrect: true,
       grammarMaxBlanks: 10,
+      grammarForceExtraGrammar: false,
 
       setReviewMode: (reviewMode) => set({ reviewMode }),
       setWordsPerSession: (wordsPerSession) => set({ wordsPerSession }),
@@ -252,6 +256,7 @@ export const useSettingsStore = create<SettingsState>()(
       setGrammarRollingSentences: (grammarRollingSentences) => set({ grammarRollingSentences: Math.max(2, Math.min(12, grammarRollingSentences)) }),
       setGrammarDoubleCorrect: (grammarDoubleCorrect) => set({ grammarDoubleCorrect }),
       setGrammarMaxBlanks: (grammarMaxBlanks) => set({ grammarMaxBlanks: Math.max(3, Math.min(20, grammarMaxBlanks)) }),
+      setGrammarForceExtraGrammar: (grammarForceExtraGrammar) => set({ grammarForceExtraGrammar }),
     }),
     { name: 'vocabox-settings' }
   )

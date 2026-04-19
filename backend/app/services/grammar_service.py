@@ -160,97 +160,312 @@ Grammar areas to cover (include as many as possible):
 - Common verbs with specific cases: helfen+Dat, danken+Dat, gefallen+Dat, kaufen+Akk...
 """
 
-# Two-phase mode — Phase 1: generate prose only
-PROMPT_GENERATE_PROSE = """\
-You are a German language teacher writing a grammar exercise text.
+# ── Focus-conditional prompt building ─────────────────────────────────────────
+#
+# Each focus key maps to:
+#   FOCUS_PROSE_GUIDE   → one instruction line for Phase-1 prose generation
+#   FOCUS_STEP1         → one instruction line for Phase-2 STEP 1 (what to scan)
+#   FOCUS_STEP2_BLOCKS  → the option-set block(s) for Phase-2 STEP 2
+#   FOCUS_BLANK_HINT    → one-line hint for Rolling PROMPT_ROLLING_BLANK
+#
+# Keys must match what the frontend sends in the grammar_focus array:
+#   articles, cases, prepositions, word_order, verb_prepositions,
+#   adjective_endings, modal_verbs, possessive_pronouns, reflexive_pronouns
 
-Topic: {topic}
+FOCUS_PROSE_GUIDE: dict[str, str] = {
+    "articles": (
+        "- Articles & declension: pack MULTIPLE declined forms per sentence — "
+        "der/die/das/dem/den/des/ein/eine/einen/einem/einer/eines. "
+        "Each case (Nom/Akk/Dat/Gen) at least twice across the text."
+    ),
+    "cases": (
+        "- Cases (Nom/Akk/Dat/Gen): vary grammatical cases — use nouns and pronouns "
+        "in different cases so each case appears at least once."
+    ),
+    "prepositions": (
+        "- Prepositions: use prepositions with their required case — "
+        "mit+Dat, für+Akk, in+Dat/Akk (Wechsel!), auf+Dat/Akk, nach+Dat, bei+Dat, "
+        "von+Dat, zu+Dat, wegen+Gen, trotz+Gen. "
+        "Include contractions (zum, zur, im, am, ins, vom, beim) and "
+        "da-compounds (darauf, damit, dafür, davon, daran) where natural."
+    ),
+    "word_order": (
+        "- Word order: include at least TWO subordinate clauses "
+        "(weil, dass, damit, wenn, obwohl, nachdem, bevor, während) with verb at the end."
+    ),
+    "verb_prepositions": (
+        "- Verb+preposition pairs: include fixed verb-preposition pairs — "
+        "warten auf (+Akk), sich freuen auf (+Akk), denken an (+Akk), "
+        "fragen nach (+Dat), sich interessieren für (+Akk), sprechen über (+Akk)."
+    ),
+    "adjective_endings": (
+        "- Adjective endings: use adjectives before nouns with correct case/gender agreement — "
+        "strong (kalter Kaffee), weak (der kalte Kaffee), mixed (ein kalter Kaffee). "
+        "Vary the case and gender."
+    ),
+    "modal_verbs": (
+        "- Modal verbs: use at least two DIFFERENT modals "
+        "(können, müssen, wollen, möchten, dürfen, sollen) "
+        "conjugated for different subjects (ich/du/er/wir)."
+    ),
+    "possessive_pronouns": (
+        "- Possessive pronouns: use DECLINED possessive pronouns across different cases — "
+        "meinen/meinem/meiner/seiner/ihrer/unserem/eurem etc. "
+        "At least 3 different declined forms."
+    ),
+    "reflexive_pronouns": (
+        "- Reflexive pronouns: use reflexive verb constructions explicitly — "
+        "mich/dich/sich/uns/euch/mir/dir in verbs like "
+        "sich freuen, sich erinnern, sich waschen, sich setzen, sich vorstellen."
+    ),
+}
 
-{cefr_block}
+FOCUS_STEP1: dict[str, str] = {
+    "articles": (
+        '- "Articles & declension": find EVERY definite article (der/die/das/dem/den/des) '
+        'and indefinite article (ein/eine/einen/einem/einer/eines). '
+        'List every single occurrence — even repeated forms. Each occurrence = one blank.'
+    ),
+    "cases": (
+        '- "Cases (Nom/Akk/Dat/Gen)": find articles and pronouns that show case — '
+        'der/die/das/dem/den/des, ein/eine/einen/einem/einer/eines. Each occurrence = one blank.'
+    ),
+    "prepositions": (
+        '- "Prepositions": find EVERY simple preposition '
+        '(mit/nach/auf/für/in/an/zu/bei/von/durch/über/unter/vor/hinter/neben/zwischen/seit/wegen/trotz), '
+        'every contraction (zum/zur/im/am/ins/vom/beim/aufs/ans), '
+        'and every da-compound (darauf/darüber/daran/damit/dafür/davon/dabei/danach/darin/davor). '
+        'Each one = one blank.'
+    ),
+    "word_order": (
+        '- "Word order / subordinate clauses": identify subordinating conjunctions '
+        '(weil/dass/wenn/damit/obwohl/nachdem/bevor/während/falls) — blank the conjunction.'
+    ),
+    "verb_prepositions": (
+        '- "Verb+preposition": find verb+preposition pairs '
+        '(warte auf, freue mich auf, denke an, frage nach, interessiere mich für, spreche über). '
+        'Blank the preposition only (single word).'
+    ),
+    "adjective_endings": (
+        '- "Adjective endings": find EVERY adjective directly before a noun. '
+        'Each one = one blank (blank the FULL adjective, not just its ending).'
+    ),
+    "modal_verbs": (
+        '- "Modal verbs": find EVERY conjugated modal verb '
+        '(kann/kannst/können/muss/musst/müssen/will/willst/wollen/'
+        'darf/darfst/dürfen/soll/sollst/sollen/mag/magst/mögen/möchte/möchtest/möchten). '
+        'Each one = one blank.'
+    ),
+    "possessive_pronouns": (
+        '- "Possessive pronouns": find EVERY possessive pronoun form '
+        '(mein/meine/meinen/meinem/meiner/meines/'
+        'dein/deine/deinen/deinem/deiner/'
+        'sein/seine/seinen/seinem/seiner/'
+        'ihr/ihre/ihren/ihrem/ihrer/'
+        'unser/unsere/unseren/unserem/unserer/'
+        'euer/eure/euren/eurem/eurer). '
+        'Each one = one blank.'
+    ),
+    "reflexive_pronouns": (
+        '- "Reflexive pronouns": find EVERY reflexive pronoun '
+        '(mich/dich/sich/uns/euch/mir/dir) used in reflexive verb constructions. '
+        'Each one = one blank.'
+    ),
+}
 
-GRAMMAR FOCUS — you MUST use these structures multiple times in the text:
-{grammar_focus}
+FOCUS_STEP2_BLOCKS: dict[str, str] = {
+    "articles": """\
+  DEFINITE ARTICLES (der/die/das and their cases):
+    → options from: der, die, das, dem, den, des
+    Examples: "dem" → [dem, der, den] | "des" → [des, der, dem] | "den" → [den, dem, der]
 
-How to apply the grammar focus:
-- Articles & declension: use declined articles (der/die/das/dem/den/ein/einen/einem/einer) in different cases. Example: "Ich kaufe einen Kaffee" (Akk), "mit dem Zug" (Dat), "der Mann" (Nom).
-- Prepositions: use prepositions that govern specific cases (mit+Dat, für+Akk, in+Dat/Akk, auf+Dat/Akk, nach+Dat, bei+Dat, von+Dat, zu+Dat).
-- Word order: include at least one subordinate clause (weil, dass, damit, wenn, obwohl) with verb at the end.
-- Adjective endings: use adjectives before nouns with correct endings (ein schönes Hotel, dem netten Kellner).
-- Modal verbs: use können, müssen, wollen, möchten, dürfen, sollen.
-- Verb+preposition: use fixed verb-preposition pairs (warten auf, sich freuen auf, denken an, fragen nach).
+  INDEFINITE ARTICLES (ein and its cases):
+    → options from: ein, eine, einen, einem, einer, eines
+    Examples: "einen" → [einen, ein, eine] | "einem" → [einem, einen, einer]""",
 
-Requirements:
-- 5-7 sentences, natural and coherent German prose or dialogue
-- EVERY sentence must contain at least one structure from the grammar focus above
-- Write ONLY the German text — no explanations, no JSON, no markdown, no translation
-
-German text:
-"""
-
-# Two-phase mode — Phase 2: analyze prose → blank list (Python builds segments)
-PROMPT_ANALYZE_TO_EXERCISE = """\
-You are a German grammar teacher. Your task: find words in the text that belong to the grammar focus areas and turn them into fill-in-the-blank questions. Generate between 8 and {max_blanks} blanks — pick the most interesting and varied ones, covering different grammatical categories.
-
-TEXT:
-{prose}
-
-Grammar areas to focus on: {grammar_focus}
-
-STEP 1 — Scan the text and list ALL words that match the grammar focus:
-- "Articles & declension": find EVERY article and declined form — der/die/das/dem/den/ein/eine/einen/einem/einer. List every single one, even if the same form appears multiple times. Each occurrence = one blank.
-- "Prepositions": find EVERY preposition — mit/nach/auf/für/in/an/zu/bei/von/durch/über/unter. Each one = one blank.
-- "Adjective endings": find EVERY adjective before a noun. Each one = one blank (blank only the ending or the full adjective).
-- "Modal verbs": find EVERY modal verb — kann/muss/will/möchte/darf/soll. Each one = one blank.
-- "Word order": identify subordinate clauses (weil/dass/wenn/damit/obwohl) — blank the conjunction.
-- "Verb+preposition": find verb+preposition pairs (freue mich auf, warte auf, denke an). Blank the preposition.
-
-STEP 2 — For each word found, create a blank:
-- "word": exact word as it appears in the text (case-sensitive, single word only)
-- "options": exactly 3 DISTINCT words of the SAME TYPE. CRITICAL: "word" MUST be one of the 3 options. The other 2 must be plausible wrong alternatives of the same grammatical category. Never mix types. Never repeat values.
-
-  Option sets by type — use ONLY words from the matching set:
-
+    "cases": """\
   DEFINITE ARTICLES (der/die/das and their cases):
     → options from: der, die, das, dem, den, des
     Examples: "dem" → [dem, der, den] | "des" → [des, der, dem]
 
   INDEFINITE ARTICLES (ein and its cases):
     → options from: ein, eine, einen, einem, einer, eines
-    Examples: "einen" → [einen, ein, eine] | "einem" → [einem, einen, einer]
+    Examples: "einen" → [einen, ein, eine] | "einem" → [einem, einen, einer]""",
 
-  POSSESSIVE PRONOUNS (mein/dein/sein/ihr/unser/euer — all declined forms):
-    → options: other declined forms of pronouns
-    Examples: "meinem" → [meinem, meinen, meine] | "seiner" → [seiner, seinem, seine]
-    "mein" → [mein, dein, sein] | "meine" → [meine, seine, deine]
-
-  REFLEXIVE PRONOUNS (mich/dich/sich/uns/euch/mir/dir):
-    → options from: mich, dich, sich, uns, euch, mir, dir
-    Examples: "mich" → [mich, dich, sich] | "mir" → [mir, dir, sich]
-
+    "prepositions": """\
   PREPOSITIONS (simple):
     → options from: mit, nach, auf, für, in, an, zu, bei, von, durch, über, unter, vor, hinter, neben, zwischen, seit, wegen, trotz, außer, gegenüber
-    Examples: "mit" → [mit, nach, bei] | "für" → [für, mit, durch]
+    Examples: "mit" → [mit, nach, bei] | "für" → [für, mit, durch] | "seit" → [seit, nach, von]
 
-  PREPOSITION CONTRACTIONS (zu+dem=zum, zu+der=zur, in+das=ins, an+das=ans, bei+dem=beim, in+dem=im, an+dem=am, auf+das=aufs, von+dem=vom):
+  PREPOSITION CONTRACTIONS (zum/zur/ins/ans/beim/im/am/aufs/vom):
     → options from the same contraction family:
     "zum" → [zum, zur, beim] | "ins" → [ins, ans, aufs] | "im" → [im, am, beim] | "am" → [am, im, vom]
 
   DA-COMPOUNDS (darauf/darüber/daran/damit/dafür/davon/dabei/danach/darin/davor):
     → options from: darauf, darüber, daran, damit, dafür, davon, dabei, danach, darin, davor
-    Examples: "darauf" → [darauf, daran, damit]
+    Examples: "darauf" → [darauf, daran, damit] | "davon" → [davon, dafür, dabei]""",
 
-  MODAL VERBS (conjugated forms — keep same subject/tense):
-    → options: other modals conjugated for the same subject
-    "muss" (ich) → [muss, kann, darf] | "musst" (du) → [musst, kannst, darfst]
-    "soll" → [soll, kann, will] | "darf" → [darf, muss, soll]
-
-  ADJECTIVE ENDINGS (only the full adjective, not just the ending):
-    → options: same adjective with different endings for wrong case/gender
-    "wichtiges" → [wichtiges, wichtigen, wichtige] | "guten" → [guten, gute, gutem]
-
-  SUBORDINATING CONJUNCTIONS (weil/dass/wenn/obwohl/damit/obwohl/nachdem/bevor/während):
+    "word_order": """\
+  SUBORDINATING CONJUNCTIONS (weil/dass/wenn/obwohl/damit/nachdem/bevor/während):
     → options from: weil, dass, wenn, obwohl, damit, nachdem, bevor, während, falls
-    Examples: "obwohl" → [obwohl, weil, wenn]
+    Examples: "obwohl" → [obwohl, weil, wenn] | "nachdem" → [nachdem, bevor, während]""",
+
+    "verb_prepositions": """\
+  PREPOSITIONS in verb+preposition context:
+    → options from: auf, an, für, nach, über, von, bei, mit, in, zu, um
+    Examples: "auf" (warten auf) → [auf, an, für] | "an" (denken an) → [an, auf, über]
+    "nach" (fragen nach) → [nach, an, für] | "für" (interessieren für) → [für, auf, an]""",
+
+    "adjective_endings": """\
+  ADJECTIVE ENDINGS (blank the FULL adjective, not just the ending):
+    → options: same adjective root with different endings for wrong case/gender
+    "wichtiges" → [wichtiges, wichtigen, wichtige] | "guten" → [guten, gute, gutem]
+    "kalten" → [kalten, kalte, kaltem] | "schöner" → [schöner, schöne, schönem]""",
+
+    "modal_verbs": """\
+  MODAL VERBS (conjugated — keep same subject and tense):
+    → options: other modals conjugated for the SAME subject
+    ich: "muss" → [muss, kann, darf] | "will" → [will, soll, kann]
+    du: "musst" → [musst, kannst, darfst] | "willst" → [willst, sollst, kannst]
+    er/sie: "muss" → [muss, kann, darf] | "soll" → [soll, kann, will]
+    wir/sie: "müssen" → [müssen, können, dürfen] | "wollen" → [wollen, sollen, können]""",
+
+    "possessive_pronouns": """\
+  POSSESSIVE PRONOUNS (mein/dein/sein/ihr/unser/euer — all declined forms):
+    → options: other declined forms of possessives (same or different owner)
+    "meinem" → [meinem, meinen, meine] | "seiner" → [seiner, seinem, seine]
+    "mein" → [mein, dein, sein] | "meine" → [meine, seine, deine]
+    "unserem" → [unserem, unseren, unser] | "ihren" → [ihren, ihre, ihrem]""",
+
+    "reflexive_pronouns": """\
+  REFLEXIVE PRONOUNS (mich/dich/sich/uns/euch/mir/dir):
+    → options from: mich, dich, sich, uns, euch, mir, dir
+    Examples: "mich" → [mich, dich, sich] | "mir" → [mir, dir, sich]
+    "uns" → [uns, euch, sich] | "dich" → [dich, mich, sich]""",
+}
+
+# Short hint injected into PROMPT_ROLLING_BLANK per focus key
+FOCUS_BLANK_HINT: dict[str, str] = {
+    "articles": "articles (definite: der/die/das/dem/den/des — indefinite: ein/eine/einen/einem/einer)",
+    "cases": "articles or pronouns showing grammatical case (Nom/Akk/Dat/Gen)",
+    "prepositions": "prepositions (mit/auf/für/in/an/zu/bei...), contractions (zum/zur/im/am/ins) or da-compounds (darauf/damit/dafür)",
+    "word_order": "subordinating conjunctions (weil/dass/wenn/obwohl/damit/nachdem/bevor/während)",
+    "verb_prepositions": "the preposition in a verb+preposition pair (warten auf, denken an, fragen nach...)",
+    "adjective_endings": "an adjective before a noun (blank the full adjective)",
+    "modal_verbs": "a modal verb (kann/muss/will/darf/soll/möchte and their conjugations)",
+    "possessive_pronouns": "a possessive pronoun (mein/meine/meinen/meinem/sein/ihre/unser...)",
+    "reflexive_pronouns": "a reflexive pronoun (mich/dich/sich/uns/euch/mir/dir)",
+}
+
+
+def _build_prose_focus_guide(focus_keys: list[str], free_text: list[str] | None = None) -> str:
+    """Build the grammar focus application guide lines for Phase-1 prose prompts."""
+    lines = [FOCUS_PROSE_GUIDE[k] for k in focus_keys if k in FOCUS_PROSE_GUIDE]
+    # Option B: inject free-text focus items as direct instructions
+    for ft in (free_text or []):
+        lines.append(f"- {ft}: build multiple sentences that clearly illustrate this grammar structure. Use it at least 3 times across the text.")
+    return "\n".join(lines) if lines else "- Use natural German grammar appropriate to the level."
+
+
+def _build_analysis_step1(focus_keys: list[str], free_text: list[str] | None = None) -> str:
+    """Build the STEP 1 scan instructions for PROMPT_ANALYZE_TO_EXERCISE."""
+    # Deduplicate: 'articles' and 'cases' both produce article blanks — keep only one line
+    seen: set[str] = set()
+    lines: list[str] = []
+    for k in focus_keys:
+        canonical = "articles" if k == "cases" else k
+        if canonical not in seen and k in FOCUS_STEP1:
+            seen.add(canonical)
+            lines.append(FOCUS_STEP1[k])
+    # Option B: free-text focus → instruct model to find and blank relevant words itself
+    for ft in (free_text or []):
+        lines.append(
+            f'- "{ft}": find every word or form that exemplifies this grammar structure. '
+            f'Each occurrence = one blank. Choose plausible wrong alternatives of the same grammatical category.'
+        )
+    return "\n".join(lines) if lines else "- Find grammatically interesting words to blank."
+
+
+def _build_analysis_step2(focus_keys: list[str], free_text: list[str] | None = None) -> str:
+    """Build the option-set blocks for STEP 2 of PROMPT_ANALYZE_TO_EXERCISE."""
+    seen: set[str] = set()
+    blocks: list[str] = []
+    for k in focus_keys:
+        # 'articles' and 'cases' share the same block — deduplicate
+        canonical = "articles" if k == "cases" else k
+        if canonical not in seen and canonical in FOCUS_STEP2_BLOCKS:
+            seen.add(canonical)
+            blocks.append(FOCUS_STEP2_BLOCKS[canonical])
+    # Option B: for free-text focus, no fixed option sets — model uses own judgment
+    for ft in (free_text or []):
+        blocks.append(
+            f"  {ft.upper()} forms:\n"
+            f"    → Choose 2 wrong options of the SAME grammatical category as the correct answer.\n"
+            f"    → Never mix grammatical categories. Options must be the same word type."
+        )
+    if not blocks:
+        return "  Use appropriate option sets for the word type found."
+    return "\n\n".join(blocks)
+
+
+def _build_rolling_blank_instructions(focus_keys: list[str], free_text: list[str] | None = None) -> str:
+    """Build the word-type preference hint for PROMPT_ROLLING_BLANK."""
+    hints = [FOCUS_BLANK_HINT[k] for k in focus_keys if k in FOCUS_BLANK_HINT]
+    # Option B: add free-text items as direct hints
+    hints.extend(free_text or [])
+    if not hints:
+        return "articles, prepositions, pronouns, adjective endings, modal verbs"
+    return " | ".join(hints)
+
+
+# Two-phase mode — Phase 1: generate prose only
+PROMPT_GENERATE_PROSE = """\
+You are a German language teacher writing a text for a grammar exercise.
+
+Topic: {topic}
+
+{cefr_block}
+
+PRIMARY GOAL — GRAMMAR FOCUS:
+The text MUST be rich in the following grammar structures. Every sentence must illustrate at least one of them:
+{grammar_focus}
+
+Grammar focus application guide — apply ONLY the instructions below, nothing else:
+{prose_focus_guide}
+
+Format rules:
+- 5-8 sentences total. Write either coherent prose OR a dialogue — both are good.
+- If writing a DIALOGUE: put each speaker's line on a new line, starting with the speaker's name followed by a colon. Example:
+  Anna: Ich möchte einen Kaffee, bitte.
+  Kellner: Mit Milch oder ohne?
+  Anna: Mit Milch, aber ohne Zucker.
+- If writing PROSE: use cohesive paragraphs with clear narrative flow.
+- Write ONLY the German text — no explanations, no labels, no JSON, no translation, no markdown.
+
+German text:
+"""
+
+# Two-phase mode — Phase 2: analyze prose → blank list (Python builds segments)
+PROMPT_ANALYZE_TO_EXERCISE = """\
+You are a German grammar teacher. Your task: find words in the text that belong to the grammar focus areas and turn them into fill-in-the-blank questions. Generate between 6 and {max_blanks} blanks — pick the most interesting and varied ones, strictly within the grammar focus.
+
+TEXT:
+{prose}
+
+Grammar areas to focus on: {grammar_focus}
+
+IMPORTANT: ONLY blank words from the grammar focus listed above. Do NOT blank words from other grammatical categories.
+
+STEP 1 — Scan the text and list ALL words that match the grammar focus ONLY:
+{step1_instructions}
+
+STEP 2 — For each word found, create a blank:
+- "word": exact word as it appears in the text (case-sensitive, single word only)
+- "options": exactly 3 DISTINCT words of the SAME TYPE. CRITICAL: "word" MUST be one of the 3 options. The other 2 must be plausible wrong alternatives of the SAME grammatical category. Never mix types. Never repeat values.
+
+  Option sets by type — use ONLY the sets listed below, no others:
+
+{step2_blocks}
 
 - "correct": 0-based index of the correct answer in options (shuffle — not always 0)
 - "rule": ONE sentence in {interface_lang} — state the grammatical case/category, gender if applicable, and why this form is correct
@@ -266,21 +481,27 @@ For "description": write a single sentence in {interface_lang} summarizing the g
 
 # Rolling mode — Phase 1: generate all sentences as plain prose
 PROMPT_ROLLING_PROSE = """\
-You are a German language teacher writing a grammar exercise text.
+You are a German language teacher writing sentences for a grammar exercise.
 
 Topic: {topic}
 
 {cefr_block}
 
-GRAMMAR FOCUS — you MUST use these structures in the text:
+PRIMARY GOAL — GRAMMAR FOCUS:
+Every sentence MUST actively illustrate at least one of these structures (more is better):
 {grammar_focus}
 
-Write exactly {num_sentences} short, natural German sentences on this topic.
-Requirements:
-- Each sentence must be grammatically correct and naturally spelled (check umlauts: ä, ö, ü, ß).
-- Each sentence introduces a NEW aspect or situation related to the topic — avoid repeating ideas.
-- Every sentence must use at least one structure from the grammar focus above.
-- Write ONLY the {num_sentences} sentences separated by newlines — no numbering, no explanations, no JSON.
+Grammar focus application guide — apply ONLY the instructions below, nothing else:
+{prose_focus_guide}
+
+Format rules:
+- Write exactly {num_sentences} sentences.
+- You may write a coherent mini-story (each sentence a new moment) OR a dialogue (speaker name + colon + line, one per row).
+- If writing a DIALOGUE: each turn on its own line. Example:
+  Anna: Ich muss mit dem Bus fahren, weil mein Auto kaputt ist.
+  Max: Kannst du nicht mit meinem Fahrrad fahren?
+- Each sentence must cover a NEW aspect — do not repeat ideas or structures.
+- Write ONLY the sentences — no numbering, no explanations, no JSON, no markdown.
 
 German sentences:
 """
@@ -292,14 +513,16 @@ You are creating a German fill-in-the-blank exercise.
 German sentence: {sentence}
 Grammar focus: {grammar_focus}
 
-Choose ONE word from this sentence to turn into a blank. Prefer: articles, prepositions, pronouns, adjective endings, modal verbs.
+Choose ONE word from this sentence to turn into a blank.
+ONLY choose a word that belongs to the grammar focus. Preferred word types (in order):
+{blank_instructions}
 
 Return ONLY valid JSON — no markdown, no backticks:
 {{"answer":"<exact word from sentence>","wrong":["<wrong1>","<wrong2>"],"rule":"<grammar rule in {interface_lang}>"}}
 
 Rules:
 - "answer" must be exactly one word as it appears in the sentence (same spelling, same case).
-- "wrong" = exactly 2 alternatives of the SAME word type (all definite articles, OR all prepositions, etc. — never mix).
+- "wrong" = exactly 2 alternatives of the SAME word type (never mix types).
 - "rule" = one sentence explaining the grammatical rule in {interface_lang}.
 
 EXAMPLE — sentence "Ich kaufe einen roten Pullover.":
@@ -566,23 +789,39 @@ def _find_word_in_text(word: str, text: str) -> re.Match | None:
     """
     Find `word` in `text` as a whole token.
     Strategy (each tried in order until a match is found):
-      1. Exact case, word-boundary
+      1. Exact case, word-boundary  (\b word \b)
       2. Case-insensitive, word-boundary
-      3. Exact case, no word-boundary (handles punctuation-adjacent words)
-      4. Case-insensitive, no word-boundary
-    Returns the first match object or None.
+      3. Exact case, preceded/followed by non-word char or start/end (handles ä/ö/ü adjacent to punctuation)
+      4. Case-insensitive, same
+
+    Patterns 3 and 4 intentionally require the match NOT to be embedded inside a longer
+    word — a match at position i is only valid if text[i-1] (if exists) and text[i+len]
+    (if exists) are non-alphanumeric. This prevents "hat" from matching inside "hatten".
+    Returns the first valid match object or None.
     """
     escaped = re.escape(word)
-    patterns = [
-        re.compile(r'(?<!\w)' + escaped + r'(?!\w)'),
-        re.compile(r'(?<!\w)' + escaped + r'(?!\w)', re.IGNORECASE),
-        re.compile(escaped),
-        re.compile(escaped, re.IGNORECASE),
+    # Patterns 1 & 2: strict word boundary (\b handles ASCII word chars only)
+    strict_patterns = [
+        re.compile(r'\b' + escaped + r'\b'),
+        re.compile(r'\b' + escaped + r'\b', re.IGNORECASE),
     ]
-    for pat in patterns:
+    for pat in strict_patterns:
         m = pat.search(text)
         if m:
             return m
+
+    # Patterns 3 & 4: Unicode-aware boundary — check surrounding chars manually
+    loose_patterns = [
+        re.compile(escaped),
+        re.compile(escaped, re.IGNORECASE),
+    ]
+    for pat in loose_patterns:
+        for m in pat.finditer(text):
+            start, end = m.start(), m.end()
+            before_ok = start == 0 or not text[start - 1].isalnum()
+            after_ok = end == len(text) or not text[end].isalnum()
+            if before_ok and after_ok:
+                return m
     return None
 
 
@@ -748,12 +987,220 @@ def _parse_exercise_json(raw: str, attempt: int, prose: str = "") -> tuple[dict 
     return data, None
 
 
+# ── Rule-based extra blanks ───────────────────────────────────────────────────
+
+# Each entry: (pattern_group_label, set_of_forms, options_pool)
+# Pattern is matched as whole word (case-insensitive).  options_pool is the
+# full list of candidates — 2 distractors are picked randomly from it
+# (excluding the matched form).
+
+_RULE_BASED_GROUPS: list[tuple[str, frozenset[str], list[str]]] = [
+    # Definite articles
+    ("definite_article",
+     frozenset({"der", "die", "das", "dem", "den", "des"}),
+     ["der", "die", "das", "dem", "den", "des"]),
+
+    # Indefinite articles
+    ("indefinite_article",
+     frozenset({"ein", "eine", "einen", "einem", "einer", "eines"}),
+     ["ein", "eine", "einen", "einem", "einer", "eines"]),
+
+    # Possessive pronouns (all declined forms — common subset)
+    ("possessive_pronoun",
+     frozenset({
+         "mein", "meine", "meinen", "meinem", "meiner", "meines",
+         "dein", "deine", "deinen", "deinem", "deiner", "deines",
+         "sein", "seine", "seinen", "seinem", "seiner", "seines",
+         "ihr", "ihre", "ihren", "ihrem", "ihrer", "ihres",
+         "unser", "unsere", "unseren", "unserem", "unserer", "unseres",
+         "euer", "eure", "euren", "eurem", "eurer", "eures",
+     }),
+     ["mein", "meine", "meinen", "meinem", "dein", "deine", "deinen", "sein", "seine", "seinen",
+      "ihr", "ihre", "ihren", "unser", "unsere", "unseren", "unserem"]),
+
+    # Reflexive pronouns
+    ("reflexive_pronoun",
+     frozenset({"mich", "dich", "sich", "uns", "euch", "mir", "dir"}),
+     ["mich", "dich", "sich", "uns", "euch", "mir", "dir"]),
+
+    # Modal verbs (conjugated — keep same subject by grouping by person)
+    ("modal_ich",
+     frozenset({"kann", "muss", "will", "darf", "soll", "mag"}),
+     ["kann", "muss", "will", "darf", "soll", "mag"]),
+    ("modal_du",
+     frozenset({"kannst", "musst", "willst", "darfst", "sollst", "magst"}),
+     ["kannst", "musst", "willst", "darfst", "sollst", "magst"]),
+    ("modal_er",
+     frozenset({"kann", "muss", "will", "darf", "soll", "mag"}),
+     # same as ich — handled by context; kept separate for label clarity
+     ["kann", "muss", "will", "darf", "soll", "mag"]),
+    ("modal_wir",
+     frozenset({"können", "müssen", "wollen", "dürfen", "sollen", "mögen", "möchten"}),
+     ["können", "müssen", "wollen", "dürfen", "sollen", "mögen", "möchten"]),
+
+    # Simple prepositions
+    ("preposition",
+     frozenset({
+         "mit", "nach", "auf", "für", "in", "an", "zu", "bei", "von",
+         "durch", "über", "unter", "vor", "hinter", "neben", "zwischen",
+         "seit", "wegen", "trotz", "außer", "gegenüber",
+     }),
+     ["mit", "nach", "auf", "für", "in", "an", "zu", "bei", "von",
+      "durch", "über", "unter", "vor", "hinter", "neben", "zwischen", "seit"]),
+
+    # Preposition contractions
+    ("prep_contraction",
+     frozenset({"zum", "zur", "ins", "ans", "beim", "im", "am", "aufs", "vom"}),
+     ["zum", "zur", "beim", "ins", "ans", "aufs", "im", "am", "vom"]),
+
+    # Da-compounds
+    ("da_compound",
+     frozenset({
+         "darauf", "darüber", "daran", "damit", "dafür", "davon",
+         "dabei", "danach", "darin", "davor",
+     }),
+     ["darauf", "darüber", "daran", "damit", "dafür", "davon", "dabei", "danach", "darin", "davor"]),
+
+    # Subordinating conjunctions
+    ("sub_conjunction",
+     frozenset({"weil", "dass", "wenn", "obwohl", "damit", "nachdem", "bevor", "während", "falls"}),
+     ["weil", "dass", "wenn", "obwohl", "damit", "nachdem", "bevor", "während", "falls"]),
+]
+
+# Build a fast lookup: lowercase_form → (label, pool)
+_FORM_TO_GROUP: dict[str, tuple[str, list[str]]] = {}
+for _label, _forms, _pool in _RULE_BASED_GROUPS:
+    for _f in _forms:
+        # Don't overwrite — first match wins (definite articles before possessives for "ihr" etc.)
+        if _f.lower() not in _FORM_TO_GROUP:
+            _FORM_TO_GROUP[_f.lower()] = (_label, _pool)
+
+# Special-case: "ihr/ihre/ihren/ihrem/ihrer/ihres" are possessives, not definite articles
+for _poss in ("ihre", "ihren", "ihrem", "ihrer", "ihres"):
+    _FORM_TO_GROUP[_poss] = ("possessive_pronoun",
+                              ["ihr", "ihre", "ihren", "ihrem", "ihrer", "ihres",
+                               "sein", "seine", "seinen", "unser", "unsere"])
+
+# "ihr" by itself is ambiguous (pronoun / possessive) — skip for determinism
+_FORM_TO_GROUP.pop("ihr", None)
+
+# Prepositions that are ambiguous short words — exclude to avoid false positives
+_SKIP_AMBIGUOUS = frozenset({"in", "an", "auf", "vor", "über", "unter", "nach", "zu"})
+
+
+def _inject_rule_based_blanks(
+    segments: list[dict],
+    existing_blank_words: set[str],
+    max_extra: int = 6,
+) -> list[dict]:
+    """
+    Post-process segments: scan text segments for words that match the rule-based
+    grammar tables and turn them into additional blanks.
+
+    existing_blank_words: set of lowercase words already blanked by the AI phase.
+    max_extra: maximum number of new blanks to inject.
+
+    Strategy:
+    - Walk text segments left-to-right.
+    - Tokenise each text segment into word-tokens + surrounding punctuation/spaces.
+    - For each word-token, check if it's in _FORM_TO_GROUP.
+    - Skip words already blanked, skip ambiguous short prepositions if not in focus.
+    - Pick 2 random distractors from the pool (excluding the actual form).
+    - Replace the text segment with [text_before, blank, text_after] sub-segments.
+    - Stop after max_extra new blanks.
+    """
+    if max_extra <= 0:
+        return segments
+
+    # Assign starting blank_id from existing blanks
+    next_id = max((s.get("id", 0) for s in segments if s.get("t") == "blank"), default=0) + 1
+    injected = 0
+
+    # Regex: split a text into (prefix, word, suffix) tokens
+    _TOKEN_RE = re.compile(r'(\W*)(\w+)(\W*)')
+
+    result: list[dict] = []
+
+    for seg in segments:
+        if seg.get("t") != "text" or injected >= max_extra:
+            result.append(seg)
+            continue
+
+        text = seg.get("v", "")
+        if not text.strip():
+            result.append(seg)
+            continue
+
+        # Try to find a word in this text segment to blank
+        found = False
+        pos = 0
+        while pos < len(text) and injected < max_extra:
+            m = _TOKEN_RE.search(text, pos)
+            if not m:
+                break
+            prefix, word, suffix = m.group(1), m.group(2), m.group(3)
+            word_lower = word.lower()
+
+            group_info = _FORM_TO_GROUP.get(word_lower)
+            if group_info and word_lower not in existing_blank_words:
+                label, pool = group_info
+                # Skip very short ambiguous prepositions unless they're the only option
+                if word_lower in _SKIP_AMBIGUOUS and len(word_lower) <= 3:
+                    pos = m.end()
+                    continue
+
+                # Build 2 distractors from pool
+                candidates = [p for p in pool if p.lower() != word_lower]
+                if len(candidates) < 2:
+                    pos = m.end()
+                    continue
+                distractors = random.sample(candidates, 2)
+
+                options = [word] + distractors
+                random.shuffle(options)
+                correct_idx = options.index(word)
+
+                # Split the segment at this word
+                before_text = text[:m.start()] + prefix
+                after_text = suffix + text[m.end():]
+
+                if before_text:
+                    result.append({"t": "text", "v": before_text})
+
+                result.append({
+                    "t": "blank",
+                    "id": next_id,
+                    "options": options,
+                    "correct": correct_idx,
+                    "rule": f"[{label}] {word}",
+                })
+                next_id += 1
+                injected += 1
+                existing_blank_words.add(word_lower)
+
+                # Continue with the rest of the segment as a new text seg
+                if after_text:
+                    result.append({"t": "text", "v": after_text})
+
+                found = True
+                break  # one blank per text segment max (keeps flow readable)
+            else:
+                pos = m.end()
+
+        if not found:
+            result.append(seg)
+
+    return result
+
+
 # ── Generation modes ──────────────────────────────────────────────────────────
 
 def _generate_two_phase(
     topic: str,
     interface_lang: str,
     grammar_focus: str,
+    focus_keys: list[str],
+    free_text_focus: list[str],
     model: str,
     timeout: int,
     client: AIClient,
@@ -767,6 +1214,11 @@ def _generate_two_phase(
     """Phase 1: generate prose. Optional Phase 1b: auto-correct (1 or 2 passes). Phase 2: analyze prose → exercise JSON."""
     interface_lang_name = INTERFACE_LANG_NAMES.get(interface_lang, "Spanish")
 
+    # Build conditional prompt sections from the focus keys + free-text items
+    prose_focus_guide = _build_prose_focus_guide(focus_keys, free_text_focus)
+    step1_instructions = _build_analysis_step1(focus_keys, free_text_focus)
+    step2_blocks = _build_analysis_step2(focus_keys, free_text_focus)
+
     prose_kwargs = {**extra_kwargs, "num_predict": extra_kwargs.get("num_predict", 1024)}
     phase2_kwargs = {**extra_kwargs, "num_predict": max(extra_kwargs.get("num_predict", 0), 8000)}
 
@@ -776,11 +1228,12 @@ def _generate_two_phase(
         logger.info("[two_phase] Using prose_override (%d chars)", len(prose))
     else:
         # Phase 1 — prose
-        logger.info("[two_phase] Phase 1: generating prose for topic=%r", topic)
+        logger.info("[two_phase] Phase 1: generating prose for topic=%r focus_keys=%r", topic, focus_keys)
         prose_prompt = PROMPT_GENERATE_PROSE.format_map(_SafeDict(
             topic=topic,
             grammar_focus=grammar_focus,
             cefr_block=cefr_block,
+            prose_focus_guide=prose_focus_guide,
         ))
         prose = _call_client(client, prose_prompt, model, timeout, prose_kwargs)
         if not prose:
@@ -810,6 +1263,8 @@ def _generate_two_phase(
         interface_lang=interface_lang_name,
         grammar_focus=grammar_focus,
         max_blanks=max_blanks,
+        step1_instructions=step1_instructions,
+        step2_blocks=step2_blocks,
     ))
 
     last_error: Exception | None = None
@@ -830,6 +1285,8 @@ def _generate_rolling(
     topic: str,
     interface_lang: str,
     grammar_focus: str,
+    focus_keys: list[str],
+    free_text_focus: list[str],
     num_sentences: int,
     model: str,
     timeout: int,
@@ -849,13 +1306,18 @@ def _generate_rolling(
     """
     interface_lang_name = INTERFACE_LANG_NAMES.get(interface_lang, "Spanish")
 
+    # Build conditional prompt sections from the focus keys + free-text items
+    prose_focus_guide = _build_prose_focus_guide(focus_keys, free_text_focus)
+    blank_instructions = _build_rolling_blank_instructions(focus_keys, free_text_focus)
+
     # ── Phase 1: generate all sentences at once ────────────────────────────────
-    logger.info("[rolling] Phase 1: generating %d sentences", num_sentences)
+    logger.info("[rolling] Phase 1: generating %d sentences focus_keys=%r", num_sentences, focus_keys)
     prose_prompt = PROMPT_ROLLING_PROSE.format_map(_SafeDict(
         topic=topic,
         grammar_focus=grammar_focus,
         num_sentences=num_sentences,
         cefr_block=cefr_block,
+        prose_focus_guide=prose_focus_guide,
     ))
     prose_timeout = max(60, timeout // 3)
     raw_prose = _call_client(client, prose_prompt, model, prose_timeout, extra_kwargs)
@@ -898,6 +1360,7 @@ def _generate_rolling(
             sentence=sentence,
             grammar_focus=grammar_focus,
             interface_lang=interface_lang_name,
+            blank_instructions=blank_instructions,
         ))
 
         blank_data: dict | None = None
@@ -996,6 +1459,7 @@ def generate_exercise(
     double_correct: bool = False,
     max_blanks: int = 10,
     cefr_level: str = "",
+    force_extra_grammar: bool = False,
 ) -> dict:
     """
     Generate a fill-in-the-blank grammar exercise.
@@ -1006,7 +1470,15 @@ def generate_exercise(
       "custom"     — Uses custom_prompt (original single-shot behavior)
     """
     interface_lang_name = INTERFACE_LANG_NAMES.get(interface_lang, "Spanish")
-    focus_str = ", ".join(grammar_focus) if grammar_focus else "articles, prepositions, word order"
+
+    # Separate recognised keys (have conditional prompt sections) from free-text focus items
+    _KNOWN_KEYS = set(FOCUS_PROSE_GUIDE.keys())
+    focus_keys: list[str] = [f for f in (grammar_focus or []) if f in _KNOWN_KEYS]
+    free_text_focus: list[str] = [f for f in (grammar_focus or []) if f not in _KNOWN_KEYS]
+
+    # focus_str: human-readable list for prompt text (all items)
+    all_focus = focus_keys + free_text_focus
+    focus_str = ", ".join(all_focus) if all_focus else "articles, prepositions, word order"
     cefr_block = CEFR_LEVEL_DESCRIPTIONS.get(cefr_level, "Intermediate level (A2-B2): natural everyday German vocabulary and grammar.")
 
     client = ai_client or OllamaClient(OLLAMA_BASE)
@@ -1026,6 +1498,8 @@ def generate_exercise(
             topic=topic,
             interface_lang=interface_lang,
             grammar_focus=focus_str,
+            focus_keys=focus_keys,
+            free_text_focus=free_text_focus,
             model=model,
             timeout=timeout,
             client=client,
@@ -1040,6 +1514,8 @@ def generate_exercise(
             topic=topic,
             interface_lang=interface_lang,
             grammar_focus=focus_str,
+            focus_keys=focus_keys,
+            free_text_focus=free_text_focus,
             num_sentences=rolling_sentences,
             model=model,
             timeout=timeout,
@@ -1083,6 +1559,22 @@ def generate_exercise(
     data.setdefault("topic", topic)
     data.setdefault("description", "")
     data.setdefault("cefr_level", "")
+
+    # Inject rule-based extra blanks (Python-only, no AI call)
+    if force_extra_grammar:
+        existing_blanked = {
+            opt.lower()
+            for seg in data.get("segments", [])
+            if seg.get("t") == "blank"
+            for opt in [seg["options"][seg.get("correct", 0)]]
+        }
+        data["segments"] = _inject_rule_based_blanks(
+            data["segments"],
+            existing_blank_words=existing_blanked,
+            max_extra=8,
+        )
+        logger.info("[force_extra_grammar] Injected extra blanks. Total blanks: %d",
+                    sum(1 for s in data["segments"] if s.get("t") == "blank"))
 
     return data
 

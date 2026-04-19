@@ -42,6 +42,7 @@ class GenerateRequest(BaseModel):
     double_correct: bool = False          # run a second auto-correction pass on Phase 1 prose
     max_blanks: int = 10                  # maximum number of blanks to generate
     cefr_level: str = ""                  # A1/A2/B1/B2/C1/C2 or "" for intermediate default
+    force_extra_grammar: bool = False     # inject additional rule-based blanks (Python, no AI)
 
 
 class CheckProseRequest(BaseModel):
@@ -128,6 +129,7 @@ def generate_exercise(
             double_correct=req.double_correct,
             max_blanks=max(3, min(20, req.max_blanks)),
             cefr_level=req.cefr_level or "",
+            force_extra_grammar=req.force_extra_grammar,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -428,3 +430,15 @@ def _exercise_full(e: GrammarExercise) -> dict:
     summary["grammar_notes"] = json.loads(e.grammar_notes_json or "[]")
     summary["vocabulary_used"] = json.loads(e.vocabulary_used_json or "[]")
     return summary
+
+
+@router.get("/exercises/{exercise_id}/public")
+def get_exercise_public(
+    exercise_id: int,
+    db: Session = Depends(get_db),
+):
+    """Get a single saved exercise without authentication (for sharing)."""
+    exercise = db.query(GrammarExercise).filter(GrammarExercise.id == exercise_id).first()
+    if not exercise:
+        raise HTTPException(status_code=404, detail="Exercise not found")
+    return _exercise_full(exercise)

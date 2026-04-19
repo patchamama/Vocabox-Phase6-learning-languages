@@ -293,6 +293,7 @@ export const grammarApi = {
     double_correct?: boolean
     max_blanks?: number
     cefr_level?: string
+    force_extra_grammar?: boolean
   }) => api.post<GrammarExerciseData>('/grammar/generate', data),
 
   checkProse: (data: {
@@ -341,6 +342,8 @@ export const grammarApi = {
     api.patch(`/grammar/exercises/${id}/score`, { correct, total }),
 
   deleteExercise: (id: number) => api.delete(`/grammar/exercises/${id}`),
+
+  getExercisePublic: (id: number) => api.get<SavedGrammarExercise>(`/grammar/exercises/${id}/public`),
 }
 
 // ── Grammar Queue ─────────────────────────────────────────────────────────────
@@ -386,6 +389,7 @@ export interface GrammarQueueAddRequest {
   grammar_check_enabled?: boolean
   cefr_level?: string
   is_global?: boolean
+  force_extra_grammar?: boolean
 }
 
 export const grammarQueueApi = {

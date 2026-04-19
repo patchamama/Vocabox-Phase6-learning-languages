@@ -82,6 +82,7 @@ function BatchPanel({
   grammarNumPredict,
   grammarTopP,
   grammarCheckEnabled,
+  grammarForceExtraGrammar,
   onToast,
   onQueued,
 }: {
@@ -98,6 +99,7 @@ function BatchPanel({
   grammarNumPredict: number | null
   grammarTopP: number | null
   grammarCheckEnabled: boolean
+  grammarForceExtraGrammar: boolean
   onToast: (msg: string, type?: 'ok' | 'err') => void
   onQueued: () => void
 }) {
@@ -199,6 +201,7 @@ function BatchPanel({
           grammar_check_enabled: grammarCheckEnabled,
           cefr_level: cefr || undefined,
           is_global: batchGlobal || undefined,
+          force_extra_grammar: grammarForceExtraGrammar || undefined,
         })
         added++
       }
@@ -437,12 +440,14 @@ function BatchPanel({
 
 const GRAMMAR_FOCUS_OPTIONS = [
   { key: 'articles', label: { es: 'Artículos y declinación', en: 'Articles & declension', de: 'Artikel & Deklination', fr: 'Articles & déclinaison' } },
+  { key: 'cases', label: { es: 'Casos (Nom/Akk/Dat/Gen)', en: 'Cases (Nom/Akk/Dat/Gen)', de: 'Kasus (Nom/Akk/Dat/Gen)', fr: 'Cas grammaticaux' } },
   { key: 'prepositions', label: { es: 'Preposiciones', en: 'Prepositions', de: 'Präpositionen', fr: 'Prépositions' } },
   { key: 'word_order', label: { es: 'Orden de palabras (Haupt/Nebensatz)', en: 'Word order (Haupt/Nebensatz)', de: 'Wortstellung (Haupt/Nebensatz)', fr: 'Ordre des mots' } },
   { key: 'verb_prepositions', label: { es: 'Verbos + preposición fija', en: 'Verb + fixed preposition', de: 'Verb + feste Präposition', fr: 'Verbe + préposition fixe' } },
   { key: 'adjective_endings', label: { es: 'Declinación de adjetivos', en: 'Adjective endings', de: 'Adjektivendungen', fr: 'Terminaisons adj.' } },
-  { key: 'cases', label: { es: 'Casos (Nom/Akk/Dat/Gen)', en: 'Cases (Nom/Akk/Dat/Gen)', de: 'Kasus (Nom/Akk/Dat/Gen)', fr: 'Cas grammaticaux' } },
   { key: 'modal_verbs', label: { es: 'Verbos modales (können, müssen...)', en: 'Modal verbs (können, müssen...)', de: 'Modalverben (können, müssen...)', fr: 'Verbes modaux (können, müssen...)' } },
+  { key: 'possessive_pronouns', label: { es: 'Pronombres posesivos', en: 'Possessive pronouns', de: 'Possessivpronomen', fr: 'Pronoms possessifs' } },
+  { key: 'reflexive_pronouns', label: { es: 'Pronombres reflexivos', en: 'Reflexive pronouns', de: 'Reflexivpronomen', fr: 'Pronoms réfléchis' } },
 ]
 
 // ── Shuffle helper ────────────────────────────────────────────────────────────
@@ -564,6 +569,16 @@ function ExercisePlayer({
   const leoDropdownRef = useRef<HTMLDivElement | null>(null)
   const [saved, setSaved] = useState(savedId !== null)
   const [currentSavedId, setCurrentSavedId] = useState<number | null>(savedId)
+  const [copied, setCopied] = useState(false)
+
+  const handleShare = () => {
+    if (!currentSavedId) return
+    const url = `${window.location.origin}${import.meta.env.BASE_URL}grammar/share/${currentSavedId}`
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
   // Exercise metadata (AI-suggested, user-editable before saving)
   const [editTitle, setEditTitle] = useState(exercise.title)
   const [editDescription, setEditDescription] = useState(exercise.description ?? '')
@@ -826,27 +841,33 @@ function ExercisePlayer({
       <div className="card space-y-5">
 
         {sentences.map((group, gi) => (
-          <div key={gi}>
-            <p className="text-white text-base leading-relaxed">
+          <div key={gi} className="flex items-start gap-2">
+            <span className="text-[10px] text-slate-500 select-none mt-1.5 w-4 shrink-0 text-right">{gi + 1}</span>
+            <p className="flex-1 text-white text-base leading-relaxed">
               {group.segs.map((seg, si) => {
                 if (seg.t === 'text') {
-                  // Split text into clickable words
-                  const words = (seg.v ?? '').split(/(\s+)/)
+                  // Split by newlines first, then tokenize each line into clickable words
+                  const lines = (seg.v ?? '').split('\n')
                   return (
                     <span key={si}>
-                      {words.map((token, ti) =>
-                        /^\s+$/.test(token) ? (
-                          <span key={ti}>{token}</span>
-                        ) : (
-                          <span
-                            key={ti}
-                            onClick={() => lookupTextWord(token)}
-                            className="italic text-slate-200 cursor-pointer hover:text-white hover:underline decoration-dotted underline-offset-2 transition-colors"
-                          >
-                            {token}
-                          </span>
-                        )
-                      )}
+                      {lines.map((line, li) => (
+                        <span key={li}>
+                          {li > 0 && <br />}
+                          {line.split(/(\s+)/).map((token, ti) =>
+                            /^\s+$/.test(token) ? (
+                              <span key={ti}>{token}</span>
+                            ) : (
+                              <span
+                                key={ti}
+                                onDoubleClick={() => lookupTextWord(token)}
+                                className="italic text-slate-200 cursor-text hover:text-white select-text"
+                              >
+                                {token}
+                              </span>
+                            )
+                          )}
+                        </span>
+                      ))}
                     </span>
                   )
                 }
@@ -1105,6 +1126,15 @@ function ExercisePlayer({
           >
             {saving ? '...' : saved ? `✓ ${uiLang === 'de' ? 'Gespeichert' : uiLang === 'en' ? 'Saved' : uiLang === 'fr' ? 'Enregistré' : 'Guardado'}` : uiLang === 'de' ? 'Speichern' : uiLang === 'en' ? 'Save exercise' : uiLang === 'fr' ? 'Enregistrer' : 'Guardar'}
           </button>
+          {currentSavedId && (
+            <button
+              onClick={handleShare}
+              title={uiLang === 'de' ? 'Link kopieren' : uiLang === 'en' ? 'Copy share link' : uiLang === 'fr' ? 'Copier le lien' : 'Copiar enlace'}
+              className="px-3 py-2.5 rounded-xl border border-slate-600 text-slate-300 hover:border-blue-500/40 hover:text-blue-300 text-sm transition-colors"
+            >
+              {copied ? '✓' : '🔗'}
+            </button>
+          )}
           <button onClick={onNext ?? onNew} className="flex-1 btn-primary py-2.5 text-sm">
             {uiLang === 'de' ? 'Nächste Übung →' : uiLang === 'en' ? 'Next exercise →' : uiLang === 'fr' ? 'Exercice suivant →' : 'Próximo ejercicio →'}
           </button>
@@ -1690,8 +1720,8 @@ export default function GrammarWorkshop() {
   const {
     ollamaTranslationModel, ollamaTimeout, ollamaPromptGrammar,
     grammarTemperature, grammarNumPredict, grammarTopP,
-    grammarMode, grammarRollingSentences, grammarDoubleCorrect, grammarMaxBlanks,
-    setGrammarMode, setGrammarRollingSentences,
+    grammarMode, grammarRollingSentences, grammarDoubleCorrect, grammarMaxBlanks, grammarForceExtraGrammar,
+    setGrammarMode, setGrammarRollingSentences, setGrammarForceExtraGrammar,
   } = useSettingsStore()
   const { uiLanguage } = useUserProfileStore()
   const uiLang = (uiLanguage as TipLang) ?? 'es'
@@ -1790,6 +1820,7 @@ export default function GrammarWorkshop() {
         double_correct: grammarDoubleCorrect,
         max_blanks: grammarMaxBlanks,
         cefr_level: generateCefr || undefined,
+        force_extra_grammar: grammarForceExtraGrammar || undefined,
       })
       setExercise({
         ...res.data,
@@ -1965,6 +1996,7 @@ export default function GrammarWorkshop() {
         grammar_check_enabled: grammarCheckEnabled,
         cefr_level: generateCefr || undefined,
         is_global: generateGlobal || undefined,
+        force_extra_grammar: grammarForceExtraGrammar || undefined,
       })
       await fetchQueue()
       if (!workerRunning) await resumeWorker()
@@ -2178,6 +2210,19 @@ export default function GrammarWorkshop() {
             />
             <span className="text-xs text-slate-400">
               🌐 {uiLang === 'de' ? 'Global (für alle zugänglich)' : uiLang === 'en' ? 'Global (shared with everyone)' : uiLang === 'fr' ? 'Global (partagé avec tous)' : 'Global (compartido con todos)'}
+            </span>
+          </label>
+
+          {/* Force extra grammar toggle */}
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={grammarForceExtraGrammar}
+              onChange={(e) => setGrammarForceExtraGrammar(e.target.checked)}
+              className="w-3.5 h-3.5 rounded accent-amber-500"
+            />
+            <span className="text-xs text-slate-400">
+              ⚡ {uiLang === 'de' ? 'Zusätzliche Grammatik erzwingen' : uiLang === 'en' ? 'Force extra grammar blanks' : uiLang === 'fr' ? 'Forcer grammaire supplémentaire' : 'Forzar gramática extra adicional'}
             </span>
           </label>
 
@@ -2427,6 +2472,7 @@ export default function GrammarWorkshop() {
                   grammarNumPredict={grammarNumPredict}
                   grammarTopP={grammarTopP}
                   grammarCheckEnabled={grammarCheckEnabled}
+                  grammarForceExtraGrammar={grammarForceExtraGrammar}
                   onToast={showToast}
                   onQueued={async () => { await fetchQueue(); if (!workerRunning) await resumeWorker() }}
                 />
