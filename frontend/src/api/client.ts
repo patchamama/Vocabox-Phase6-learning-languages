@@ -276,7 +276,14 @@ export interface SavedGrammarExercise extends GrammarExerciseData {
   last_attempted: string | null
 }
 
+export interface ExtraGrammarCategory {
+  key: string
+  labels: { es: string; en: string; de: string; fr: string }
+}
+
 export const grammarApi = {
+  getExtraGrammarCategories: () => api.get<ExtraGrammarCategory[]>('/grammar/extra-grammar-categories'),
+
   generate: (data: {
     topic: string
     interface_lang: string
@@ -295,6 +302,7 @@ export const grammarApi = {
     max_blanks?: number
     cefr_level?: string
     force_extra_grammar?: boolean
+    extra_grammar_categories?: string[]
   }) => api.post<GrammarExerciseData>('/grammar/generate', data),
 
   checkProse: (data: {
@@ -393,6 +401,7 @@ export interface GrammarQueueAddRequest {
   cefr_level?: string
   is_global?: boolean
   force_extra_grammar?: boolean
+  extra_grammar_categories?: string[]
 }
 
 export const grammarQueueApi = {

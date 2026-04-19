@@ -101,6 +101,8 @@ interface SettingsState {
   grammarMaxBlanks: number
   /** Inject additional rule-based blanks after AI generation (Python, no AI) */
   grammarForceExtraGrammar: boolean
+  /** Which rule-based categories to inject (empty = all) */
+  grammarExtraCategories: string[]
 
   setReviewMode: (mode: ReviewMode) => void
   setWordsPerSession: (n: number) => void
@@ -145,6 +147,8 @@ interface SettingsState {
   setGrammarDoubleCorrect: (v: boolean) => void
   setGrammarMaxBlanks: (v: number) => void
   setGrammarForceExtraGrammar: (v: boolean) => void
+  setGrammarExtraCategories: (v: string[]) => void
+  toggleGrammarExtraCategory: (key: string) => void
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -201,6 +205,7 @@ export const useSettingsStore = create<SettingsState>()(
       grammarDoubleCorrect: true,
       grammarMaxBlanks: 10,
       grammarForceExtraGrammar: false,
+      grammarExtraCategories: [],
 
       setReviewMode: (reviewMode) => set({ reviewMode }),
       setWordsPerSession: (wordsPerSession) => set({ wordsPerSession }),
@@ -257,6 +262,13 @@ export const useSettingsStore = create<SettingsState>()(
       setGrammarDoubleCorrect: (grammarDoubleCorrect) => set({ grammarDoubleCorrect }),
       setGrammarMaxBlanks: (grammarMaxBlanks) => set({ grammarMaxBlanks: Math.max(3, Math.min(20, grammarMaxBlanks)) }),
       setGrammarForceExtraGrammar: (grammarForceExtraGrammar) => set({ grammarForceExtraGrammar }),
+      setGrammarExtraCategories: (grammarExtraCategories) => set({ grammarExtraCategories }),
+      toggleGrammarExtraCategory: (key) =>
+        set((state) => {
+          const curr = state.grammarExtraCategories
+          const next = curr.includes(key) ? curr.filter((k) => k !== key) : [...curr, key]
+          return { grammarExtraCategories: next }
+        }),
     }),
     { name: 'vocabox-settings' }
   )

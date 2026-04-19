@@ -45,6 +45,7 @@ class GenerateRequest(BaseModel):
     max_blanks: int = 10                  # maximum number of blanks to generate
     cefr_level: str = ""                  # A1/A2/B1/B2/C1/C2 or "" for intermediate default
     force_extra_grammar: bool = False     # inject additional rule-based blanks (Python, no AI)
+    extra_grammar_categories: list[str] = []  # which categories to inject (empty = all)
 
 
 class CheckProseRequest(BaseModel):
@@ -132,6 +133,7 @@ def generate_exercise(
             max_blanks=max(3, min(20, req.max_blanks)),
             cefr_level=req.cefr_level or "",
             force_extra_grammar=req.force_extra_grammar,
+            extra_grammar_categories=req.extra_grammar_categories or None,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -192,6 +194,12 @@ def suggest_topics(
         ai_client=ai_client,
     )
     return {"topics": topics}
+
+
+@router.get("/extra-grammar-categories")
+def get_extra_grammar_categories(current_user: User = Depends(get_current_user)):
+    """Return the list of rule-based extra grammar categories available for injection."""
+    return grammar_service.EXTRA_GRAMMAR_CATEGORIES
 
 
 @router.get("/default-prompt")

@@ -1099,10 +1099,38 @@ _FORM_TO_GROUP.pop("ihr", None)
 _SKIP_AMBIGUOUS = frozenset({"in", "an", "auf", "vor", "über", "unter", "nach", "zu"})
 
 
+# Canonical user-facing categories (groups modal_ich/du/er/wir under one key)
+EXTRA_GRAMMAR_CATEGORIES: list[dict] = [
+    {"key": "definite_article",   "labels": {"es": "Artículos definidos (der/die/das)", "en": "Definite articles", "de": "Bestimmte Artikel", "fr": "Articles définis"}},
+    {"key": "indefinite_article", "labels": {"es": "Artículos indefinidos (ein/eine)", "en": "Indefinite articles", "de": "Unbestimmte Artikel", "fr": "Articles indéfinis"}},
+    {"key": "possessive_pronoun", "labels": {"es": "Pronombres posesivos (mein/dein/sein...)", "en": "Possessive pronouns", "de": "Possessivpronomen", "fr": "Pronoms possessifs"}},
+    {"key": "reflexive_pronoun",  "labels": {"es": "Pronombres reflexivos (mich/dich/sich...)", "en": "Reflexive pronouns", "de": "Reflexivpronomen", "fr": "Pronoms réfléchis"}},
+    {"key": "modal_verbs",        "labels": {"es": "Verbos modales (kann/muss/will...)", "en": "Modal verbs", "de": "Modalverben", "fr": "Verbes modaux"}},
+    {"key": "preposition",        "labels": {"es": "Preposiciones simples (mit/auf/für...)", "en": "Simple prepositions", "de": "Präpositionen", "fr": "Prépositions simples"}},
+    {"key": "prep_contraction",   "labels": {"es": "Contracciones (zum/zur/im/am...)", "en": "Preposition contractions", "de": "Präpositionalkontraktion", "fr": "Contractions prépositionnelles"}},
+    {"key": "da_compound",        "labels": {"es": "Da-compuestos (darauf/damit/dafür...)", "en": "Da-compounds", "de": "Da-Komposita", "fr": "Composés da-"}},
+    {"key": "sub_conjunction",    "labels": {"es": "Conjunciones subordinantes (weil/dass/wenn...)", "en": "Subordinating conjunctions", "de": "Unterordnende Konjunktionen", "fr": "Conjonctions de subordination"}},
+]
+
+# Map user-facing keys to the internal _RULE_BASED_GROUPS labels they cover
+_CATEGORY_TO_LABELS: dict[str, set[str]] = {
+    "definite_article":   {"definite_article"},
+    "indefinite_article": {"indefinite_article"},
+    "possessive_pronoun": {"possessive_pronoun"},
+    "reflexive_pronoun":  {"reflexive_pronoun"},
+    "modal_verbs":        {"modal_ich", "modal_du", "modal_er", "modal_wir"},
+    "preposition":        {"preposition"},
+    "prep_contraction":   {"prep_contraction"},
+    "da_compound":        {"da_compound"},
+    "sub_conjunction":    {"sub_conjunction"},
+}
+
+
 def _inject_rule_based_blanks(
     segments: list[dict],
     existing_blank_words: set[str],
     max_extra: int = 6,
+    allowed_categories: list[str] | None = None,
 ) -> list[dict]:
     """
     Post-process segments: scan text segments for words that match the rule-based
@@ -1122,6 +1150,17 @@ def _inject_rule_based_blanks(
     """
     if max_extra <= 0:
         return segments
+
+    # Build the set of allowed internal labels from user-facing category keys
+    if allowed_categories:
+        allowed_labels: set[str] = set()
+        for cat_key in allowed_categories:
+            allowed_labels.update(_CATEGORY_TO_LABELS.get(cat_key, set()))
+    else:
+        # No filter → all labels allowed
+        allowed_labels = set()
+        for labels in _CATEGORY_TO_LABELS.values():
+            allowed_labels.update(labels)
 
     # Assign starting blank_id from existing blanks
     next_id = max((s.get("id", 0) for s in segments if s.get("t") == "blank"), default=0) + 1
@@ -1155,6 +1194,10 @@ def _inject_rule_based_blanks(
             group_info = _FORM_TO_GROUP.get(word_lower)
             if group_info and word_lower not in existing_blank_words:
                 label, pool = group_info
+                # Skip if this label is not in the allowed categories
+                if label not in allowed_labels:
+                    pos = m.end()
+                    continue
                 # Skip very short ambiguous prepositions unless they're the only option
                 if word_lower in _SKIP_AMBIGUOUS and len(word_lower) <= 3:
                     pos = m.end()
@@ -1394,17 +1437,28 @@ def _generate_rolling(
         if blank_data is None:
             # Fallback: include the sentence as plain text with no blank
             logger.warning("[rolling] Sentence %d has no blank, adding as plain text", i+1)
-            all_segments.append({"t": "text", "v": sentence + " "})
+            # Prefix \n to separate from previous sentence (frontend splits on \n)
+            prefix = "\n" if all_segments else ""
+            all_segments.append({"t": "text", "v": prefix + sentence})
             continue
 
         # Build segments using the robust builder (handles capitalisation etc.)
-        sentence_segs = _build_segments_from_blanks(sentence + " ", [blank_data])
+        sentence_segs = _build_segments_from_blanks(sentence, [blank_data])
 
         # Re-assign blank IDs globally
         for seg in sentence_segs:
             if seg.get("t") == "blank":
                 seg["id"] = blank_id
                 blank_id += 1
+
+        # Add \n to the first text segment of this sentence (frontend splits on \n to group by sentence)
+        if all_segments and sentence_segs:
+            first = sentence_segs[0]
+            if first.get("t") == "text":
+                sentence_segs[0] = {**first, "v": "\n" + first.get("v", "")}
+            else:
+                # First segment is a blank — insert a text separator before it
+                sentence_segs.insert(0, {"t": "text", "v": "\n"})
 
         all_segments.extend(sentence_segs)
 
@@ -1471,6 +1525,7 @@ def generate_exercise(
     max_blanks: int = 10,
     cefr_level: str = "",
     force_extra_grammar: bool = False,
+    extra_grammar_categories: list[str] | None = None,
 ) -> dict:
     """
     Generate a fill-in-the-blank grammar exercise.
@@ -1583,6 +1638,7 @@ def generate_exercise(
             data["segments"],
             existing_blank_words=existing_blanked,
             max_extra=8,
+            allowed_categories=extra_grammar_categories or None,
         )
         logger.info("[force_extra_grammar] Injected extra blanks. Total blanks: %d",
                     sum(1 for s in data["segments"] if s.get("t") == "blank"))

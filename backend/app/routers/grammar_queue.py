@@ -74,6 +74,7 @@ class AddToQueueRequest(BaseModel):
     cefr_level: str = ""
     is_global: bool = False
     force_extra_grammar: bool = False
+    extra_grammar_categories: list[str] = []
 
 
 # ── Serialization ─────────────────────────────────────────────────────────────
@@ -150,6 +151,7 @@ def _process_item_sync(item_id: int, user_id: int) -> None:
             double_correct=params.get("double_correct", False),
             max_blanks=max(3, min(20, params.get("max_blanks", 10))),
             force_extra_grammar=params.get("force_extra_grammar", False),
+            extra_grammar_categories=params.get("extra_grammar_categories") or None,
             cefr_level=params.get("cefr_level", "") or "",
         )
 

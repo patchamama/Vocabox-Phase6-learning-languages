@@ -84,6 +84,7 @@ function BatchPanel({
   grammarTopP,
   grammarCheckEnabled,
   grammarForceExtraGrammar,
+  grammarExtraCategories,
   onToast,
   onQueued,
 }: {
@@ -101,6 +102,7 @@ function BatchPanel({
   grammarTopP: number | null
   grammarCheckEnabled: boolean
   grammarForceExtraGrammar: boolean
+  grammarExtraCategories: string[]
   onToast: (msg: string, type?: 'ok' | 'err') => void
   onQueued: () => void
 }) {
@@ -203,6 +205,7 @@ function BatchPanel({
           cefr_level: cefr || undefined,
           is_global: batchGlobal || undefined,
           force_extra_grammar: grammarForceExtraGrammar || undefined,
+          extra_grammar_categories: grammarForceExtraGrammar && grammarExtraCategories.length > 0 ? grammarExtraCategories : undefined,
         })
         added++
       }
@@ -1845,7 +1848,7 @@ export default function GrammarWorkshop() {
   const {
     ollamaTranslationModel, ollamaTimeout, ollamaPromptGrammar,
     grammarTemperature, grammarNumPredict, grammarTopP,
-    grammarMode, grammarRollingSentences, grammarDoubleCorrect, grammarMaxBlanks, grammarForceExtraGrammar,
+    grammarMode, grammarRollingSentences, grammarDoubleCorrect, grammarMaxBlanks, grammarForceExtraGrammar, grammarExtraCategories,
     setGrammarMode, setGrammarRollingSentences, setGrammarForceExtraGrammar,
   } = useSettingsStore()
   const { uiLanguage } = useUserProfileStore()
@@ -1946,6 +1949,7 @@ export default function GrammarWorkshop() {
         max_blanks: grammarMaxBlanks,
         cefr_level: generateCefr || undefined,
         force_extra_grammar: grammarForceExtraGrammar || undefined,
+        extra_grammar_categories: grammarForceExtraGrammar && grammarExtraCategories.length > 0 ? grammarExtraCategories : undefined,
       })
       setExercise({
         ...res.data,
@@ -2122,6 +2126,7 @@ export default function GrammarWorkshop() {
         cefr_level: generateCefr || undefined,
         is_global: generateGlobal || undefined,
         force_extra_grammar: grammarForceExtraGrammar || undefined,
+        extra_grammar_categories: grammarForceExtraGrammar && grammarExtraCategories.length > 0 ? grammarExtraCategories : undefined,
       })
       await fetchQueue()
       if (!workerRunning) await resumeWorker()
@@ -2598,6 +2603,7 @@ export default function GrammarWorkshop() {
                   grammarTopP={grammarTopP}
                   grammarCheckEnabled={grammarCheckEnabled}
                   grammarForceExtraGrammar={grammarForceExtraGrammar}
+                  grammarExtraCategories={grammarExtraCategories}
                   onToast={showToast}
                   onQueued={async () => { await fetchQueue(); if (!workerRunning) await resumeWorker() }}
                 />

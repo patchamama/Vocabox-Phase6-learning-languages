@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { RoundType } from '../stores/settingsStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { aiProvidersApi, grammarApi, ollamaApi, temasApi } from '../api/client'
-import type { AIProviderInfo } from '../api/client'
+import type { AIProviderInfo, ExtraGrammarCategory } from '../api/client'
 import AIProvidersModal from '../components/AIProvidersModal'
 import Import from './Import'
 import type { Tema } from '../types'
@@ -622,7 +622,8 @@ const WORDS_OPTIONS = [5, 10, 15, 20, 30]
 const DELAY_OPTIONS = [1, 2, 3, 5]
 
 export default function Settings() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const uiLang = (['es', 'en', 'de', 'fr'].includes(i18n.language) ? i18n.language : 'es') as 'es' | 'en' | 'de' | 'fr'
   const {
     reviewMode, wordsPerSession, transitionDelay, transitionType,
     safeRound1, safeRound2, safeRound3, autoPlayAudio, autoPlayAudioReversed, wordsOnly, reviewDirection,
@@ -633,12 +634,14 @@ export default function Settings() {
     subtitleIndexPalabra, subtitleIndexAudioText, subtitleIndexSignificado,
     germanArticleChoice, grammarReviewEnabled, grammarOptions, ollamaPromptGrammar,
     grammarTemperature, grammarNumPredict, grammarTopP, grammarDoubleCorrect, grammarMaxBlanks,
+    grammarForceExtraGrammar, grammarExtraCategories,
     setReviewMode, setWordsPerSession, setTransitionDelay, setTransitionType,
     setSafeRound, setAutoPlayAudio, setAutoPlayAudioReversed, setWordsOnly, setReviewDirection,
     setUseTtsInAudioReview, setLeoAutoFetchExtras, setLeoExtraLangs,
     setAudioReviewExtraLangs, setOllamaTranslationModel,
     setOllamaTimeout, setOllamaPromptTranslate, setOllamaPromptEnhance, setOllamaPromptGrammar,
     setGrammarTemperature, setGrammarNumPredict, setGrammarTopP, setGrammarDoubleCorrect, setGrammarMaxBlanks,
+    setGrammarForceExtraGrammar, toggleGrammarExtraCategory,
     setVideoClipPauseSec, setVideoClipContext, setVideoClipAutoPlay, setVideoClipPlaybackRate, setMaxRefsPerWord,
     setSubtitleIndexPalabra, setSubtitleIndexAudioText, setSubtitleIndexSignificado,
     setGermanArticleChoice, setGrammarReviewEnabled, setGrammarOption,
@@ -649,6 +652,7 @@ export default function Settings() {
   const [defaultPrompts, setDefaultPrompts] = useState<{ translate: string; enhance: string } | null>(null)
   const [defaultGrammarPrompt, setDefaultGrammarPrompt] = useState('')
   const [activeProvider, setActiveProvider] = useState<AIProviderInfo | null | undefined>(undefined)
+  const [extraGrammarCategories, setExtraGrammarCategories] = useState<ExtraGrammarCategory[]>([])
   const [showAIProviders, setShowAIProviders] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const ollamaChecked = useRef(false)
@@ -660,6 +664,9 @@ export default function Settings() {
       .catch(() => {})
     grammarApi.getDefaultPrompt()
       .then((r) => setDefaultGrammarPrompt(r.data.prompt))
+      .catch(() => {})
+    grammarApi.getExtraGrammarCategories()
+      .then((r) => setExtraGrammarCategories(r.data))
       .catch(() => {})
     aiProvidersApi.active()
       .then((r) => setActiveProvider(r.data))
@@ -987,6 +994,63 @@ export default function Settings() {
                 />
                 <span className="text-sm text-slate-300 w-6 text-right">{grammarMaxBlanks}</span>
               </div>
+            </div>
+
+            {/* Force extra grammar blanks */}
+            <div className="space-y-3 border border-slate-700/60 rounded-xl p-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-200 font-medium">
+                    {uiLang === 'de' ? 'Extra Grammatikübungen erzwingen' : uiLang === 'en' ? 'Force extra grammar blanks' : uiLang === 'fr' ? 'Forcer des exercices supplémentaires' : 'Forzar ejercicios de gramática adicional'}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {uiLang === 'de' ? 'Regelbasierte Lücken nach der KI-Generierung einfügen' : uiLang === 'en' ? 'Inject rule-based blanks after AI generation' : uiLang === 'fr' ? 'Injecter des espaces basés sur des règles après la génération IA' : 'Inserta espacios adicionales basados en reglas después de la generación IA'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setGrammarForceExtraGrammar(!grammarForceExtraGrammar)}
+                  className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors ${grammarForceExtraGrammar ? 'bg-blue-500' : 'bg-slate-600'}`}
+                >
+                  <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${grammarForceExtraGrammar ? 'translate-x-4' : 'translate-x-0'}`} />
+                </button>
+              </div>
+
+              {grammarForceExtraGrammar && extraGrammarCategories.length > 0 && (
+                <div className="space-y-2 pt-1">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide">
+                    {uiLang === 'de' ? 'Kategorien (leer = alle)' : uiLang === 'en' ? 'Categories (empty = all)' : uiLang === 'fr' ? 'Catégories (vide = toutes)' : 'Categorías (vacío = todas)'}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {extraGrammarCategories.map((cat) => {
+                      const selected = grammarExtraCategories.includes(cat.key)
+                      return (
+                        <button
+                          key={cat.key}
+                          onClick={() => toggleGrammarExtraCategory(cat.key)}
+                          className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
+                            selected
+                              ? 'border-blue-500/60 bg-blue-500/15 text-blue-300'
+                              : grammarExtraCategories.length === 0
+                                ? 'border-slate-500 bg-slate-700/50 text-slate-300'
+                                : 'border-slate-700 bg-slate-800/50 text-slate-500'
+                          }`}
+                          title={grammarExtraCategories.length === 0 ? (uiLang === 'en' ? 'All active — click to restrict' : 'Todas activas — clic para restringir') : ''}
+                        >
+                          {cat.labels[uiLang] ?? cat.labels.es}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {grammarExtraCategories.length > 0 && (
+                    <button
+                      onClick={() => useSettingsStore.getState().setGrammarExtraCategories([])}
+                      className="text-xs text-slate-500 hover:text-slate-300 underline"
+                    >
+                      {uiLang === 'de' ? 'Alle auswählen' : uiLang === 'en' ? 'Select all (reset)' : uiLang === 'fr' ? 'Tout sélectionner' : 'Seleccionar todas (reset)'}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Grammar model parameters */}
