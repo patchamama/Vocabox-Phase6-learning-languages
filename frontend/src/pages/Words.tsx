@@ -268,7 +268,7 @@ export default function Words() {
       setIsAdding(true)
       clearPrefill()
       // Scroll to top so form is visible
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }, [prefill, clearPrefill])
 
@@ -294,6 +294,9 @@ export default function Words() {
 
   // ── Categories (fetched once) ─────────────────────────────────────────────
   const [categories, setCategories] = useState<string[]>([])
+
+  // ── Last tema used when adding a word (persistent) ───────────────────────────
+  const [lastAddTemaId, setLastAddTemaId] = useLocalStorage<string>('words:lastAddTemaId', '')
 
   // ── Sort (persistent) ────────────────────────────────────────────────────────
   const [sortField, setSortField] = useLocalStorage<SortField>('words:sortField', 'added')
@@ -559,7 +562,11 @@ export default function Words() {
           type="search"
           placeholder={t('words.search')}
           value={filterSearch}
-          onChange={(e) => { setFilterSearch(e.target.value); resetPage() }}
+          onChange={(e) => {
+            setFilterSearch(e.target.value)
+            resetPage()
+            if (isAdding) { setIsAdding(false); setPrefillData(null) }
+          }}
           className="flex-1 min-w-[120px] bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
         />
         <select
@@ -925,14 +932,21 @@ export default function Words() {
         <WordEditForm
           word={{
             word_id: 0,
-            palabra: prefillData?.palabra ?? '',
+            palabra: prefillData?.palabra ?? filterSearch.trim(),
             significado: prefillData?.significado ?? '',
             idioma_origen: 'de',
             idioma_destino: 'es',
-            tema_id: null,
+            tema_id: lastAddTemaId ? parseInt(lastAddTemaId) : null,
           }}
-          onSaved={() => { setIsAdding(false); setPrefillData(null); load() }}
+          onSaved={(updated) => {
+            if (updated.tema_id != null) setLastAddTemaId(String(updated.tema_id))
+            else setLastAddTemaId('')
+            setIsAdding(false)
+            setPrefillData(null)
+            load()
+          }}
           onCancel={() => { setIsAdding(false); setPrefillData(null) }}
+          onTemaChange={(v) => setLastAddTemaId(v)}
         />
       )}
 

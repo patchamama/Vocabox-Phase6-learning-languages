@@ -59,6 +59,7 @@ interface Props {
   onSaved: (updated: SavedPayload) => void
   onCancel: () => void
   onDeleted?: () => void
+  onTemaChange?: (temaId: string) => void
 }
 
 const CAT_LABELS: Record<string, string> = {
@@ -69,7 +70,7 @@ const CAT_LABELS: Record<string, string> = {
   prep: 'Preposición',
 }
 
-export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Props) {
+export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTemaChange }: Props) {
   const { t } = useTranslation()
   const { leoAutoFetchExtras, leoExtraLangs, ollamaTranslationModel, ollamaTimeout, ollamaPromptEnhance } = useSettingsStore()
   const [form, setForm] = useState({
@@ -689,7 +690,7 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted }: Pro
       <TemaSelect
         temas={temas}
         value={form.tema_id}
-        onChange={set('tema_id')}
+        onChange={(v) => { set('tema_id')(v); onTemaChange?.(v) }}
         onTemaCreated={(t) => setTemas((prev) => [...prev, t])}
       />
 

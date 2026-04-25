@@ -33,6 +33,7 @@ export default function Layout() {
   const { pathname } = useLocation()
   const scrollPositions = useRef<Map<string, number>>(new Map())
   const prevPath = useRef<string | null>(null)
+  const mainRef = useRef<HTMLElement>(null)
 
   // Load settings from backend once on mount (after auth)
   useEffect(() => {
@@ -40,19 +41,20 @@ export default function Layout() {
   }, [])
 
   useEffect(() => {
+    const el = mainRef.current
+    if (!el) return
     // Save previous route's scroll before switching
     if (prevPath.current !== null && prevPath.current !== pathname) {
-      scrollPositions.current.set(prevPath.current, window.scrollY)
+      scrollPositions.current.set(prevPath.current, el.scrollTop)
     }
     // Restore scroll for incoming route
-    const saved = scrollPositions.current.get(pathname) ?? 0
-    window.scrollTo(0, saved)
+    el.scrollTop = scrollPositions.current.get(pathname) ?? 0
     prevPath.current = pathname
   }, [pathname])
 
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col">
-      <main className="flex-1 max-w-lg mx-auto w-full pb-20">
+    <div className="h-screen bg-slate-900 flex flex-col overflow-hidden">
+      <main ref={mainRef} className="flex-1 overflow-y-auto max-w-lg mx-auto w-full pb-4">
         {PAGES.map(({ path, Component, exact }) => (
           <div
             key={path}
