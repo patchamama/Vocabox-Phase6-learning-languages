@@ -51,7 +51,8 @@ export default function SubtitleManager() {
   const [reindexState, setReindexState] = useState<ReindexState | null>(null)
   const [reindexPartial, setReindexPartial] = useState(false)
   const [reindexMinRefs, setReindexMinRefs] = useState(3)
-  const wsRef = useRef<WebSocket | null>(null)
+  const wsRef      = useRef<WebSocket | null>(null)
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Search
   const [searchQuery, setSearchQuery] = useState('')
@@ -83,7 +84,10 @@ export default function SubtitleManager() {
 
   useEffect(() => {
     load()
-    return () => { wsRef.current?.close() }
+    return () => {
+      wsRef.current?.close()
+      if (pollingRef.current) clearInterval(pollingRef.current)
+    }
   }, [load])
 
   // ── File selection ────────────────────────────────────────────────────────────
@@ -198,7 +202,24 @@ export default function SubtitleManager() {
       }
     }
     ws.onerror = () => {
-      setReindexState((s) => s ? { ...s, status: 'error', error: 'WebSocket error' } : null)
+      // WS unavailable — fall back to HTTP polling
+      if (pollingRef.current) return
+      pollingRef.current = setInterval(async () => {
+        try {
+          const res = await subtitlesApi.getJob(jobId)
+          const data = res.data
+          setReindexState(data as ReindexState)
+          if (data.status === 'done' || data.status === 'error') {
+            clearInterval(pollingRef.current!)
+            pollingRef.current = null
+            if (data.status === 'done') loadFileCounts()
+          }
+        } catch {
+          clearInterval(pollingRef.current!)
+          pollingRef.current = null
+          setReindexState((s) => s ? { ...s, status: 'error', error: 'Job not found' } : null)
+        }
+      }, 2000)
     }
   }
 

@@ -72,7 +72,8 @@ export default function AudioReviewPanel({ filteredWords, onClose }: Props) {
   // Saved playback position per file (survives switching to another file)
   const pausedAt = useRef<Map<string, number>>(new Map())
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const wsRef = useRef<WebSocket | null>(null)
+  const wsRef      = useRef<WebSocket | null>(null)
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Subtitle player state
   const [subtitlePlayer, setSubtitlePlayer] = useState<{
@@ -95,6 +96,7 @@ export default function AudioReviewPanel({ filteredWords, onClose }: Props) {
     loadAudioFiles()
     return () => {
       wsRef.current?.close()
+      if (pollingRef.current) clearInterval(pollingRef.current)
       stopCurrent()
       stopTracking()
       // Release all cached blob URLs
@@ -171,11 +173,30 @@ export default function AudioReviewPanel({ filteredWords, onClose }: Props) {
         }
       }
       ws.onerror = () => {
-        setJobState((s) => (s ? { ...s, status: 'error', error: 'WebSocket error' } : null))
-        setIsGenerating(false)
+        // WS unavailable — fall back to HTTP polling
+        if (pollingRef.current) return
+        pollingRef.current = setInterval(async () => {
+          try {
+            const res = await audioReviewApi.getJob(jobId)
+            const data: JobState = res.data
+            setJobState(data)
+            if (data.status === 'done' || data.status === 'error') {
+              clearInterval(pollingRef.current!)
+              pollingRef.current = null
+              setIsGenerating(false)
+              if (data.status === 'done') loadAudioFiles()
+            }
+          } catch {
+            clearInterval(pollingRef.current!)
+            pollingRef.current = null
+            setJobState((s) => (s ? { ...s, status: 'error', error: 'Job not found' } : null))
+            setIsGenerating(false)
+          }
+        }, 2000)
       }
       ws.onclose = (ev) => {
-        if (ev.code !== 1000 && ev.code !== 1005) {
+        // Ignore abnormal close if polling already took over
+        if (ev.code !== 1000 && ev.code !== 1005 && !pollingRef.current) {
           setJobState((s) =>
             s && s.status !== 'done' && s.status !== 'error'
               ? { ...s, status: 'error', error: `WebSocket closed (${ev.code})` }

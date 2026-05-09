@@ -1075,6 +1075,31 @@ async def ws_progress(
             pass
 
 
+# ── Audio job status — HTTP polling fallback ──────────────────────────────────
+
+@router.get("/jobs/{job_id}")
+def get_audio_job(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job["user_id"] != current_user.id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    state = {
+        "status":       job.get("status"),
+        "progress":     job.get("progress", 0),
+        "total":        job.get("total", 0),
+        "filename":     job.get("filename"),
+        "srt_filename": job.get("srt_filename"),
+        "error":        job.get("error"),
+    }
+    if state["status"] in ("done", "error"):
+        _jobs.pop(job_id, None)
+    return state
+
+
 # ── File management ───────────────────────────────────────────────────────────
 
 def _get_duration(path: Path) -> Optional[float]:

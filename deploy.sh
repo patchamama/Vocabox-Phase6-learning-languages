@@ -43,6 +43,11 @@ rm -rf "$STATIC_DIR"
 cp -r "$FRONTEND_DIR/dist" "$STATIC_DIR"
 echo "      Copied → $STATIC_DIR"
 
+# ── 3.5 Clean up frontend ────────────────────────────────────────────────────
+echo "[3.5/4] Cleaning up frontend dependencies..."
+rm -rf "$FRONTEND_DIR/node_modules"
+echo "      Deleted → $FRONTEND_DIR/node_modules"
+
 # ── 4. Backend dependencies ───────────────────────────────────────────────────
 cd "$BACKEND_DIR"
 VENV_DIR="$(cd "$SCRIPT_DIR/.." && pwd)/.venv"

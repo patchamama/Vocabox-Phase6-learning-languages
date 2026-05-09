@@ -78,6 +78,8 @@
     "ollamaNoModel": "Modell auswählen…",
     "ollamaTimeout": "Timeout",
     "ollamaTimeoutDesc": "Maximale Sekunden auf eine Ollama-Antwort (10–300)",
+    "useFrontendOllama": "Ollama direkt im Frontend verwenden",
+    "useFrontendOllamaDesc": "Versucht zuerst lokales Ollama im Browser; bei Fehler erfolgt automatisch Fallback auf das Backend.",
     "ollamaTimeoutSuffix": "s",
     "ollamaPrompts": "Benutzerdefinierte Prompts",
     "ollamaPromptsDesc": "Leer lassen für den Standardprompt. {variable} für dynamische Werte verwenden.",

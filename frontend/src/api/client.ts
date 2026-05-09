@@ -178,6 +178,10 @@ export const audioReviewApi = {
   getTtsFilters: (lang: string) => api.get(`/audio-review/tts-filters/${lang}`),
   putTtsFilters: (lang: string, content: string) => api.put(`/audio-review/tts-filters/${lang}`, { content }),
   deleteTtsFilters: (lang: string) => api.delete(`/audio-review/tts-filters/${lang}`),
+  getJob: (jobId: string) => api.get<{
+    status: string; progress: number; total: number;
+    filename: string | null; srt_filename: string | null; error: string | null
+  }>(`/audio-review/jobs/${jobId}`),
 }
 
 import type { SegmentContext, SegmentRef, SubtitleFile, SubtitleSearchResult, WordVideoRef } from '../types'
@@ -220,6 +224,10 @@ export const subtitlesApi = {
   /** Convenience: convert SegmentRef[] from search into WordVideoRef[] for VideoRefsModal */
   segmentsToVideoRefs: (segs: SegmentRef[]): WordVideoRef[] =>
     segs.map((seg, i) => ({ id: -(i + 1), word_id: 0, segment_id: seg.id, segment: seg })),
+  getJob: (jobId: string) => api.get<{
+    status: string; progress: number; total: number;
+    refs_created: number; error: string | null
+  }>(`/subtitles/jobs/${jobId}`),
 }
 
 export const ollamaApi = {

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -179,17 +179,25 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Rewrite /vocabox/api/* → /api/* so the built frontend (Vite base: '/vocabox/')
-# hits the correct routers regardless of HTTP method.
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request as StarletteRequest
+# Rewrite /vocabox/api/* → /api/* for both HTTP and WebSocket scopes.
+# BaseHTTPMiddleware only handles http scope — WebSocket connections need a raw
+# ASGI middleware so the path strip runs for ws:// upgrades too.
+from starlette.types import ASGIApp, Receive, Scope, Send
 
-class StripVocaboxApiPrefix(BaseHTTPMiddleware):
-    async def dispatch(self, request: StarletteRequest, call_next):
-        if request.scope["path"].startswith("/vocabox/api/"):
-            request.scope["path"]     = request.scope["path"][len("/vocabox"):]
-            request.scope["raw_path"] = request.scope["path"].encode()
-        return await call_next(request)
+class StripVocaboxApiPrefix:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] in ("http", "websocket"):
+            path: str = scope.get("path", "")
+            if path.startswith("/vocabox/api/"):
+                new_path = path[len("/vocabox"):]
+                scope["path"] = new_path
+                raw: bytes = scope.get("raw_path", b"")
+                if raw.startswith(b"/vocabox"):
+                    scope["raw_path"] = raw[len(b"/vocabox"):]
+        await self.app(scope, receive, send)
 
 app.add_middleware(StripVocaboxApiPrefix)
 
@@ -223,6 +231,19 @@ app.include_router(grammar.router,       prefix="/api")
 app.include_router(grammar_queue.router,  prefix="/api")
 app.include_router(ai_providers.router,   prefix="/api")
 app.include_router(user_settings.router,  prefix="/api")
+
+# ── Health & WebSocket connectivity probe ─────────────────────────────────────
+
+@app.get("/api/health", tags=["health"])
+def health_check():
+    return {"status": "ok", "version": "1.0.0"}
+
+@app.websocket("/api/ws/ping")
+async def ws_ping(websocket: WebSocket):
+    """Lightweight WS endpoint — frontend uses this to detect proxy WS support."""
+    await websocket.accept()
+    await websocket.send_json({"type": "pong"})
+    await websocket.close()
 
 # ── Static frontend (served from app/static after deploy) ─────────────────────
 _STATIC_DIR = Path(__file__).parent / "static"

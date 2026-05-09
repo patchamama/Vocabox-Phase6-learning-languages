@@ -172,6 +172,74 @@ npm run build        # Output: frontend/dist/
 npm run preview      # Preview the production build locally
 ```
 
+> Note: If you enable "Use Ollama directly from frontend", requests to `http://localhost:11434` are executed by the browser on the end-user machine. That machine must have Ollama running and CORS configured (`OLLAMA_ORIGINS`). Otherwise, keep backend fallback enabled.
+
+---
+
+## Ollama Directly From Frontend (CORS Setup)
+
+You can configure the app to query Ollama directly from the browser (instead of backend-first) for the "Enhance with AI" flow.
+
+### 1. Enable frontend Ollama in app settings
+
+In **Settings → Ollama**:
+
+- Enable: `Use Ollama directly from frontend`
+- Select an Ollama model
+
+### 2. Allow your web origin in Ollama (`OLLAMA_ORIGINS`)
+
+Set `OLLAMA_ORIGINS` to the exact origin(s) where your app runs.
+
+Examples:
+
+```bash
+OLLAMA_ORIGINS=https://your-domain.com
+```
+
+or multiple origins:
+
+```bash
+OLLAMA_ORIGINS=https://your-domain.com,http://localhost:5173
+```
+
+Notes:
+
+- Use exact origins (scheme + host + optional port).
+- Avoid `*` in production.
+- Restart Ollama after changing env vars.
+
+### 3. Verify CORS preflight
+
+Run from the same machine where Ollama is running:
+
+```bash
+curl -i -X OPTIONS http://localhost:11434/api/generate \
+  -H "Origin: https://your-domain.com" \
+  -H "Access-Control-Request-Method: POST" \
+  -H "Access-Control-Request-Headers: content-type"
+```
+
+Expected: non-`403` response with CORS allow headers.
+
+### 4. Troubleshooting
+
+#### Error: `Access to fetch ... blocked by CORS policy`
+
+- `OLLAMA_ORIGINS` does not include your frontend origin, or
+- Ollama was not restarted after env changes.
+
+#### Error: `POST http://localhost:11434/api/generate 404 (Not Found)`
+
+Check these points:
+
+1. Ollama is running on the same machine as the browser and listening on port `11434`.
+2. Endpoint exists:
+   - `curl http://localhost:11434/api/tags`
+3. Generate endpoint works:
+   - `curl -s http://localhost:11434/api/generate -d '{"model":"<your-model>","prompt":"test","stream":false}'`
+4. If the app is opened from a remote/public domain, browser-to-`localhost` calls depend on the end-user machine running Ollama locally. Otherwise, use backend fallback.
+
 ---
 
 ## API Overview
@@ -244,6 +312,95 @@ PORT=9009
 - [ ] Adaptive difficulty based on error patterns
 - [ ] Shared word lists / community decks
 - [ ] Push notifications (review reminders)
+
+---
+
+## Production Deployment — Plesk (Apache + nginx)
+
+The app runs on FastAPI/uvicorn at port `9009` and is exposed at `https://patchamama.com/vocabox`.  
+Plesk places **nginx in front of Apache** — both hops must be configured for WebSocket support.
+
+### Active WebSocket endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `wss://patchamama.com/vocabox/api/ws/grammar-queue` | Real-time grammar queue updates |
+| `wss://patchamama.com/vocabox/api/ws/reindex/{job_id}` | Subtitle reindex progress |
+
+The `StripVocaboxApiPrefix` ASGI middleware in `main.py` rewrites  
+`/vocabox/api/ws/*` → `/api/ws/*` for both HTTP and WebSocket scopes before FastAPI routes the request.
+
+---
+
+### Recommended: nginx bypasses Apache (direct proxy to port 9009)
+
+**Plesk → domain → Apache & nginx Settings → "Additional nginx directives"**
+
+```nginx
+# WebSocket upgrade map — add if not already present globally in Plesk
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+location /vocabox/ {
+    proxy_pass         http://127.0.0.1:9009;
+    proxy_http_version 1.1;
+
+    # Required for WebSocket support
+    proxy_set_header   Upgrade    $http_upgrade;
+    proxy_set_header   Connection $connection_upgrade;
+
+    proxy_set_header   Host              $host;
+    proxy_set_header   X-Real-IP         $remote_addr;
+    proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header   X-Forwarded-Proto $scheme;
+
+    # Long timeout — grammar-queue connection stays open
+    proxy_read_timeout 86400;
+    proxy_send_timeout 86400;
+    proxy_buffering    off;
+}
+```
+
+This bypasses Apache entirely for `/vocabox/` — nginx proxies straight to uvicorn.
+
+---
+
+### Alternative: Apache as proxy (requires mod_proxy_wstunnel)
+
+**Plesk → domain → Apache & nginx Settings → "Additional Apache directives for HTTPS"**
+
+```apache
+# WebSocket rewrite — MUST come before ProxyPass HTTP rules
+RewriteEngine On
+RewriteCond %{HTTP:Upgrade} websocket [NC]
+RewriteCond %{HTTP:Connection} upgrade [NC]
+RewriteRule ^/vocabox/(.*) ws://127.0.0.1:9009/vocabox/$1 [P,L]
+
+# HTTP proxy
+ProxyPreserveHost On
+ProxyPass        /vocabox/ http://127.0.0.1:9009/vocabox/
+ProxyPassReverse /vocabox/ http://127.0.0.1:9009/vocabox/
+```
+
+> **Note:** When using Plesk's nginx+Apache stack, nginx still receives the connection first.
+> The nginx directives above (with `Upgrade` / `Connection` headers) are required even if Apache handles the final proxy hop.
+
+---
+
+### Verify WebSocket connectivity
+
+```bash
+# Test grammar-queue WebSocket (replace TOKEN with a valid JWT)
+curl -i -N \
+  -H "Connection: Upgrade" \
+  -H "Upgrade: websocket" \
+  -H "Sec-WebSocket-Version: 13" \
+  -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
+  "https://patchamama.com/vocabox/api/ws/grammar-queue?token=TOKEN"
+# Expected: HTTP/1.1 101 Switching Protocols
+```
 
 ---
 

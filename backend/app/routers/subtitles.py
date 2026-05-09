@@ -369,3 +369,27 @@ async def ws_reindex(
             await asyncio.sleep(0.5)
     except WebSocketDisconnect:
         pass
+
+
+# ── Reindex job status — HTTP polling fallback ────────────────────────────────
+
+@router.get("/jobs/{job_id}")
+def get_reindex_job(
+    job_id: str,
+    current_user=Depends(get_current_user),
+):
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job["user_id"] != current_user.id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    state = {
+        "status":       job["status"],
+        "progress":     job["progress"],
+        "total":        job["total"],
+        "refs_created": job["refs_created"],
+        "error":        job["error"],
+    }
+    if state["status"] in ("done", "error"):
+        _jobs.pop(job_id, None)
+    return state

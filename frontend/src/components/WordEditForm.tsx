@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next'
 import { languagesApi, leoApi, ollamaApi, temasApi, wordTranslationsApi, wordsApi } from '../api/client'
 import { playAudio } from '../utils/audioManager'
 import { useSettingsStore } from '../stores/settingsStore'
+import { enhanceWordDirect } from '../services/ollamaFrontend'
 import type { Language, LeoEntry, LeoResult, Tema, WordTranslation } from '../types'
 import LanguageSelect from './LanguageSelect'
 import TemaSelect from './TemaSelect'
@@ -30,6 +31,8 @@ interface OllamaSuggestion {
   category?: string
   extra_translations?: OllamaExtraTranslation[]
 }
+
+type OllamaSource = 'frontend-ollama' | 'backend-fallback' | 'backend'
 
 function splitByChar(text: string, char: string): string[] {
   return text.split(char).map((s) => s.trim()).filter(Boolean)
@@ -72,7 +75,7 @@ const CAT_LABELS: Record<string, string> = {
 
 export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTemaChange }: Props) {
   const { t } = useTranslation()
-  const { leoAutoFetchExtras, leoExtraLangs, ollamaTranslationModel, ollamaTimeout, ollamaPromptEnhance } = useSettingsStore()
+  const { leoAutoFetchExtras, leoExtraLangs, ollamaTranslationModel, useFrontendOllama, ollamaTimeout, ollamaPromptEnhance } = useSettingsStore()
   const [form, setForm] = useState({
     palabra: word.palabra,
     significado: word.significado,
@@ -110,6 +113,7 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
   const [ollamaSuggestion, setOllamaSuggestion] = useState<OllamaSuggestion | null>(null)
   const [ollamaError, setOllamaError] = useState<string | null>(null)
   const [ollamaChecks, setOllamaChecks] = useState<Record<string, boolean>>({})
+  const [ollamaSource, setOllamaSource] = useState<OllamaSource | null>(null)
   const ollamaRef = useRef<HTMLDivElement>(null)
 
   // Extra translations (multi-language from LEO)
@@ -148,6 +152,7 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
       if (ollamaRef.current && !ollamaRef.current.contains(e.target as Node)) {
         setOllamaSuggestion(null)
         setOllamaError(null)
+        setOllamaSource(null)
       }
     }
     document.addEventListener('mousedown', handler)
@@ -376,17 +381,33 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
     setOllamaLoading(true)
     setOllamaError(null)
     setOllamaSuggestion(null)
+    setOllamaSource(null)
+    const payload = {
+      palabra: form.palabra.trim(),
+      significado: form.significado.trim(),
+      idioma_origen: form.idioma_origen,
+      idioma_destino: form.idioma_destino,
+      model: ollamaTranslationModel,
+      extra_langs: leoExtraLangs.length > 0 ? leoExtraLangs : undefined,
+      timeout: ollamaTimeout,
+      prompt_override: ollamaPromptEnhance || undefined,
+    }
     try {
-      const { data } = await ollamaApi.enhanceWord({
-        palabra: form.palabra.trim(),
-        significado: form.significado.trim(),
-        idioma_origen: form.idioma_origen,
-        idioma_destino: form.idioma_destino,
-        model: ollamaTranslationModel,
-        extra_langs: leoExtraLangs.length > 0 ? leoExtraLangs : undefined,
-        timeout: ollamaTimeout,
-        prompt_override: ollamaPromptEnhance || undefined,
-      })
+      let data: OllamaSuggestion
+      if (useFrontendOllama) {
+        try {
+          data = await enhanceWordDirect(payload) as OllamaSuggestion
+          setOllamaSource('frontend-ollama')
+        } catch {
+          const backend = await ollamaApi.enhanceWord(payload)
+          data = backend.data
+          setOllamaSource('backend-fallback')
+        }
+      } else {
+        const backend = await ollamaApi.enhanceWord(payload)
+        data = backend.data
+        setOllamaSource('backend')
+      }
       setOllamaSuggestion(data)
       const checks: Record<string, boolean> = {}
       if (data.palabra) checks['palabra'] = true
@@ -439,6 +460,7 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
     }
     setOllamaSuggestion(null)
     setOllamaError(null)
+    setOllamaSource(null)
   }
 
   const splitPreview: SplitResult | null = (() => {
@@ -593,6 +615,20 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
                     <div className="px-3 py-2 border-b border-slate-700 text-xs text-slate-400 uppercase tracking-wide flex items-center gap-1.5">
                       <img src="https://ollama.com/public/ollama.png" alt="" className="w-3.5 h-3.5 rounded" />
                       {t('wordEdit.ollamaSuggestions')}
+                      {ollamaSource && (
+                        <span
+                          className={`ml-auto normal-case text-[10px] px-1.5 py-0.5 rounded border ${
+                            ollamaSource === 'frontend-ollama'
+                              ? 'bg-emerald-900/40 border-emerald-700 text-emerald-300'
+                              : ollamaSource === 'backend-fallback'
+                                ? 'bg-amber-900/40 border-amber-700 text-amber-300'
+                                : 'bg-slate-700/60 border-slate-600 text-slate-300'
+                          }`}
+                          title={ollamaSource}
+                        >
+                          {ollamaSource === 'frontend-ollama' ? 'frontend' : ollamaSource === 'backend-fallback' ? 'fallback→backend' : 'backend'}
+                        </span>
+                      )}
                     </div>
                     <div className="divide-y divide-slate-700/50 max-h-80 overflow-y-auto">
                       {ollamaSuggestion.palabra && (

@@ -78,6 +78,8 @@
     "ollamaNoModel": "Select a model…",
     "ollamaTimeout": "Request timeout",
     "ollamaTimeoutDesc": "Maximum seconds to wait for an Ollama response (10–300)",
+    "useFrontendOllama": "Use Ollama directly from frontend",
+    "useFrontendOllamaDesc": "Try local Ollama from the browser first; if it fails, automatically fall back to backend.",
     "ollamaTimeoutSuffix": "s",
     "ollamaPrompts": "Custom prompts",
     "ollamaPromptsDesc": "Leave blank to use the built-in prompt. Use {variable} to insert dynamic values.",

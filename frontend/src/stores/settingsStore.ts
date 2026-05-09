@@ -48,6 +48,8 @@ interface SettingsState {
   audioReviewExtraLangs: boolean
   /** Ollama model to use for auto-translating missing entries (empty = disabled) */
   ollamaTranslationModel: string
+  /** If true, frontend tries direct requests to local Ollama before backend fallback */
+  useFrontendOllama: boolean
   /** Timeout in seconds for Ollama requests (10–300) */
   ollamaTimeout: number
   /** Custom prompt template for Ollama translation (empty = use default) */
@@ -126,6 +128,7 @@ interface SettingsState {
   setLeoExtraLangs: (langs: string[]) => void
   setAudioReviewExtraLangs: (v: boolean) => void
   setOllamaTranslationModel: (model: string) => void
+  setUseFrontendOllama: (v: boolean) => void
   setOllamaTimeout: (n: number) => void
   setOllamaPromptTranslate: (p: string) => void
   setOllamaPromptEnhance: (p: string) => void
@@ -179,6 +182,7 @@ export const useSettingsStore = create<SettingsState>()(
       leoExtraLangs: [],
       audioReviewExtraLangs: true,
       ollamaTranslationModel: '',
+      useFrontendOllama: false,
       ollamaTimeout: 360,
       ollamaPromptTranslate: '',
       ollamaPromptEnhance: '',
@@ -242,6 +246,7 @@ export const useSettingsStore = create<SettingsState>()(
       setLeoExtraLangs: (leoExtraLangs) => set({ leoExtraLangs }),
       setAudioReviewExtraLangs: (audioReviewExtraLangs) => set({ audioReviewExtraLangs }),
       setOllamaTranslationModel: (ollamaTranslationModel) => set({ ollamaTranslationModel }),
+      setUseFrontendOllama: (useFrontendOllama) => set({ useFrontendOllama }),
       setOllamaTimeout: (ollamaTimeout) => set({ ollamaTimeout: Math.max(10, Math.min(900, ollamaTimeout)) }),
       setOllamaPromptTranslate: (ollamaPromptTranslate) => set({ ollamaPromptTranslate }),
       setOllamaPromptEnhance: (ollamaPromptEnhance) => set({ ollamaPromptEnhance }),
@@ -288,6 +293,7 @@ const _SETTER_KEYS = new Set([
   'setLeitnerDay', 'setPageSizeOption', 'setSelectedPageSize', 'setReviewDirection',
   'setUseTtsInAudioReview', 'setTtsVoice', 'setTtsRate', 'setLeoAutoFetchExtras',
   'setLeoExtraLangs', 'setAudioReviewExtraLangs', 'setOllamaTranslationModel',
+  'setUseFrontendOllama',
   'setOllamaTimeout', 'setOllamaPromptTranslate', 'setOllamaPromptEnhance',
   'setCompleteWithTts', 'setVideoClipPauseSec', 'setVideoClipContext',
   'setVideoClipAutoPlay', 'setVideoClipPlaybackRate', 'setMaxRefsPerWord',
