@@ -9,6 +9,7 @@ import Import from './Import'
 import type { Tema } from '../types'
 import { TtsVoiceSettings } from '../components/TtsVoiceSettings'
 import { TtsFiltersEditor } from '../components/TtsFiltersEditor'
+import { listLocalOllamaModels } from '../services/ollamaFrontend'
 
 // ─── Shared Toggle ────────────────────────────────────────────────────────────
 
@@ -628,7 +629,7 @@ export default function Settings() {
     reviewMode, wordsPerSession, transitionDelay, transitionType,
     safeRound1, safeRound2, safeRound3, autoPlayAudio, autoPlayAudioReversed, wordsOnly, reviewDirection,
     useTtsInAudioReview, leoAutoFetchExtras, leoExtraLangs,
-    audioReviewExtraLangs, ollamaTranslationModel,
+    audioReviewExtraLangs, ollamaTranslationModel, useFrontendOllama,
     ollamaTimeout, ollamaPromptTranslate, ollamaPromptEnhance,
     videoClipPauseSec, videoClipContext, videoClipAutoPlay, videoClipPlaybackRate, maxRefsPerWord,
     subtitleIndexPalabra, subtitleIndexAudioText, subtitleIndexSignificado,
@@ -638,7 +639,7 @@ export default function Settings() {
     setReviewMode, setWordsPerSession, setTransitionDelay, setTransitionType,
     setSafeRound, setAutoPlayAudio, setAutoPlayAudioReversed, setWordsOnly, setReviewDirection,
     setUseTtsInAudioReview, setLeoAutoFetchExtras, setLeoExtraLangs,
-    setAudioReviewExtraLangs, setOllamaTranslationModel,
+    setAudioReviewExtraLangs, setOllamaTranslationModel, setUseFrontendOllama,
     setOllamaTimeout, setOllamaPromptTranslate, setOllamaPromptEnhance, setOllamaPromptGrammar,
     setGrammarTemperature, setGrammarNumPredict, setGrammarTopP, setGrammarDoubleCorrect, setGrammarMaxBlanks,
     setGrammarForceExtraGrammar, toggleGrammarExtraCategory, setGrammarMaxBlanksPerSentence,
@@ -655,7 +656,37 @@ export default function Settings() {
   const [extraGrammarCategories, setExtraGrammarCategories] = useState<ExtraGrammarCategory[]>([])
   const [showAIProviders, setShowAIProviders] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [ollamaEnvTab, setOllamaEnvTab] = useState<'windows' | 'macos' | 'linux'>('windows')
   const ollamaChecked = useRef(false)
+
+  const ensureSelectedOllamaModel = (models: string[]) => {
+    if (!ollamaTranslationModel && models.length > 0) {
+      const match = models.find((m) => m.toLowerCase().startsWith('translate'))
+      if (match) setOllamaTranslationModel(match)
+    }
+  }
+
+  const loadOllamaStatus = async () => {
+    if (useFrontendOllama) {
+      try {
+        const models = await listLocalOllamaModels()
+        setOllamaStatus({ running: true, models })
+        ensureSelectedOllamaModel(models)
+      } catch {
+        setOllamaStatus({ running: false, models: [] })
+      }
+      return
+    }
+
+    try {
+      const r = await ollamaApi.getStatus()
+      setOllamaStatus(r.data)
+      if (r.data.running) ensureSelectedOllamaModel(r.data.models)
+    } catch {
+      setOllamaStatus({ running: false, models: [] })
+    }
+  }
+
   useEffect(() => {
     if (ollamaChecked.current) return
     ollamaChecked.current = true
@@ -671,16 +702,11 @@ export default function Settings() {
     aiProvidersApi.active()
       .then((r) => setActiveProvider(r.data))
       .catch(() => setActiveProvider(null))
-    ollamaApi.getStatus()
-      .then((r) => {
-        setOllamaStatus(r.data)
-        if (!ollamaTranslationModel && r.data.running && r.data.models.length > 0) {
-          const match = r.data.models.find((m: string) => m.toLowerCase().startsWith('translate'))
-          if (match) setOllamaTranslationModel(match)
-        }
-      })
-      .catch(() => setOllamaStatus({ running: false, models: [] }))
   }, [])
+
+  useEffect(() => {
+    void loadOllamaStatus()
+  }, [useFrontendOllama])
 
   // Languages that LEO supports for auto-fetch (non-DE side)
   const LEO_EXTRA_LANGS = [
@@ -953,6 +979,62 @@ export default function Settings() {
                   +
                 </button>
               </div>
+            </div>
+
+            <Toggle
+              value={useFrontendOllama}
+              onChange={setUseFrontendOllama}
+              label={t('settings.useFrontendOllama')}
+              description={t('settings.useFrontendOllamaDesc')}
+            />
+
+            <div className="space-y-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3">
+              <p className="text-xs font-semibold text-amber-300">Nota CORS para Ollama local</p>
+              <p className="text-xs text-amber-200/90">
+                Si activás "{t('settings.useFrontendOllama')}", configurá `OLLAMA_ORIGINS` con tu dominio para evitar bloqueos CORS.
+              </p>
+              <div className="flex gap-2 pt-1">
+                {([
+                  ['windows', 'Windows'],
+                  ['macos', 'macOS'],
+                  ['linux', 'Linux'],
+                ] as const).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setOllamaEnvTab(key)}
+                    className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${
+                      ollamaEnvTab === key
+                        ? 'border-amber-300 bg-amber-400/20 text-amber-100'
+                        : 'border-amber-400/40 bg-transparent text-amber-200/80 hover:text-amber-100'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {ollamaEnvTab === 'windows' && (
+                <pre className="text-[11px] leading-relaxed text-amber-100/95 bg-black/30 rounded-lg p-2 overflow-auto">
+                  <code>{`setx OLLAMA_ORIGINS "https://patchamama.com"
+taskkill /IM Ollama.exe /F
+start "" "%LocalAppData%\\Programs\\Ollama\\Ollama.exe"`}</code>
+                </pre>
+              )}
+              {ollamaEnvTab === 'macos' && (
+                <pre className="text-[11px] leading-relaxed text-amber-100/95 bg-black/30 rounded-lg p-2 overflow-auto">
+                  <code>{`launchctl setenv OLLAMA_ORIGINS "https://patchamama.com"
+killall Ollama
+open -a Ollama`}</code>
+                </pre>
+              )}
+              {ollamaEnvTab === 'linux' && (
+                <pre className="text-[11px] leading-relaxed text-amber-100/95 bg-black/30 rounded-lg p-2 overflow-auto">
+                  <code>{`systemctl --user edit ollama.service
+# agregar en [Service]:
+# Environment="OLLAMA_ORIGINS=https://patchamama.com"
+systemctl --user daemon-reload
+systemctl --user restart ollama`}</code>
+                </pre>
+              )}
             </div>
 
             {/* Audio review extra languages */}
