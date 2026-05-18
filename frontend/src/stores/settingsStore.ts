@@ -50,6 +50,10 @@ interface SettingsState {
   ollamaTranslationModel: string
   /** If true, frontend tries direct requests to local Ollama before backend fallback */
   useFrontendOllama: boolean
+  /** Base URL for direct frontend connection to Ollama (without port) */
+  frontendOllamaUrl: string
+  /** Port for direct frontend connection to Ollama */
+  frontendOllamaPort: number
   /** Timeout in seconds for Ollama requests (10–300) */
   ollamaTimeout: number
   /** Custom prompt template for Ollama translation (empty = use default) */
@@ -129,6 +133,8 @@ interface SettingsState {
   setAudioReviewExtraLangs: (v: boolean) => void
   setOllamaTranslationModel: (model: string) => void
   setUseFrontendOllama: (v: boolean) => void
+  setFrontendOllamaUrl: (v: string) => void
+  setFrontendOllamaPort: (v: number) => void
   setOllamaTimeout: (n: number) => void
   setOllamaPromptTranslate: (p: string) => void
   setOllamaPromptEnhance: (p: string) => void
@@ -183,6 +189,8 @@ export const useSettingsStore = create<SettingsState>()(
       audioReviewExtraLangs: true,
       ollamaTranslationModel: '',
       useFrontendOllama: false,
+      frontendOllamaUrl: 'http://localhost',
+      frontendOllamaPort: 11434,
       ollamaTimeout: 360,
       ollamaPromptTranslate: '',
       ollamaPromptEnhance: '',
@@ -247,6 +255,8 @@ export const useSettingsStore = create<SettingsState>()(
       setAudioReviewExtraLangs: (audioReviewExtraLangs) => set({ audioReviewExtraLangs }),
       setOllamaTranslationModel: (ollamaTranslationModel) => set({ ollamaTranslationModel }),
       setUseFrontendOllama: (useFrontendOllama) => set({ useFrontendOllama }),
+      setFrontendOllamaUrl: (frontendOllamaUrl) => set({ frontendOllamaUrl }),
+      setFrontendOllamaPort: (frontendOllamaPort) => set({ frontendOllamaPort: Math.max(1, Math.min(65535, frontendOllamaPort || 11434)) }),
       setOllamaTimeout: (ollamaTimeout) => set({ ollamaTimeout: Math.max(10, Math.min(900, ollamaTimeout)) }),
       setOllamaPromptTranslate: (ollamaPromptTranslate) => set({ ollamaPromptTranslate }),
       setOllamaPromptEnhance: (ollamaPromptEnhance) => set({ ollamaPromptEnhance }),
@@ -293,7 +303,7 @@ const _SETTER_KEYS = new Set([
   'setLeitnerDay', 'setPageSizeOption', 'setSelectedPageSize', 'setReviewDirection',
   'setUseTtsInAudioReview', 'setTtsVoice', 'setTtsRate', 'setLeoAutoFetchExtras',
   'setLeoExtraLangs', 'setAudioReviewExtraLangs', 'setOllamaTranslationModel',
-  'setUseFrontendOllama',
+  'setUseFrontendOllama', 'setFrontendOllamaUrl', 'setFrontendOllamaPort',
   'setOllamaTimeout', 'setOllamaPromptTranslate', 'setOllamaPromptEnhance',
   'setCompleteWithTts', 'setVideoClipPauseSec', 'setVideoClipContext',
   'setVideoClipAutoPlay', 'setVideoClipPlaybackRate', 'setMaxRefsPerWord',

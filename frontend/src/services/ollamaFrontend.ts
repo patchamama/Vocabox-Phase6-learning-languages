@@ -1,11 +1,28 @@
-const OLLAMA_BASE = 'http://localhost:11434'
+const DEFAULT_OLLAMA_URL = 'http://localhost'
+const DEFAULT_OLLAMA_PORT = 11434
 
 type OllamaTagsResponse = {
   models?: Array<{ name?: string }>
 }
 
-export async function listLocalOllamaModels(): Promise<string[]> {
-  const resp = await fetch(`${OLLAMA_BASE}/api/tags`)
+function normalizeBaseUrl(baseUrl?: string, port?: number): string {
+  const raw = (baseUrl ?? DEFAULT_OLLAMA_URL).trim()
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `http://${raw}`
+  const url = new URL(withProtocol)
+  url.port = String(Math.max(1, Math.min(65535, Number(port ?? DEFAULT_OLLAMA_PORT) || DEFAULT_OLLAMA_PORT)))
+  return `${url.protocol}//${url.host}`
+}
+
+export function buildOllamaBaseUrl(baseUrl?: string, port?: number): string {
+  try {
+    return normalizeBaseUrl(baseUrl, port)
+  } catch {
+    return `${DEFAULT_OLLAMA_URL}:${DEFAULT_OLLAMA_PORT}`
+  }
+}
+
+export async function listLocalOllamaModels(baseUrl?: string, port?: number): Promise<string[]> {
+  const resp = await fetch(`${buildOllamaBaseUrl(baseUrl, port)}/api/tags`)
   if (!resp.ok) throw new Error(`ollama_http_${resp.status}`)
   const data = await resp.json() as OllamaTagsResponse
   return (data.models ?? [])
@@ -105,6 +122,8 @@ export interface OllamaEnhancePayload {
   extra_langs?: string[]
   timeout?: number
   prompt_override?: string
+  base_url?: string
+  base_port?: number
 }
 
 export async function enhanceWordDirect(payload: OllamaEnhancePayload): Promise<unknown> {
@@ -113,7 +132,7 @@ export async function enhanceWordDirect(payload: OllamaEnhancePayload): Promise<
   const ms = Math.max(10, Math.min(900, payload.timeout ?? 60)) * 1000
   const timer = window.setTimeout(() => controller.abort(), ms)
   try {
-    const resp = await fetch(`${OLLAMA_BASE}/api/generate`, {
+    const resp = await fetch(`${buildOllamaBaseUrl(payload.base_url, payload.base_port)}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,

@@ -9,7 +9,7 @@ import Import from './Import'
 import type { Tema } from '../types'
 import { TtsVoiceSettings } from '../components/TtsVoiceSettings'
 import { TtsFiltersEditor } from '../components/TtsFiltersEditor'
-import { listLocalOllamaModels } from '../services/ollamaFrontend'
+import { buildOllamaBaseUrl, listLocalOllamaModels } from '../services/ollamaFrontend'
 
 // ─── Shared Toggle ────────────────────────────────────────────────────────────
 
@@ -630,6 +630,7 @@ export default function Settings() {
     safeRound1, safeRound2, safeRound3, autoPlayAudio, autoPlayAudioReversed, wordsOnly, reviewDirection,
     useTtsInAudioReview, leoAutoFetchExtras, leoExtraLangs,
     audioReviewExtraLangs, ollamaTranslationModel, useFrontendOllama,
+    frontendOllamaUrl, frontendOllamaPort,
     ollamaTimeout, ollamaPromptTranslate, ollamaPromptEnhance,
     videoClipPauseSec, videoClipContext, videoClipAutoPlay, videoClipPlaybackRate, maxRefsPerWord,
     subtitleIndexPalabra, subtitleIndexAudioText, subtitleIndexSignificado,
@@ -640,6 +641,7 @@ export default function Settings() {
     setSafeRound, setAutoPlayAudio, setAutoPlayAudioReversed, setWordsOnly, setReviewDirection,
     setUseTtsInAudioReview, setLeoAutoFetchExtras, setLeoExtraLangs,
     setAudioReviewExtraLangs, setOllamaTranslationModel, setUseFrontendOllama,
+    setFrontendOllamaUrl, setFrontendOllamaPort,
     setOllamaTimeout, setOllamaPromptTranslate, setOllamaPromptEnhance, setOllamaPromptGrammar,
     setGrammarTemperature, setGrammarNumPredict, setGrammarTopP, setGrammarDoubleCorrect, setGrammarMaxBlanks,
     setGrammarForceExtraGrammar, toggleGrammarExtraCategory, setGrammarMaxBlanksPerSentence,
@@ -649,7 +651,7 @@ export default function Settings() {
   } = useSettingsStore()
 
   // Ollama status + default prompts
-  const [ollamaStatus, setOllamaStatus] = useState<{ running: boolean; models: string[] } | null>(null)
+  const [ollamaStatus, setOllamaStatus] = useState<{ running: boolean; models: string[]; blocked?: boolean } | null>(null)
   const [defaultPrompts, setDefaultPrompts] = useState<{ translate: string; enhance: string } | null>(null)
   const [defaultGrammarPrompt, setDefaultGrammarPrompt] = useState('')
   const [activeProvider, setActiveProvider] = useState<AIProviderInfo | null | undefined>(undefined)
@@ -658,6 +660,11 @@ export default function Settings() {
   const [showImport, setShowImport] = useState(false)
   const [ollamaEnvTab, setOllamaEnvTab] = useState<'windows' | 'macos' | 'linux'>('windows')
   const ollamaChecked = useRef(false)
+  const frontendOllamaBase = buildOllamaBaseUrl(frontendOllamaUrl, frontendOllamaPort)
+  const frontendOllamaHostPort = (() => {
+    try { return new URL(frontendOllamaBase).host } catch { return `localhost:${frontendOllamaPort}` }
+  })()
+  const frontendOrigin = window.location.origin
 
   const ensureSelectedOllamaModel = (models: string[]) => {
     if (!ollamaTranslationModel && models.length > 0) {
@@ -669,21 +676,23 @@ export default function Settings() {
   const loadOllamaStatus = async () => {
     if (useFrontendOllama) {
       try {
-        const models = await listLocalOllamaModels()
-        setOllamaStatus({ running: true, models })
+        const models = await listLocalOllamaModels(frontendOllamaUrl, frontendOllamaPort)
+        setOllamaStatus({ running: true, models, blocked: false })
         ensureSelectedOllamaModel(models)
-      } catch {
-        setOllamaStatus({ running: false, models: [] })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err ?? '')
+        const blocked = msg.includes('ollama_http_401') || msg.includes('ollama_http_403')
+        setOllamaStatus({ running: false, models: [], blocked })
       }
       return
     }
 
     try {
       const r = await ollamaApi.getStatus()
-      setOllamaStatus(r.data)
+      setOllamaStatus({ ...r.data, blocked: false })
       if (r.data.running) ensureSelectedOllamaModel(r.data.models)
     } catch {
-      setOllamaStatus({ running: false, models: [] })
+      setOllamaStatus({ running: false, models: [], blocked: false })
     }
   }
 
@@ -706,7 +715,7 @@ export default function Settings() {
 
   useEffect(() => {
     void loadOllamaStatus()
-  }, [useFrontendOllama])
+  }, [useFrontendOllama, frontendOllamaUrl, frontendOllamaPort])
 
   // Languages that LEO supports for auto-fetch (non-DE side)
   const LEO_EXTRA_LANGS = [
@@ -933,7 +942,97 @@ export default function Settings() {
           <p className="text-xs text-slate-400">{t('common.loading')}</p>
         )}
         {ollamaStatus && !ollamaStatus.running && (
-          <p className="text-xs text-amber-400">{t('settings.ollamaNotDetected')}</p>
+          <p className="text-xs text-amber-400">
+            {ollamaStatus.blocked ? t('settings.ollamaCorsBlocked') : t('settings.ollamaNotDetected')}
+          </p>
+        )}
+        <Toggle
+          value={useFrontendOllama}
+          onChange={setUseFrontendOllama}
+          label={t('settings.useFrontendOllama')}
+          description={t('settings.useFrontendOllamaDesc')}
+        />
+        {useFrontendOllama && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-300">URL de Ollama (frontend)</p>
+              <input
+                type="text"
+                value={frontendOllamaUrl}
+                onChange={(e) => setFrontendOllamaUrl(e.target.value)}
+                placeholder="http://localhost"
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 text-slate-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-300">Puerto de Ollama</p>
+              <input
+                type="number"
+                min={1}
+                max={65535}
+                value={frontendOllamaPort}
+                onChange={(e) => setFrontendOllamaPort(Number(e.target.value))}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 text-slate-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+            <p className="md:col-span-2 text-xs text-slate-400 dark:text-slate-500">
+              Endpoint actual: <code>{frontendOllamaBase}</code>
+            </p>
+          </div>
+        )}
+
+        {(useFrontendOllama || (ollamaStatus !== null && !ollamaStatus.running)) && (
+          <div className="space-y-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3">
+            <p className="text-xs font-semibold text-amber-300">{t('settings.ollamaCorsNoteTitle')}</p>
+            <p className="text-xs text-amber-200/90">
+              {t('settings.ollamaCorsNoteDesc', { label: t('settings.useFrontendOllama') })}
+            </p>
+            <div className="flex gap-2 pt-1">
+              {([
+                ['windows', 'Windows'],
+                ['macos', 'macOS'],
+                ['linux', 'Linux'],
+              ] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setOllamaEnvTab(key)}
+                  className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${
+                    ollamaEnvTab === key
+                      ? 'border-amber-300 bg-amber-400/20 text-amber-100'
+                      : 'border-amber-400/40 bg-transparent text-amber-200/80 hover:text-amber-100'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {ollamaEnvTab === 'windows' && (
+              <pre className="text-[11px] leading-relaxed text-amber-100/95 bg-black/30 rounded-lg p-2 overflow-auto">
+                <code>{`setx OLLAMA_ORIGINS "${frontendOrigin}"
+setx OLLAMA_HOST "${frontendOllamaHostPort}"
+taskkill /IM Ollama.exe /F
+start "" "%LocalAppData%\\Programs\\Ollama\\Ollama.exe"`}</code>
+              </pre>
+            )}
+            {ollamaEnvTab === 'macos' && (
+              <pre className="text-[11px] leading-relaxed text-amber-100/95 bg-black/30 rounded-lg p-2 overflow-auto">
+                <code>{`launchctl setenv OLLAMA_ORIGINS "${frontendOrigin}"
+launchctl setenv OLLAMA_HOST "${frontendOllamaHostPort}"
+killall Ollama
+open -a Ollama`}</code>
+              </pre>
+            )}
+            {ollamaEnvTab === 'linux' && (
+              <pre className="text-[11px] leading-relaxed text-amber-100/95 bg-black/30 rounded-lg p-2 overflow-auto">
+                <code>{`systemctl --user edit ollama.service
+# agregar en [Service]:
+# Environment="OLLAMA_ORIGINS=${frontendOrigin}"
+# Environment="OLLAMA_HOST=${frontendOllamaHostPort}"
+systemctl --user daemon-reload
+systemctl --user restart ollama`}</code>
+              </pre>
+            )}
+          </div>
         )}
         {ollamaStatus?.running && (
           <>
@@ -979,62 +1078,6 @@ export default function Settings() {
                   +
                 </button>
               </div>
-            </div>
-
-            <Toggle
-              value={useFrontendOllama}
-              onChange={setUseFrontendOllama}
-              label={t('settings.useFrontendOllama')}
-              description={t('settings.useFrontendOllamaDesc')}
-            />
-
-            <div className="space-y-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3">
-              <p className="text-xs font-semibold text-amber-300">Nota CORS para Ollama local</p>
-              <p className="text-xs text-amber-200/90">
-                Si activás "{t('settings.useFrontendOllama')}", configurá `OLLAMA_ORIGINS` con tu dominio para evitar bloqueos CORS.
-              </p>
-              <div className="flex gap-2 pt-1">
-                {([
-                  ['windows', 'Windows'],
-                  ['macos', 'macOS'],
-                  ['linux', 'Linux'],
-                ] as const).map(([key, label]) => (
-                  <button
-                    key={key}
-                    onClick={() => setOllamaEnvTab(key)}
-                    className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${
-                      ollamaEnvTab === key
-                        ? 'border-amber-300 bg-amber-400/20 text-amber-100'
-                        : 'border-amber-400/40 bg-transparent text-amber-200/80 hover:text-amber-100'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {ollamaEnvTab === 'windows' && (
-                <pre className="text-[11px] leading-relaxed text-amber-100/95 bg-black/30 rounded-lg p-2 overflow-auto">
-                  <code>{`setx OLLAMA_ORIGINS "https://patchamama.com"
-taskkill /IM Ollama.exe /F
-start "" "%LocalAppData%\\Programs\\Ollama\\Ollama.exe"`}</code>
-                </pre>
-              )}
-              {ollamaEnvTab === 'macos' && (
-                <pre className="text-[11px] leading-relaxed text-amber-100/95 bg-black/30 rounded-lg p-2 overflow-auto">
-                  <code>{`launchctl setenv OLLAMA_ORIGINS "https://patchamama.com"
-killall Ollama
-open -a Ollama`}</code>
-                </pre>
-              )}
-              {ollamaEnvTab === 'linux' && (
-                <pre className="text-[11px] leading-relaxed text-amber-100/95 bg-black/30 rounded-lg p-2 overflow-auto">
-                  <code>{`systemctl --user edit ollama.service
-# agregar en [Service]:
-# Environment="OLLAMA_ORIGINS=https://patchamama.com"
-systemctl --user daemon-reload
-systemctl --user restart ollama`}</code>
-                </pre>
-              )}
             </div>
 
             {/* Audio review extra languages */}
