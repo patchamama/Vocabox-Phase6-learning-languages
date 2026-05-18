@@ -1,9 +1,18 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Table, Text
 from sqlalchemy.orm import relationship
 
 from ..database import Base
+
+
+subtitle_file_temas = Table(
+    "subtitle_file_temas",
+    Base.metadata,
+    Column("subtitle_file_id", Integer, ForeignKey("subtitle_files.id", ondelete="CASCADE"), primary_key=True),
+    Column("tema_id", Integer, ForeignKey("temas.id", ondelete="CASCADE"), primary_key=True),
+    Index("ix_subtitle_file_temas_tema_id", "tema_id"),
+)
 
 
 class SubtitleFile(Base):
@@ -15,9 +24,11 @@ class SubtitleFile(Base):
     youtube_id = Column(String(20), nullable=True)
     language = Column(String(10), nullable=True)
     total_segments = Column(Integer, default=0)
+    stars = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     segments = relationship("SubtitleSegment", back_populates="file", cascade="all, delete-orphan")
+    temas = relationship("Tema", secondary=subtitle_file_temas, lazy="selectin")
 
 
 class SubtitleSegment(Base):

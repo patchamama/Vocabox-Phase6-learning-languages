@@ -140,6 +140,23 @@ def _migrate_word_examples() -> None:
 
 _migrate_word_examples()
 
+
+def _migrate_subtitle_files() -> None:
+    """Add stars column + subtitle_file_temas association if missing."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    if "subtitle_files" in inspector.get_table_names():
+        existing = {c["name"] for c in inspector.get_columns("subtitle_files")}
+        if "stars" not in existing:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE subtitle_files ADD COLUMN stars INTEGER NOT NULL DEFAULT 0"))
+    if "subtitle_file_temas" not in inspect(engine).get_table_names():
+        Base.metadata.create_all(bind=engine)
+
+
+_migrate_subtitle_files()
+
 from .routers import ai_providers, audio_review, auth, grammar, grammar_queue, import_router, languages, leo, ollama, review, stats, subtitles, temas, test_mode, user_settings, verbformen, words
 
 # ── Language dictionary seed data ─────────────────────────────────────────────

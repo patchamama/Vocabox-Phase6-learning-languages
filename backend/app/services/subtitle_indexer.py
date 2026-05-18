@@ -5,7 +5,7 @@ from typing import Callable, Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..models.subtitle import SubtitleFile, SubtitleSegment
+from ..models.subtitle import SubtitleFile, SubtitleSegment, subtitle_file_temas
 from ..models.user_word import UserWord
 from ..models.word_video_ref import WordVideoRef
 
@@ -15,8 +15,59 @@ DEFAULT_MAX_REFS = 10
 ACRONYM_RE = re.compile(r'^[\w.]{1,5}\.$', re.IGNORECASE)
 
 
+def _user_files_ordered(user_id: int, db: Session) -> list[tuple[int, int]]:
+    """Return (file_id, stars) for user's files, sorted by stars desc, id asc."""
+    rows = (
+        db.query(SubtitleFile.id, SubtitleFile.stars)
+        .filter(SubtitleFile.user_id == user_id)
+        .order_by(SubtitleFile.stars.desc(), SubtitleFile.id.asc())
+        .all()
+    )
+    return [(r.id, r.stars or 0) for r in rows]
+
+
 def _user_file_ids(user_id: int, db: Session) -> list[int]:
-    return [r.id for r in db.query(SubtitleFile.id).filter(SubtitleFile.user_id == user_id).all()]
+    return [fid for fid, _ in _user_files_ordered(user_id, db)]
+
+
+def _files_for_word_tema(
+    user_id: int,
+    word_tema_id: Optional[int],
+    db: Session,
+) -> list[int]:
+    """Return file_ids eligible for a word with the given tema, ordered by stars desc.
+
+    Rules (strict tema match):
+    - word with tema T → files where T is in their temas OR files with no temas at all
+    - word without tema → all files
+    """
+    all_files = _user_files_ordered(user_id, db)
+    if not all_files:
+        return []
+    if word_tema_id is None:
+        return [fid for fid, _ in all_files]
+
+    # File ids that have ANY tema linked
+    tagged_file_ids = {
+        r.subtitle_file_id
+        for r in db.query(subtitle_file_temas.c.subtitle_file_id)
+        .filter(subtitle_file_temas.c.subtitle_file_id.in_([f[0] for f in all_files]))
+        .all()
+    }
+    # File ids linked to this specific tema
+    matching_file_ids = {
+        r.subtitle_file_id
+        for r in db.query(subtitle_file_temas.c.subtitle_file_id)
+        .filter(
+            subtitle_file_temas.c.subtitle_file_id.in_([f[0] for f in all_files]),
+            subtitle_file_temas.c.tema_id == word_tema_id,
+        )
+        .all()
+    }
+    return [
+        fid for fid, _ in all_files
+        if fid in matching_file_ids or fid not in tagged_file_ids
+    ]
 
 
 def _strip_acronyms(text: str) -> list[str]:
@@ -49,9 +100,10 @@ def index_word(
     use_palabra: bool = True,
     use_audio_text: bool = True,
     use_significado: bool = True,
+    word_tema_id: Optional[int] = None,
 ) -> int:
     """Rebuild video refs for one (user, word) pair. Returns number of refs written."""
-    file_ids = _user_file_ids(user_id, db)
+    file_ids = _files_for_word_tema(user_id, word_tema_id, db)
     if not file_ids:
         return 0
 

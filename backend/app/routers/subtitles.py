@@ -10,15 +10,18 @@ from sqlalchemy.orm import Session, joinedload
 from ..database import SessionLocal, get_db
 from ..dependencies import get_current_user
 from ..models.subtitle import SubtitleFile, SubtitleSegment
+from ..models.tema import Tema
 from ..models.user_word import UserWord
 from ..models.word_video_ref import WordVideoRef
 from ..schemas.subtitle import (
     FileRefCountOut, ReindexRequest, SegmentContextOut,
-    SubtitleFileOut, SubtitleSearchOut, WordVideoRefOut,
+    SubtitleFileOut, SubtitleFileUpdate, SubtitleSearchOut, WordVideoRefOut,
+    YouTubeImportRequest, YouTubeImportResult, YouTubeImportItem,
 )
 from ..services.auth import decode_token
 from ..services.subtitle_indexer import DEFAULT_MAX_REFS, index_word, reindex_all
 from ..services.subtitle_parser import detect_youtube_id, parse_subtitle
+from ..services import youtube_subtitle_service as yts
 
 router = APIRouter(prefix="/subtitles", tags=["subtitles"])
 
@@ -28,11 +31,20 @@ _jobs: dict[str, dict] = {}
 
 # ── Upload ─────────────────────────────────────────────────────────────────────
 
+def _resolve_temas(db: Session, _user_id: int, tema_ids: List[int]) -> List[Tema]:
+    """Return Tema rows for the requested ids. Silently drops unknown ids."""
+    if not tema_ids:
+        return []
+    return db.query(Tema).filter(Tema.id.in_(tema_ids)).all()
+
+
 @router.post("/upload", response_model=SubtitleFileOut, status_code=201)
 async def upload_subtitle(
     file: UploadFile = File(...),
     youtube_id: Optional[str] = Form(default=None),
     language: Optional[str] = Form(default=None),
+    stars: int = Form(default=0),
+    tema_ids: str = Form(default=""),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -59,6 +71,8 @@ async def upload_subtitle(
         )
 
     yt_id = (youtube_id or "").strip() or detect_youtube_id(filename)
+    parsed_tema_ids = [int(x) for x in tema_ids.split(",") if x.strip().isdigit()]
+    stars_clamped = max(0, min(3, stars))
 
     sub = SubtitleFile(
         user_id=current_user.id,
@@ -66,7 +80,10 @@ async def upload_subtitle(
         youtube_id=yt_id or None,
         language=(language or "").strip() or None,
         total_segments=len(segments),
+        stars=stars_clamped,
     )
+    if parsed_tema_ids:
+        sub.temas = _resolve_temas(db, current_user.id, parsed_tema_ids)
     db.add(sub)
     db.flush()
 
@@ -83,6 +100,31 @@ async def upload_subtitle(
             for s in segments
         ],
     )
+    db.commit()
+    db.refresh(sub)
+    return sub
+
+
+@router.patch("/{file_id}", response_model=SubtitleFileOut)
+def update_subtitle(
+    file_id: int,
+    body: SubtitleFileUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    sub = (
+        db.query(SubtitleFile)
+        .filter(SubtitleFile.id == file_id, SubtitleFile.user_id == current_user.id)
+        .first()
+    )
+    if not sub:
+        raise HTTPException(404, "Archivo no encontrado")
+    if body.stars is not None:
+        sub.stars = max(0, min(3, body.stars))
+    if body.language is not None:
+        sub.language = body.language.strip() or None
+    if body.tema_ids is not None:
+        sub.temas = _resolve_temas(db, current_user.id, body.tema_ids)
     db.commit()
     db.refresh(sub)
     return sub
