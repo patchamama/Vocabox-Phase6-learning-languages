@@ -7,7 +7,8 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { languagesApi, leoApi, ollamaApi, temasApi, wordTranslationsApi, wordsApi } from '../api/client'
+import { languagesApi, leoApi, ollamaApi, temasApi, verbformenApi, wordExamplesApi, wordTranslationsApi, wordsApi } from '../api/client'
+import type { VerbformenResult, WordExample } from '../api/client'
 import { playAudio } from '../utils/audioManager'
 import { useSettingsStore } from '../stores/settingsStore'
 import { enhanceWordDirect } from '../services/ollamaFrontend'
@@ -75,7 +76,10 @@ const CAT_LABELS: Record<string, string> = {
 
 export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTemaChange }: Props) {
   const { t } = useTranslation()
-  const { leoAutoFetchExtras, leoExtraLangs, ollamaTranslationModel, useFrontendOllama, ollamaTimeout, ollamaPromptEnhance } = useSettingsStore()
+  const {
+    leoAutoFetchExtras, leoExtraLangs, ollamaTranslationModel, useFrontendOllama, ollamaTimeout, ollamaPromptEnhance,
+    frontendOllamaUrl, frontendOllamaPort,
+  } = useSettingsStore()
   const [form, setForm] = useState({
     palabra: word.palabra,
     significado: word.significado,
@@ -120,6 +124,23 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
   const [extraTranslations, setExtraTranslations] = useState<WordTranslation[]>([])
   const [extraFetching, setExtraFetching] = useState(false)
 
+  // verbformen.de state
+  const [vfLoading, setVfLoading] = useState(false)
+  const [vfResult, setVfResult] = useState<VerbformenResult | null>(null)
+  const [vfError, setVfError] = useState<string | null>(null)
+  const [vfChecks, setVfChecks] = useState<{ palabra: boolean; audio: boolean; examples: boolean[] }>({
+    palabra: true,
+    audio: true,
+    examples: [],
+  })
+  const vfRef = useRef<HTMLDivElement>(null)
+
+  // Local examples editor (id < 0 means new, not yet persisted)
+  type LocalExample = { id: number; texto: string; traduccion: string | null; source: string | null }
+  const [examples, setExamples] = useState<LocalExample[]>([])
+  const [originalExampleIds, setOriginalExampleIds] = useState<number[]>([])
+  const nextNegIdRef = useRef(-1)
+
   useEffect(() => {
     Promise.all([temasApi.list(), languagesApi.list()]).then(([tRes, lRes]) => {
       setTemas(tRes.data)
@@ -129,6 +150,16 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
     if (word.word_id !== 0) {
       wordTranslationsApi.list(word.word_id).then((res) => {
         setExtraTranslations(res.data)
+      }).catch(() => {})
+      wordExamplesApi.list(word.word_id).then((res) => {
+        const items = res.data as WordExample[]
+        setExamples(items.map((e) => ({
+          id: e.id,
+          texto: e.texto,
+          traduccion: e.traduccion,
+          source: e.source,
+        })))
+        setOriginalExampleIds(items.map((e) => e.id))
       }).catch(() => {})
     }
   }, [])
@@ -158,6 +189,19 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [ollamaSuggestion, ollamaError])
+
+  // Close verbformen panel on outside click
+  useEffect(() => {
+    if (!vfResult && !vfError) return
+    const handler = (e: MouseEvent) => {
+      if (vfRef.current && !vfRef.current.contains(e.target as Node)) {
+        setVfResult(null)
+        setVfError(null)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [vfResult, vfError])
 
   const set = (field: keyof typeof form) => (value: string) =>
     setForm((f) => ({ ...f, [field]: value }))
@@ -206,6 +250,29 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
             })
           )
         )
+      }
+      // Sync examples: delete removed, create new, update existing
+      if (savedWordId !== 0) {
+        const currentIds = new Set(examples.filter((e) => e.id > 0).map((e) => e.id))
+        const toDelete = originalExampleIds.filter((id) => !currentIds.has(id))
+        const ops: Promise<unknown>[] = []
+        for (const id of toDelete) {
+          ops.push(wordExamplesApi.delete(savedWordId, id).catch(() => null))
+        }
+        examples.forEach((ex, i) => {
+          const payload = {
+            texto: ex.texto,
+            traduccion: ex.traduccion,
+            source: ex.source ?? 'manual',
+            orden: i,
+          }
+          if (ex.id < 0) {
+            ops.push(wordExamplesApi.create(savedWordId, payload).catch(() => null))
+          } else {
+            ops.push(wordExamplesApi.update(savedWordId, ex.id, payload).catch(() => null))
+          }
+        })
+        if (ops.length > 0) await Promise.allSettled(ops)
       }
       const temaObj = temaId ? (temas.find((t) => t.id === temaId) ?? null) : null
       onSaved({ ...payload, tema_id: temaId, tema: temaObj })
@@ -391,6 +458,8 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
       extra_langs: leoExtraLangs.length > 0 ? leoExtraLangs : undefined,
       timeout: ollamaTimeout,
       prompt_override: ollamaPromptEnhance || undefined,
+      base_url: frontendOllamaUrl,
+      base_port: frontendOllamaPort,
     }
     try {
       let data: OllamaSuggestion
@@ -422,6 +491,54 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
     } finally {
       setOllamaLoading(false)
     }
+  }
+
+  const handleVerbformenLookup = async () => {
+    const query = form.palabra.trim().split('|')[0].trim()
+    if (!query) return
+    setVfLoading(true)
+    setVfError(null)
+    setVfResult(null)
+    try {
+      const { data } = await verbformenApi.lookup(query)
+      setVfResult(data)
+      setVfChecks({
+        palabra: true,
+        audio: !!data.audio_url,
+        examples: data.examples.map(() => true),
+      })
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status
+      setVfError(status === 404 ? t('wordEdit.vfNotFound') : t('wordEdit.vfError'))
+    } finally {
+      setVfLoading(false)
+    }
+  }
+
+  const handleApplyVerbformen = () => {
+    if (!vfResult) return
+    setForm((f) => ({
+      ...f,
+      ...(vfChecks.palabra ? { palabra: vfResult.palabra_formatted } : {}),
+      ...(vfChecks.audio && vfResult.audio_url ? { audio_url: vfResult.audio_url } : {}),
+    }))
+    const source = vfResult.examples_full ?? vfResult.examples.map((texto) => ({ texto, traduccion: null }))
+    const newExamples = source
+      .filter((_, i) => vfChecks.examples[i])
+      .map<LocalExample>((e) => ({
+        id: nextNegIdRef.current--,
+        texto: e.texto,
+        traduccion: e.traduccion,
+        source: 'verbformen',
+      }))
+    if (newExamples.length > 0) {
+      setExamples((prev) => [...prev, ...newExamples])
+    }
+    if (!showAdvanced && (vfChecks.audio || newExamples.length > 0)) {
+      setShowAdvanced(true)
+    }
+    setVfResult(null)
+    setVfError(null)
   }
 
   const handleApplyOllama = () => {
@@ -705,6 +822,147 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
             )}
           </div>
         )}
+
+        {/* verbformen.de lookup button (German verbs) */}
+        {form.idioma_origen === 'de' && (
+          <div className="relative" ref={vfRef}>
+            <button
+              type="button"
+              title={t('wordEdit.vfLookup')}
+              onClick={handleVerbformenLookup}
+              disabled={vfLoading || !form.palabra.trim()}
+              className="flex items-center justify-center w-9 h-9 rounded-lg border border-slate-600 bg-slate-800 hover:border-amber-400 hover:bg-slate-700 disabled:opacity-40 transition-colors"
+            >
+              {vfLoading ? (
+                <span className="text-xs text-slate-400 animate-spin">⟳</span>
+              ) : (
+                <img
+                  src="https://www.verbformen.de/favicon.ico"
+                  alt="VF"
+                  className="w-5 h-5"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none'
+                    ;(e.target as HTMLImageElement).nextElementSibling!.removeAttribute('hidden')
+                  }}
+                />
+              )}
+              <span hidden className="text-xs font-bold text-amber-400">VF</span>
+            </button>
+
+            {(vfResult || vfError) && (
+              <div className="absolute right-0 top-10 z-50 w-96 bg-slate-800 border border-slate-600 rounded-xl shadow-2xl overflow-hidden">
+                {vfError && <p className="text-xs text-red-400 p-3">{vfError}</p>}
+                {vfResult && (
+                  <>
+                    <div className="px-3 py-2 border-b border-slate-700 text-xs text-slate-400 uppercase tracking-wide flex items-center gap-1.5">
+                      <img src="https://www.verbformen.de/favicon.ico" alt="" className="w-3.5 h-3.5" />
+                      verbformen · {vfResult.lemma}
+                      <a
+                        href={vfResult.source_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="ml-auto normal-case text-[10px] text-blue-400 hover:underline"
+                      >
+                        ↗
+                      </a>
+                    </div>
+                    <div className="divide-y divide-slate-700/50 max-h-96 overflow-y-auto">
+                      <label className="flex items-start gap-2.5 px-3 py-2.5 hover:bg-slate-700/40 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={vfChecks.palabra}
+                          onChange={(e) => setVfChecks((c) => ({ ...c, palabra: e.target.checked }))}
+                          className="mt-0.5 shrink-0 accent-amber-500"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-xs text-slate-400 uppercase tracking-wide mb-0.5">{t('wordEdit.vfFieldPalabra')}</p>
+                          <p className="text-sm text-slate-100 font-mono break-words">{vfResult.palabra_formatted}</p>
+                        </div>
+                      </label>
+                      {vfResult.audio_url && (
+                        <label className="flex items-start gap-2.5 px-3 py-2.5 hover:bg-slate-700/40 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={vfChecks.audio}
+                            onChange={(e) => setVfChecks((c) => ({ ...c, audio: e.target.checked }))}
+                            className="mt-0.5 shrink-0 accent-amber-500"
+                          />
+                          <div className="min-w-0 flex items-center gap-2 flex-1">
+                            <span className="text-xs text-slate-400 uppercase tracking-wide">{t('wordEdit.vfFieldAudio')}</span>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.preventDefault(); playAudio(new Audio(vfResult.audio_url!)) }}
+                              className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-0.5 rounded transition-colors"
+                            >
+                              ▶
+                            </button>
+                            <span className="text-[10px] text-slate-500 truncate">{vfResult.audio_url}</span>
+                          </div>
+                        </label>
+                      )}
+                      {vfResult.examples.length > 0 && (
+                        <div className="px-3 py-2">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <p className="text-xs text-slate-400 uppercase tracking-wide">
+                              {t('wordEdit.vfFieldExamples')} ({vfResult.examples.length})
+                            </p>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setVfChecks((c) => ({ ...c, examples: vfResult.examples.map(() => true) }))}
+                                className="text-[10px] text-slate-400 hover:text-slate-200"
+                              >
+                                {t('wordEdit.vfSelectAll')}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setVfChecks((c) => ({ ...c, examples: vfResult.examples.map(() => false) }))}
+                                className="text-[10px] text-slate-400 hover:text-slate-200"
+                              >
+                                {t('wordEdit.vfSelectNone')}
+                              </button>
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            {(vfResult.examples_full ?? vfResult.examples.map((texto) => ({ texto, traduccion: null }))).map((ex, i) => (
+                              <label key={i} className="flex items-start gap-2 cursor-pointer hover:bg-slate-700/30 rounded px-1.5 py-1">
+                                <input
+                                  type="checkbox"
+                                  checked={vfChecks.examples[i] ?? true}
+                                  onChange={(e) => setVfChecks((c) => {
+                                    const next = [...c.examples]
+                                    next[i] = e.target.checked
+                                    return { ...c, examples: next }
+                                  })}
+                                  className="mt-0.5 shrink-0 accent-amber-500"
+                                />
+                                <div className="min-w-0">
+                                  <p className="text-xs text-slate-200 leading-snug">{ex.texto}</p>
+                                  {ex.traduccion && (
+                                    <p className="text-[10px] text-slate-500 leading-snug italic">{ex.traduccion}</p>
+                                  )}
+                                </div>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="px-3 py-2 border-t border-slate-700">
+                      <button
+                        type="button"
+                        onClick={handleApplyVerbformen}
+                        className="w-full py-1.5 text-xs font-medium rounded-lg bg-amber-700 hover:bg-amber-600 text-white transition-colors"
+                      >
+                        {t('wordEdit.vfApply')}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         </div>
       </div>
 
@@ -865,6 +1123,66 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
                 )}
               </div>
             )}
+
+            {/* ── Examples (verbformen / manual) ── */}
+            <div className="border-t border-slate-200 dark:border-slate-600 pt-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                  {t('wordEdit.examplesSection')} {examples.length > 0 && `(${examples.length})`}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setExamples((prev) => [
+                    ...prev,
+                    { id: nextNegIdRef.current--, texto: '', traduccion: null, source: 'manual' },
+                  ])}
+                  className="text-xs text-blue-400 hover:text-blue-300"
+                >
+                  + {t('wordEdit.exampleAdd')}
+                </button>
+              </div>
+              {examples.length === 0 && (
+                <p className="text-xs text-slate-500 italic">{t('wordEdit.examplesEmpty')}</p>
+              )}
+              {examples.map((ex, i) => (
+                <div key={ex.id} className="flex items-start gap-2 bg-slate-50 dark:bg-slate-800 rounded-lg p-2">
+                  <span className="text-xs text-slate-500 font-mono mt-1.5 shrink-0">{i + 1}.</span>
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <input
+                      type="text"
+                      className="input text-sm w-full"
+                      placeholder={t('wordEdit.examplePlaceholder')}
+                      value={ex.texto}
+                      onChange={(e) =>
+                        setExamples((prev) => prev.map((x) => x.id === ex.id ? { ...x, texto: e.target.value } : x))
+                      }
+                    />
+                    <input
+                      type="text"
+                      className="input text-xs w-full"
+                      placeholder={t('wordEdit.exampleTranslationPlaceholder')}
+                      value={ex.traduccion ?? ''}
+                      onChange={(e) =>
+                        setExamples((prev) => prev.map((x) => x.id === ex.id ? { ...x, traduccion: e.target.value || null } : x))
+                      }
+                    />
+                  </div>
+                  {ex.source && (
+                    <span className="text-[10px] font-mono bg-slate-700 text-slate-400 rounded px-1.5 py-0.5 uppercase mt-1.5 shrink-0">
+                      {ex.source}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setExamples((prev) => prev.filter((x) => x.id !== ex.id))}
+                    className="text-xs text-red-400 hover:text-red-300 px-1 mt-1.5 shrink-0"
+                    title={t('common.delete')}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
 
             {/* ── Extra translations (multi-language LEO) ── */}
             {(extraTranslations.length > 0 || extraFetching) && (

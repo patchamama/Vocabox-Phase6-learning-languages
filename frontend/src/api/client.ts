@@ -122,6 +122,58 @@ export const leoApi = {
     api.post('/leo/auto-fetch-extras', { word, extra_langs: extraLangs }),
 }
 
+export interface VerbformenExample {
+  texto: string
+  traduccion: string | null
+}
+
+export interface VerbformenResult {
+  lemma: string
+  palabra_formatted: string
+  presente: string
+  praeteritum: string
+  perfekt: string
+  audio_url: string | null
+  examples: string[]
+  examples_full: VerbformenExample[]
+  source_url: string
+}
+
+export const verbformenApi = {
+  lookup: (word: string, exampleLimit = 12) =>
+    api.get<VerbformenResult>('/verbformen/lookup', {
+      params: { word, example_limit: exampleLimit },
+    }),
+}
+
+export interface WordExample {
+  id: number
+  word_id: number
+  texto: string
+  traduccion: string | null
+  source: string | null
+  orden: number
+}
+
+export interface WordExampleInput {
+  texto: string
+  traduccion?: string | null
+  source?: string | null
+  orden?: number
+}
+
+export const wordExamplesApi = {
+  list: (wordId: number) => api.get<WordExample[]>(`/words/${wordId}/examples`),
+  create: (wordId: number, data: WordExampleInput) =>
+    api.post<WordExample>(`/words/${wordId}/examples`, data),
+  update: (wordId: number, exampleId: number, data: WordExampleInput) =>
+    api.put<WordExample>(`/words/${wordId}/examples/${exampleId}`, data),
+  delete: (wordId: number, exampleId: number) =>
+    api.delete(`/words/${wordId}/examples/${exampleId}`),
+  bulkCreate: (wordId: number, items: WordExampleInput[]) =>
+    api.post<WordExample[]>(`/words/${wordId}/examples/bulk`, items),
+}
+
 export const wordTranslationsApi = {
   list: (wordId: number) => api.get(`/words/${wordId}/translations`),
   upsert: (wordId: number, data: { idioma: string; texto: string; audio_url?: string | null; audio_text?: string | null; source?: string }) =>

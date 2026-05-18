@@ -14,8 +14,18 @@ from ..models.language_dict import LanguageDict
 from ..models.user import User
 from ..models.user_word import UserWord
 from ..models.word import Word
+from ..models.word_example import WordExample
 from ..models.word_translation import WordTranslation
-from ..schemas.word import UserWordOut, WordCreate, WordOut, WordTranslationCreate, WordTranslationOut, WordUpdate
+from ..schemas.word import (
+    UserWordOut,
+    WordCreate,
+    WordExampleCreate,
+    WordExampleOut,
+    WordOut,
+    WordTranslationCreate,
+    WordTranslationOut,
+    WordUpdate,
+)
 
 router = APIRouter(prefix="/words", tags=["words"])
 
@@ -342,3 +352,97 @@ def delete_translation(
         raise HTTPException(status_code=404, detail="Translation not found")
     db.delete(translation)
     db.commit()
+
+
+# ── Word examples ────────────────────────────────────────────────────────────
+
+@router.get("/{word_id}/examples", response_model=List[WordExampleOut])
+def list_examples(
+    word_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _assert_word_owned(word_id, current_user.id, db)
+    return (
+        db.query(WordExample)
+        .filter(WordExample.word_id == word_id)
+        .order_by(WordExample.orden, WordExample.id)
+        .all()
+    )
+
+
+@router.post("/{word_id}/examples", response_model=WordExampleOut, status_code=201)
+def create_example(
+    word_id: int,
+    body: WordExampleCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _assert_word_owned(word_id, current_user.id, db)
+    example = WordExample(word_id=word_id, **body.model_dump())
+    db.add(example)
+    db.commit()
+    db.refresh(example)
+    return example
+
+
+@router.put("/{word_id}/examples/{example_id}", response_model=WordExampleOut)
+def update_example(
+    word_id: int,
+    example_id: int,
+    body: WordExampleCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _assert_word_owned(word_id, current_user.id, db)
+    example = (
+        db.query(WordExample)
+        .filter(WordExample.id == example_id, WordExample.word_id == word_id)
+        .first()
+    )
+    if not example:
+        raise HTTPException(status_code=404, detail="Example not found")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(example, field, value)
+    db.commit()
+    db.refresh(example)
+    return example
+
+
+@router.delete("/{word_id}/examples/{example_id}", status_code=204)
+def delete_example(
+    word_id: int,
+    example_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _assert_word_owned(word_id, current_user.id, db)
+    example = (
+        db.query(WordExample)
+        .filter(WordExample.id == example_id, WordExample.word_id == word_id)
+        .first()
+    )
+    if not example:
+        raise HTTPException(status_code=404, detail="Example not found")
+    db.delete(example)
+    db.commit()
+
+
+@router.post("/{word_id}/examples/bulk", response_model=List[WordExampleOut], status_code=201)
+def bulk_create_examples(
+    word_id: int,
+    body: List[WordExampleCreate],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Append multiple examples in one call (used by verbformen import)."""
+    _assert_word_owned(word_id, current_user.id, db)
+    created: List[WordExample] = []
+    for item in body:
+        example = WordExample(word_id=word_id, **item.model_dump())
+        db.add(example)
+        created.append(example)
+    db.commit()
+    for ex in created:
+        db.refresh(ex)
+    return created

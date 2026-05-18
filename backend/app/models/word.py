@@ -31,3 +31,7 @@ class Word(Base):
         "WordTranslation", back_populates="word", cascade="all, delete-orphan",
         order_by="WordTranslation.idioma",
     )
+    examples = relationship(
+        "WordExample", back_populates="word", cascade="all, delete-orphan",
+        order_by="WordExample.orden",
+    )

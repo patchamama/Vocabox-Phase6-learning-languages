@@ -32,6 +32,26 @@ class WordTranslationOut(WordTranslationCreate):
     model_config = {"from_attributes": True}
 
 
+# ── WordExample schemas ──────────────────────────────────────────────────────
+
+class WordExampleBase(BaseModel):
+    texto: str
+    traduccion: Optional[str] = None
+    source: Optional[str] = None
+    orden: int = 0
+
+
+class WordExampleCreate(WordExampleBase):
+    pass
+
+
+class WordExampleOut(WordExampleBase):
+    id: int
+    word_id: int
+
+    model_config = {"from_attributes": True}
+
+
 # ── Word schemas ──────────────────────────────────────────────────────────────
 
 class WordCreate(BaseModel):
@@ -66,6 +86,7 @@ class WordOut(WordCreate):
     id: int
     tema: Optional[TemaOut] = None
     translations: List[WordTranslationOut] = []
+    examples: List[WordExampleOut] = []
 
     model_config = {"from_attributes": True}
 

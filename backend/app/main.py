@@ -129,7 +129,18 @@ def _migrate_user_settings() -> None:
 
 _migrate_user_settings()
 
-from .routers import ai_providers, audio_review, auth, grammar, grammar_queue, import_router, languages, leo, ollama, review, stats, subtitles, temas, test_mode, user_settings, words
+
+def _migrate_word_examples() -> None:
+    """Ensure word_examples table exists (create_all handles it; safety net)."""
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    if "word_examples" not in inspector.get_table_names():
+        Base.metadata.create_all(bind=engine)
+
+
+_migrate_word_examples()
+
+from .routers import ai_providers, audio_review, auth, grammar, grammar_queue, import_router, languages, leo, ollama, review, stats, subtitles, temas, test_mode, user_settings, verbformen, words
 
 # ── Language dictionary seed data ─────────────────────────────────────────────
 
@@ -224,6 +235,7 @@ app.include_router(import_router.router, prefix="/api")
 app.include_router(languages.router,     prefix="/api")
 app.include_router(test_mode.router,     prefix="/api")
 app.include_router(leo.router,           prefix="/api")
+app.include_router(verbformen.router,    prefix="/api")
 app.include_router(ollama.router,        prefix="/api")
 app.include_router(audio_review.router,  prefix="/api")
 app.include_router(subtitles.router,     prefix="/api")

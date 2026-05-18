@@ -397,8 +397,8 @@ export default function Words() {
       return false
     }
     if (filterCategory !== null && uw.word.category !== filterCategory) return false
-    if (filterSearch) {
-      const q = filterSearch.toLowerCase()
+    const q = filterSearch.trim().toLowerCase()
+    if (q) {
       const inTranslations = uw.word.translations?.some(
         (tr) => tr.texto.toLowerCase().includes(q)
       ) ?? false
