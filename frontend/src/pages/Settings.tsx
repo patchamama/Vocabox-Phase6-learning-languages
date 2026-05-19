@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { RoundType } from '../stores/settingsStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { aiProvidersApi, backupsApi, grammarApi, ollamaApi, systemSettingsApi, temasApi } from '../api/client'
-import type { AIProviderInfo, BackupInfo, ExtraGrammarCategory, YouTubeProxyCheckItem, YouTubeProxyInfo, YouTubeProxyTestResult } from '../api/client'
+import type { AIProviderInfo, BackupInfo, ExtraGrammarCategory, YouTubeCookiesInfo, YouTubeProxyCheckItem, YouTubeProxyInfo, YouTubeProxyTestResult } from '../api/client'
 import { useAuthStore } from '../stores/authStore'
 import AIProvidersModal from '../components/AIProvidersModal'
 import Import from './Import'
@@ -780,6 +780,183 @@ function AdminYoutubeProxy() {
   )
 }
 
+// ─── Admin YouTube Cookies ───────────────────────────────────────────────────
+
+function AdminYoutubeCookies() {
+  const { t } = useTranslation()
+  const [info, setInfo] = useState<YouTubeCookiesInfo | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [error, setError] = useState('')
+  const cookieFileRef = useRef<HTMLInputElement>(null)
+
+  const load = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const { data } = await systemSettingsApi.getYoutubeCookies()
+      setInfo(data)
+    } catch {
+      setError(t('settings.youtubeCookiesLoadError', 'No se pudieron cargar las cookies.'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { void load() }, [])
+
+  const sourceLabel = (s: YouTubeCookiesInfo['source']) => {
+    if (s === 'db') return t('settings.youtubeCookiesSourceDb', 'override del frontend (DB)')
+    if (s === 'env') return t('settings.youtubeCookiesSourceEnv', '.env del backend')
+    return t('settings.youtubeCookiesSourceNone', 'sin configurar')
+  }
+
+  const handleSave = async () => {
+    if (!draft.trim()) return
+    setSaving(true)
+    setError('')
+    try {
+      const { data } = await systemSettingsApi.setYoutubeCookies(draft)
+      setInfo(data)
+      setDraft('')
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || t('settings.youtubeCookiesSaveError', 'No se pudieron guardar las cookies.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleCookieFile = async (file: File | undefined) => {
+    if (!file) return
+    setError('')
+    if (file.size > 2 * 1024 * 1024) {
+      setError(t('settings.youtubeCookiesFileTooLarge', 'El archivo de cookies es demasiado grande.'))
+      return
+    }
+    try {
+      setDraft(await file.text())
+    } catch {
+      setError(t('settings.youtubeCookiesFileReadError', 'No se pudo leer el archivo de cookies.'))
+    } finally {
+      if (cookieFileRef.current) cookieFileRef.current.value = ''
+    }
+  }
+
+  const handleClear = async () => {
+    setSaving(true)
+    setError('')
+    try {
+      const { data } = await systemSettingsApi.clearYoutubeCookies()
+      setInfo(data)
+      setDraft('')
+    } catch {
+      setError(t('settings.youtubeCookiesClearError', 'No se pudieron limpiar las cookies.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="card space-y-4">
+      <div>
+        <h2 className="font-semibold text-slate-800 dark:text-slate-200">
+          {t('settings.youtubeCookiesTitle', 'Cookies de YouTube')}
+        </h2>
+        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+          {t(
+            'settings.youtubeCookiesDesc',
+            'Pegá cookies exportadas en formato Netscape para que yt-dlp pueda intentar descargar subtítulos cuando YouTube pide login. Se guardan en el backend y no se vuelven a mostrar.'
+          )}
+        </p>
+      </div>
+
+      {loading ? (
+        <p className="text-xs text-slate-400 dark:text-slate-500">{t('common.loading')}</p>
+      ) : (
+        <>
+          <div className="rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 p-3 text-xs space-y-1">
+            <div>
+              <span className="text-slate-500 dark:text-slate-400">{t('settings.youtubeCookiesStatus', 'Estado')}: </span>
+              <span className={info?.has_value ? 'text-emerald-300' : 'text-slate-400'}>
+                {info?.has_value
+                  ? t('settings.youtubeCookiesConfigured', 'configuradas')
+                  : t('settings.youtubeCookiesMissing', 'sin cookies')}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500 dark:text-slate-400">{t('settings.proxySource', 'Origen')}: </span>
+              <span className="text-slate-800 dark:text-slate-100">{sourceLabel(info?.source ?? 'none')}</span>
+            </div>
+            <div className="text-slate-500 dark:text-slate-400">
+              {info?.db_override_set
+                ? t('settings.youtubeCookiesDbActive', 'Override DB activo — el .env queda ignorado.')
+                : info?.env_set
+                  ? t('settings.youtubeCookiesEnvActive', 'Usando cookies del .env. Guardá unas acá para sobreescribirlas.')
+                  : t('settings.youtubeCookiesEmpty', 'No hay cookies configuradas.')}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <input
+              ref={cookieFileRef}
+              type="file"
+              accept=".txt,.cookies"
+              className="hidden"
+              onChange={(e) => void handleCookieFile(e.target.files?.[0])}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => cookieFileRef.current?.click()}
+                disabled={saving}
+                className="px-3 py-2 rounded-lg border border-blue-500/40 bg-blue-500/15 text-blue-300 text-xs font-medium hover:bg-blue-500/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {t('settings.youtubeCookiesChooseFile', 'Elegir cookies.txt')}
+              </button>
+              {draft.trim() && (
+                <span className="text-xs text-emerald-300">
+                  {t('settings.youtubeCookiesLoadedDraft', 'Archivo cargado, listo para guardar.')}
+                </span>
+              )}
+            </div>
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder={'# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t1893456000\tSID\t...'}
+              rows={8}
+              className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs font-mono resize-y"
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleSave}
+              disabled={saving || !draft.trim()}
+              className="px-3 py-2 rounded-lg bg-blue-500/15 border border-blue-500/40 text-blue-300 text-xs font-medium hover:bg-blue-500/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {saving ? t('settings.youtubeCookiesSaving', 'Guardando...') : t('settings.youtubeCookiesSave', 'Guardar cookies')}
+            </button>
+            <button
+              onClick={handleClear}
+              disabled={saving || !info?.db_override_set}
+              className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 text-xs font-medium hover:border-red-400 hover:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {t('settings.youtubeCookiesClear', 'Quitar override')}
+            </button>
+          </div>
+
+          {error && (
+            <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+              {error}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── Pagination Editor ────────────────────────────────────────────────────────
 
 const PAGE_SIZE_PRESETS = [5, 10, 20, 25, 30, 50, 75, 100]
@@ -1242,6 +1419,7 @@ export default function Settings() {
 
       {user?.is_admin && <AdminBackups />}
       {user?.is_admin && <AdminYoutubeProxy />}
+      {user?.is_admin && <AdminYoutubeCookies />}
 
       {/* Review mode */}
       <div className="card space-y-3">

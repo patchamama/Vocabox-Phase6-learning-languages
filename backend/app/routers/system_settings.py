@@ -15,7 +15,10 @@ from pydantic import BaseModel, Field
 from ..dependencies import get_current_admin
 from ..models.user import User
 from ..services.system_settings import (
+    YOUTUBE_COOKIES_KEY,
     YOUTUBE_PROXY_KEY,
+    get_youtube_cookies_source,
+    get_youtube_cookies_text,
     get_sticky_session,
     get_youtube_proxy_url,
     get_youtube_proxy_source,
@@ -50,6 +53,17 @@ class ProxyInfo(BaseModel):
 
 class ProxyUpdate(BaseModel):
     url: Optional[str] = None
+
+
+class YouTubeCookiesInfo(BaseModel):
+    source: Literal["db", "env", "none"]
+    has_value: bool
+    db_override_set: bool
+    env_set: bool
+
+
+class YouTubeCookiesUpdate(BaseModel):
+    cookies: Optional[str] = None
 
 
 class ProxyTestResult(BaseModel):
@@ -92,6 +106,39 @@ def _build_info() -> ProxyInfo:
     )
 
 
+def _build_cookies_info() -> YouTubeCookiesInfo:
+    source = get_youtube_cookies_source()
+    return YouTubeCookiesInfo(
+        source=source,
+        has_value=bool(get_youtube_cookies_text()),
+        db_override_set=source == "db",
+        env_set=bool((os.environ.get("YOUTUBE_COOKIES") or "").strip()),
+    )
+
+
+def _validate_netscape_cookies(raw: str) -> None:
+    lines = []
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("#") and not stripped.startswith("#HttpOnly_"):
+            continue
+        lines.append(stripped)
+    if not lines:
+        raise HTTPException(status_code=400, detail="Cookies are empty")
+    valid = 0
+    for line in lines:
+        parts = line.split("\t")
+        if len(parts) == 7 and "youtube.com" in parts[0].lower():
+            valid += 1
+    if valid == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Paste cookies in Netscape format exported for youtube.com",
+        )
+
+
 @router.get("/youtube-proxy", response_model=ProxyInfo)
 def get_youtube_proxy(_: User = Depends(get_current_admin)):
     return _build_info()
@@ -124,6 +171,26 @@ def reset_sticky(_: User = Depends(get_current_admin)):
     reset_sticky_support()
     set_sticky_session(None)
     return _build_info()
+
+
+@router.get("/youtube-cookies", response_model=YouTubeCookiesInfo)
+def get_youtube_cookies(_: User = Depends(get_current_admin)):
+    return _build_cookies_info()
+
+
+@router.put("/youtube-cookies", response_model=YouTubeCookiesInfo)
+def put_youtube_cookies(payload: YouTubeCookiesUpdate, _: User = Depends(get_current_admin)):
+    raw = (payload.cookies or "").strip()
+    if raw:
+        _validate_netscape_cookies(raw)
+    set_setting(YOUTUBE_COOKIES_KEY, raw or None)
+    return _build_cookies_info()
+
+
+@router.delete("/youtube-cookies", response_model=YouTubeCookiesInfo)
+def clear_youtube_cookies(_: User = Depends(get_current_admin)):
+    set_setting(YOUTUBE_COOKIES_KEY, None)
+    return _build_cookies_info()
 
 
 @router.post("/youtube-proxy/test", response_model=ProxyTestResult)

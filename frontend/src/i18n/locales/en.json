@@ -358,6 +358,7 @@
     "ytExpandingSources": "Expanding sources…",
     "ytError": "Import error",
     "ytResultSummary": "Created: {{created}} · Skipped: {{skipped}} · Errors: {{errors}}",
+    "ytResultAllFailed": "No videos were imported. Check the YouTube proxy/connection.",
     "ytSegments": "segments",
     "ytReset": "Clear",
     "playlistsTitle": "Registered playlists",

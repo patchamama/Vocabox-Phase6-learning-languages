@@ -358,6 +358,7 @@
     "ytExpandingSources": "Quellen werden erweitert…",
     "ytError": "Importfehler",
     "ytResultSummary": "Erstellt: {{created}} · Übersprungen: {{skipped}} · Fehler: {{errors}}",
+    "ytResultAllFailed": "Es wurde kein Video importiert. Prüfe den YouTube-Proxy bzw. die Verbindung.",
     "ytSegments": "Segmente",
     "ytReset": "Leeren",
     "subtitleYoutubeId": "YouTube-Video-ID",

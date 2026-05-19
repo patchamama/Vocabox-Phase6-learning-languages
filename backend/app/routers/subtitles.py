@@ -122,8 +122,11 @@ async def upload_subtitle(
     file: UploadFile = File(...),
     youtube_id: Optional[str] = Form(default=None),
     language: Optional[str] = Form(default=None),
+    fallback_languages: Optional[str] = Form(default=None),
     stars: int = Form(default=0),
     tema_ids: str = Form(default=""),
+    create_internal_playlist: bool = Form(default=False),
+    internal_playlist_title: Optional[str] = Form(default=None),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -180,6 +183,30 @@ async def upload_subtitle(
         ],
     )
     db.commit()
+
+    if create_internal_playlist:
+        title = (internal_playlist_title or "").strip()
+        if not title:
+            title = f"Upload {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}"
+        fallback_csv = _fallback_csv(
+            [s.strip() for s in (fallback_languages or "").split(",") if s.strip()]
+        )
+        pl = SubtitlePlaylist(
+            user_id=current_user.id,
+            playlist_id=f"internal:{uuid.uuid4().hex[:16]}",
+            title=title[:500],
+            source_url=None,
+            is_internal=True,
+            language=(language or "").strip() or None,
+            fallback_languages=fallback_csv,
+            max_videos=9999,
+            stars=stars_clamped,
+        )
+        pl.temas = _resolve_temas(db, current_user.id, parsed_tema_ids)
+        pl.files = [sub]
+        db.add(pl)
+        db.commit()
+
     db.refresh(sub)
     return sub
 

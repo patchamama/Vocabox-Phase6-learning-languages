@@ -252,11 +252,27 @@ export const audioReviewApi = {
 import type { SegmentContext, SegmentRef, SubtitleFile, SubtitlePlaylist, SubtitleSearchResult, WordVideoRef } from '../types'
 
 export const subtitlesApi = {
-  upload: (file: File, youtubeId?: string, language?: string) => {
+  upload: (
+    file: File,
+    opts?: {
+      youtubeId?: string
+      language?: string
+      fallbackLanguages?: string
+      stars?: number
+      temaIds?: number[]
+      createInternalPlaylist?: boolean
+      internalPlaylistTitle?: string
+    },
+  ) => {
     const form = new FormData()
     form.append('file', file)
-    if (youtubeId) form.append('youtube_id', youtubeId)
-    if (language) form.append('language', language)
+    if (opts?.youtubeId) form.append('youtube_id', opts.youtubeId)
+    if (opts?.language) form.append('language', opts.language)
+    if (opts?.fallbackLanguages) form.append('fallback_languages', opts.fallbackLanguages)
+    if (opts?.stars !== undefined) form.append('stars', String(opts.stars))
+    if (opts?.temaIds?.length) form.append('tema_ids', opts.temaIds.join(','))
+    if (opts?.createInternalPlaylist) form.append('create_internal_playlist', 'true')
+    if (opts?.internalPlaylistTitle) form.append('internal_playlist_title', opts.internalPlaylistTitle)
     return api.post<SubtitleFile>('/subtitles/upload', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
@@ -643,6 +659,13 @@ export interface YouTubeProxyCheckResponse {
   results: YouTubeProxyCheckItem[]
 }
 
+export interface YouTubeCookiesInfo {
+  source: 'db' | 'env' | 'none'
+  has_value: boolean
+  db_override_set: boolean
+  env_set: boolean
+}
+
 export const systemSettingsApi = {
   getYoutubeProxy: () => api.get<YouTubeProxyInfo>('/system-settings/youtube-proxy'),
   setYoutubeProxy: (url: string) =>
@@ -654,4 +677,8 @@ export const systemSettingsApi = {
     api.post<YouTubeProxyCheckResponse>('/system-settings/youtube-proxy/check', { urls, samples }),
   resetSticky: () =>
     api.post<YouTubeProxyInfo>('/system-settings/youtube-proxy/sticky/reset'),
+  getYoutubeCookies: () => api.get<YouTubeCookiesInfo>('/system-settings/youtube-cookies'),
+  setYoutubeCookies: (cookies: string) =>
+    api.put<YouTubeCookiesInfo>('/system-settings/youtube-cookies', { cookies }),
+  clearYoutubeCookies: () => api.delete<YouTubeCookiesInfo>('/system-settings/youtube-cookies'),
 }

@@ -15,6 +15,7 @@ from ..models.system_setting import SystemSetting
 YOUTUBE_PROXY_KEY = "youtube_proxy_url"
 YOUTUBE_PROXY_STICKY_SESSION_KEY = "youtube_proxy_sticky_session"
 YOUTUBE_PROXY_STICKY_UNSUPPORTED_KEY = "youtube_proxy_sticky_unsupported"
+YOUTUBE_COOKIES_KEY = "youtube_cookies_netscape"
 
 
 def _get_setting(key: str) -> Optional[str]:
@@ -52,6 +53,24 @@ def get_youtube_proxy_url() -> Optional[str]:
         return db_val
     env_val = (os.environ.get("YOUTUBE_PROXY_URL") or "").strip()
     return env_val or None
+
+
+def get_youtube_cookies_text() -> Optional[str]:
+    """Resolve YouTube cookies in Netscape format. DB value wins over env var."""
+    db_val = _get_setting(YOUTUBE_COOKIES_KEY)
+    if db_val:
+        return db_val
+    env_val = (os.environ.get("YOUTUBE_COOKIES") or "").strip()
+    return env_val or None
+
+
+def get_youtube_cookies_source() -> str:
+    """Return 'db' | 'env' | 'none' for the effective cookies source."""
+    if _get_setting(YOUTUBE_COOKIES_KEY):
+        return "db"
+    if (os.environ.get("YOUTUBE_COOKIES") or "").strip():
+        return "env"
+    return "none"
 
 
 def get_sticky_session() -> Optional[str]:

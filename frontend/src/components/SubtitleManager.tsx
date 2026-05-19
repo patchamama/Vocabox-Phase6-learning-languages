@@ -71,6 +71,11 @@ export default function SubtitleManager() {
   const [uploadFiles, setUploadFiles] = useState<File[]>([])
   const [youtubeId, setYoutubeId] = useState('')
   const [language, setLanguage] = useState('')
+  const [uploadFallback, setUploadFallback] = useState('')
+  const [uploadStars, setUploadStars] = useState(0)
+  const [uploadTemaIds, setUploadTemaIds] = useState<number[]>([])
+  const [uploadCreatePlaylist, setUploadCreatePlaylist] = useState(false)
+  const [uploadPlaylistTitle, setUploadPlaylistTitle] = useState('')
   const [isDragging, setIsDragging] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null)
@@ -145,6 +150,17 @@ export default function SubtitleManager() {
     skipped: data.skipped,
     errors: data.errors,
   })
+
+  const makeYouTubeProgressFromResult = (result: YouTubeImportResult): YouTubeJobProgress => {
+    const total = result.items.length
+    return {
+      current: total,
+      total,
+      created: result.created,
+      skipped: result.skipped,
+      errors: result.errors,
+    }
+  }
 
   const renderYouTubeProgress = (progress: YouTubeJobProgress) => {
     const processed = progress.created + progress.skipped + progress.errors
@@ -525,11 +541,15 @@ export default function SubtitleManager() {
       setUploadProgress({ current: i + 1, total: uploadFiles.length })
       const file = uploadFiles[i]
       try {
-        const res = await subtitlesApi.upload(
-          file,
-          uploadFiles.length === 1 ? youtubeId.trim() || undefined : undefined,
-          language.trim() || undefined,
-        )
+        const res = await subtitlesApi.upload(file, {
+          youtubeId: uploadFiles.length === 1 ? youtubeId.trim() || undefined : undefined,
+          language: language.trim() || undefined,
+          fallbackLanguages: uploadFallback.trim() || undefined,
+          stars: uploadStars,
+          temaIds: uploadTemaIds.length ? uploadTemaIds : undefined,
+          createInternalPlaylist: uploadCreatePlaylist,
+          internalPlaylistTitle: uploadPlaylistTitle.trim() || undefined,
+        })
         results.successes++
         results.segments += res.data.total_segments
       } catch (err: unknown) {
@@ -544,10 +564,16 @@ export default function SubtitleManager() {
     setUploadFiles([])
     setYoutubeId('')
     setLanguage('')
+    setUploadFallback('')
+    setUploadStars(0)
+    setUploadTemaIds([])
+    setUploadCreatePlaylist(false)
+    setUploadPlaylistTitle('')
     if (uploadInputRef.current) uploadInputRef.current.value = ''
     setUploadProgress(null)
     setIsUploading(false)
     load()
+    if (uploadCreatePlaylist) loadPlaylists()
   }
 
   // ── Delete subtitle ───────────────────────────────────────────────────────────
@@ -699,49 +725,113 @@ export default function SubtitleManager() {
 
         {/* YouTube ID — only when single file */}
         {uploadFiles.length <= 1 && (
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-xs text-slate-400 block mb-1">{t('import.subtitleYoutubeId')}</label>
-              <input
-                type="text"
-                value={youtubeId}
-                onChange={(e) => setYoutubeId(e.target.value)}
-                placeholder={t('import.subtitleYoutubeIdPlaceholder')}
-                className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-              />
-              <p className="text-xs text-slate-500 mt-0.5">{t('import.subtitleYoutubeIdHint')}</p>
-            </div>
-            <div>
-              <label className="text-xs text-slate-400 block mb-1">{t('import.subtitleLanguage')}</label>
-              <input
-                type="text"
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                placeholder="de, es, en…"
-                className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-              />
+          <div>
+            <label className="text-xs text-slate-400 block mb-1">{t('import.subtitleYoutubeId')}</label>
+            <input
+              type="text"
+              value={youtubeId}
+              onChange={(e) => setYoutubeId(e.target.value)}
+              placeholder={t('import.subtitleYoutubeIdPlaceholder')}
+              className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+            />
+            <p className="text-xs text-slate-500 mt-0.5">{t('import.subtitleYoutubeIdHint')}</p>
+          </div>
+        )}
+
+        {/* Language + Fallback */}
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs text-slate-400 block mb-1">{t('import.ytLanguage')}</label>
+            <input
+              type="text"
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              placeholder="de"
+              className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 block mb-1">{t('import.ytFallback')}</label>
+            <input
+              type="text"
+              value={uploadFallback}
+              onChange={(e) => setUploadFallback(e.target.value)}
+              placeholder="en, es"
+              className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+            />
+          </div>
+        </div>
+
+        {/* Stars + Temas */}
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs text-slate-400 block mb-1">{t('import.ytStars')}</label>
+            <select
+              value={uploadStars}
+              onChange={(e) => setUploadStars(parseInt(e.target.value))}
+              className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+            >
+              <option value={0}>0 ★</option>
+              <option value={1}>1 ★</option>
+              <option value={2}>2 ★</option>
+              <option value={3}>3 ★</option>
+            </select>
+          </div>
+          <div className="flex items-end pb-0.5">
+            <p className="text-xs text-slate-500">{t('import.subtitleYoutubeIdHint')}</p>
+          </div>
+        </div>
+
+        {temas.length > 0 && (
+          <div>
+            <label className="text-xs text-slate-400 block mb-1">{t('import.subtitleThemes')}</label>
+            <div className="flex flex-wrap gap-1.5">
+              {temas.map((tm) => {
+                const active = uploadTemaIds.includes(tm.id)
+                return (
+                  <button
+                    key={tm.id}
+                    type="button"
+                    onClick={() => setUploadTemaIds((ids) => toggleTemaId(ids, tm.id))}
+                    className={`text-xs px-2 py-1 rounded-lg border transition-colors ${
+                      active
+                        ? 'border-blue-500 bg-blue-500/20 text-blue-200'
+                        : 'border-slate-600 text-slate-400 hover:border-slate-400'
+                    }`}
+                  >
+                    <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: tm.color }} />
+                    {tm.nombre}
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}
 
-        {/* Language only — when multiple files */}
-        {uploadFiles.length > 1 && (
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-xs text-slate-400 block mb-1">{t('import.subtitleLanguage')}</label>
-              <input
-                type="text"
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                placeholder="de, es, en…"
-                className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-              />
-            </div>
-            <div className="flex items-end pb-1">
-              <p className="text-xs text-slate-500">{t('import.subtitleYoutubeIdHint')}</p>
-            </div>
-          </div>
-        )}
+        {/* Internal playlist */}
+        <div className="space-y-2 rounded-xl border border-slate-700 bg-slate-800/40 p-3">
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={uploadCreatePlaylist}
+              onChange={(e) => setUploadCreatePlaylist(e.target.checked)}
+              className="mt-0.5 rounded border-slate-600 bg-slate-800"
+            />
+            <span>
+              <span className="block text-sm text-slate-200">{t('import.ytCreateInternalPlaylist', 'Crear playlist interna con esta importación')}</span>
+              <span className="block text-xs text-slate-500">{t('import.uploadCreatePlaylistDesc', 'Agrupa los archivos subidos en una playlist interna.')}</span>
+            </span>
+          </label>
+          {uploadCreatePlaylist && (
+            <input
+              type="text"
+              value={uploadPlaylistTitle}
+              onChange={(e) => setUploadPlaylistTitle(e.target.value)}
+              placeholder={t('import.ytInternalPlaylistTitle', 'Nombre de la playlist interna')}
+              className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+            />
+          )}
+        </div>
 
         {/* Upload progress bar */}
         {uploadProgress && (
@@ -925,36 +1015,44 @@ export default function SubtitleManager() {
         {ytError && <p className="text-red-400 text-xs">{ytError}</p>}
 
         {ytResult && (
-          <div className="space-y-1 max-h-64 overflow-y-auto bg-slate-800/50 rounded-xl p-2">
-            <p className="text-xs text-slate-300 font-medium">
-              {t('import.ytResultSummary', {
-                created: ytResult.created,
-                skipped: ytResult.skipped,
-                errors: ytResult.errors,
-              })}
-            </p>
-            {ytResult.items.map((it, i) => (
-              <div key={i} className="flex items-start gap-2 text-xs">
-                <span
-                  className={`shrink-0 font-mono px-1.5 py-0.5 rounded uppercase ${
-                    it.status === 'created'
-                      ? 'bg-green-900/50 text-green-300'
-                      : it.status === 'skipped'
-                        ? 'bg-amber-900/50 text-amber-300'
-                        : 'bg-red-900/50 text-red-300'
-                  }`}
-                >
-                  {it.status}
-                </span>
-                <span className="font-mono text-slate-400">{it.video_id}</span>
-                {it.status === 'created' && (
-                  <span className="text-slate-500">· {it.segments} {t('import.ytSegments')}</span>
-                )}
-                {it.error && it.status !== 'skipped' && (
-                  <span className="text-red-400 truncate">· {it.error}</span>
-                )}
-              </div>
-            ))}
+          <div className="space-y-2">
+            {renderYouTubeProgress(makeYouTubeProgressFromResult(ytResult))}
+            <div className="space-y-1 max-h-64 overflow-y-auto bg-slate-800/50 rounded-xl p-2">
+              <p className={`text-xs font-medium ${ytResult.errors > 0 && ytResult.created === 0 ? 'text-red-300' : 'text-slate-300'}`}>
+                {t('import.ytResultSummary', {
+                  created: ytResult.created,
+                  skipped: ytResult.skipped,
+                  errors: ytResult.errors,
+                })}
+              </p>
+              {ytResult.errors > 0 && ytResult.created === 0 && (
+                <p className="text-xs text-red-400">
+                  {t('import.ytResultAllFailed', 'No se importó ningún video. Revisa el proxy/conexión de YouTube.')}
+                </p>
+              )}
+              {ytResult.items.map((it, i) => (
+                <div key={i} className="flex items-start gap-2 text-xs">
+                  <span
+                    className={`shrink-0 font-mono px-1.5 py-0.5 rounded uppercase ${
+                      it.status === 'created'
+                        ? 'bg-green-900/50 text-green-300'
+                        : it.status === 'skipped'
+                          ? 'bg-amber-900/50 text-amber-300'
+                          : 'bg-red-900/50 text-red-300'
+                    }`}
+                  >
+                    {it.status}
+                  </span>
+                  <span className="font-mono text-slate-400">{it.video_id}</span>
+                  {it.status === 'created' && (
+                    <span className="text-slate-500">· {it.segments} {t('import.ytSegments')}</span>
+                  )}
+                  {it.error && it.status !== 'skipped' && (
+                    <span className="text-red-400 truncate">· {it.error}</span>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

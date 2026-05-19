@@ -358,6 +358,7 @@
     "ytExpandingSources": "Expandiendo fuentes…",
     "ytError": "Error al importar",
     "ytResultSummary": "Creados: {{created}} · Saltados: {{skipped}} · Errores: {{errors}}",
+    "ytResultAllFailed": "No se importó ningún video. Revisa el proxy/conexión de YouTube.",
     "ytSegments": "segmentos",
     "ytReset": "Limpiar",
     "playlistsTitle": "Playlists registradas",

@@ -12,6 +12,8 @@ from __future__ import annotations
 import logging
 import os
 import re
+import glob
+import tempfile
 import time
 import unicodedata
 import urllib.parse
@@ -49,7 +51,9 @@ from ..schemas.subtitle import (
     YouTubeImportRequest,
     YouTubeImportResult,
 )
+from .subtitle_parser import parse_subtitle
 from .system_settings import (
+    get_youtube_cookies_text,
     get_sticky_session,
     get_youtube_proxy_url,
     is_sticky_supported,
@@ -247,6 +251,21 @@ class TranscriptFetchError(RuntimeError):
     """Raised by fetch_transcript when all retry+fallback paths fail."""
 
 
+def _is_youtube_connection_block(exc: BaseException) -> bool:
+    msg = f"{type(exc).__name__}: {exc}"
+    needles = (
+        "IpBlocked",
+        "RequestBlocked",
+        "ProxyError",
+        "Unable to connect to proxy",
+        "Tunnel connection failed",
+        "HTTPSConnectionPool",
+        "HTTP Error 429",
+        "Too Many Requests",
+    )
+    return any(n in msg for n in needles)
+
+
 def _try_fetch_once(
     api: "YouTubeTranscriptApi",  # type: ignore[name-defined]
     video_id: str,
@@ -306,149 +325,164 @@ def _try_fetch_once(
     return (None, None)
 
 
+def _write_ytdlp_cookiefile() -> Optional[str]:
+    cookies = get_youtube_cookies_text()
+    if not cookies:
+        return None
+    fh = tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        prefix="vocabox-youtube-cookies-",
+        suffix=".txt",
+        delete=False,
+    )
+    try:
+        os.chmod(fh.name, 0o600)
+        fh.write(cookies.strip() + "\n")
+        return fh.name
+    finally:
+        fh.close()
+
+
+_YTDLP_FATAL_NEEDLES = (
+    "HTTP Error 429",
+    "Too Many Requests",
+    "Sign in to confirm",
+    "not a bot",
+    "IpBlocked",
+    "RequestBlocked",
+)
+
+
+class _YtdlpLogger:
+    """Captures yt-dlp error messages so non-fatal errors (e.g. 429 on subtitle
+    download) can be surfaced as exceptions instead of silently returning no files."""
+
+    def __init__(self) -> None:
+        self.errors: List[str] = []
+
+    def debug(self, msg: str) -> None:  # noqa: D401
+        pass
+
+    def info(self, msg: str) -> None:
+        pass
+
+    def warning(self, msg: str) -> None:
+        pass
+
+    def error(self, msg: str) -> None:
+        self.errors.append(msg)
+        logger.debug("yt-dlp error: %s", msg)
+
+    def fatal_error(self) -> Optional[str]:
+        for err in self.errors:
+            if any(n in err for n in _YTDLP_FATAL_NEEDLES):
+                return err
+        return None
+
+
+def _fetch_transcript_with_ytdlp(
+    video_id: str,
+    langs: List[str],
+) -> Tuple[Optional[list], Optional[str]]:
+    """Download subtitles with yt-dlp, using configured proxy and cookies when available."""
+    import yt_dlp
+
+    cookiefile = _write_ytdlp_cookiefile()
+    last_exc: Optional[Exception] = None
+    proxy = get_youtube_proxy_url()
+    fallback_direct = _env_bool("YT_FALLBACK_DIRECT", True)
+    proxy_attempts = [proxy, None] if proxy and fallback_direct else [proxy] if proxy else [None]
+    try:
+        for proxy_url in proxy_attempts:
+            try:
+                with tempfile.TemporaryDirectory(prefix="vocabox-ytdlp-subs-") as tmpdir:
+                    outtmpl = os.path.join(tmpdir, f"{video_id}.%(ext)s")
+                    ytdlp_log = _YtdlpLogger()
+                    opts: dict = {
+                        "quiet": True,
+                        "no_warnings": True,
+                        # "sb0" = storyboard (tiny sprite sheet) — forces a valid format so
+                        # yt-dlp writes subtitle files even when YouTube enforces SABR
+                        # streaming (which makes skip_download fail with "no formats").
+                        "format": "sb0/bv*+ba/b",
+                        "writesubtitles": True,
+                        "writeautomaticsub": True,
+                        "subtitleslangs": langs,
+                        "subtitlesformat": "vtt/srt/best",
+                        "outtmpl": {"default": outtmpl},
+                        "logger": ytdlp_log,
+                    }
+                    if cookiefile:
+                        opts["cookiefile"] = cookiefile
+                    if proxy_url:
+                        opts["proxy"] = proxy_url
+
+                    logger.info(
+                        "transcript: yt-dlp fetch for %s via %s%s",
+                        video_id,
+                        "proxy" if proxy_url else "direct",
+                        " with cookies" if cookiefile else "",
+                    )
+                    url = f"https://www.youtube.com/watch?v={video_id}"
+                    with yt_dlp.YoutubeDL(opts) as ydl:
+                        ydl.download([url])
+
+                    if fatal := ytdlp_log.fatal_error():
+                        raise TranscriptFetchError(f"yt-dlp: {fatal}")
+
+                    candidates = sorted(
+                        glob.glob(os.path.join(tmpdir, f"{video_id}.*.vtt"))
+                        + glob.glob(os.path.join(tmpdir, f"{video_id}.*.srt"))
+                        + glob.glob(os.path.join(tmpdir, f"{video_id}.vtt"))
+                        + glob.glob(os.path.join(tmpdir, f"{video_id}.srt"))
+                    )
+                    for path in candidates:
+                        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+                            parsed = parse_subtitle(fh.read())
+                        if not parsed:
+                            continue
+                        name_parts = os.path.basename(path).split(".")
+                        used_lang = None
+                        if len(name_parts) >= 3 and name_parts[-2] in langs:
+                            used_lang = name_parts[-2]
+                        rows = [
+                            {
+                                "start": seg.start_ms / 1000,
+                                "duration": max(0, seg.end_ms - seg.start_ms) / 1000,
+                                "text": seg.text,
+                            }
+                            for seg in parsed
+                        ]
+                        return (rows, used_lang or (langs[0] if langs else None))
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                continue
+        if last_exc:
+            raise TranscriptFetchError(
+                f"yt-dlp subtitle fetch failed: {type(last_exc).__name__}: {last_exc}"
+            ) from last_exc
+        return (None, None)
+    finally:
+        if cookiefile:
+            try:
+                os.unlink(cookiefile)
+            except OSError:
+                pass
+
+
 def fetch_transcript(
     video_id: str,
     language: str,
     fallback_languages: List[str],
 ) -> Tuple[Optional[list], Optional[str]]:
-    """Fetch transcript with sticky-session, rotation, and direct-IP fallback.
-
-    Strategy:
-    1. If a Webshare proxy is configured and we have a persisted "sticky"
-       session token (a Webshare-IP that worked last time), try that first.
-    2. If sticky fails (or none), rotate up to YT_PROXY_RETRIES extra times.
-       Each rotation attempt uses a freshly-generated session token, which
-       Webshare maps to a different egress IP. The FIRST session that works
-       gets persisted as the new sticky.
-    3. If every proxy attempt is blocked and YT_FALLBACK_DIRECT is enabled,
-       try once via the server's own IP.
-
-    Env vars:
-    - YT_PROXY_RETRIES (int, default 3)
-    - YT_PROXY_RETRY_SLEEP (float seconds, default 0.5)
-    - YT_FALLBACK_DIRECT (bool, default true)
+    """Fetch transcript only through yt-dlp.
 
     Returns (rows, used_lang) on success or (None, None) when the video has no
-    transcript. Raises TranscriptFetchError when every path failed.
+    transcript. Raises TranscriptFetchError when yt-dlp cannot download one.
     """
-    from youtube_transcript_api._errors import IpBlocked, RequestBlocked
-
     langs: List[str] = [language] + [l for l in fallback_languages if l and l != language]
-    proxy_base = get_youtube_proxy_url()
-    proxy_configured = bool(proxy_base)
-    is_webshare = proxy_configured and _is_webshare(proxy_base)  # type: ignore[arg-type]
-    retries = max(0, _env_int("YT_PROXY_RETRIES", 3))
-    sleep_s = max(0.0, _env_float("YT_PROXY_RETRY_SLEEP", 0.5))
-    fallback_direct = _env_bool("YT_FALLBACK_DIRECT", True)
-
-    last_exc: Optional[Exception] = None
-    sticky_enabled = is_webshare and is_sticky_supported()
-
-    # Step 1: try the persisted sticky session (Webshare only, when supported).
-    if sticky_enabled:
-        sticky = get_sticky_session()
-        if sticky:
-            url = _with_session(proxy_base, sticky)  # type: ignore[arg-type]
-            try:
-                logger.info("transcript: using sticky session for %s", video_id)
-                return _try_fetch_once(_build_api_from_url(url), video_id, langs)
-            except (IpBlocked, RequestBlocked) as exc:
-                last_exc = exc
-                logger.warning(
-                    "transcript: sticky session blocked for %s — rotating: %s",
-                    video_id, type(exc).__name__,
-                )
-                set_sticky_session(None)
-            except TranscriptFetchError as exc:
-                last_exc = exc
-                if _is_proxy_auth_error(exc):
-                    logger.warning(
-                        "transcript: proxy plan rejects session pin (407) — disabling sticky permanently"
-                    )
-                    mark_sticky_unsupported()
-                    set_sticky_session(None)
-                    sticky_enabled = False
-                else:
-                    logger.warning(
-                        "transcript: sticky session error for %s — rotating: %s",
-                        video_id, exc,
-                    )
-                    set_sticky_session(None)
-            if sleep_s > 0:
-                time.sleep(sleep_s)
-
-    # Step 2: rotation. With sticky support, each attempt uses a fresh session
-    # token (Webshare maps each session to a different egress IP). Without it,
-    # just re-hit the rotating endpoint (it picks an IP on its own).
-    if proxy_configured:
-        attempts_left = retries + 1
-        attempt_no = 0
-        while attempts_left > 0:
-            attempt_no += 1
-            session = _new_session_token() if sticky_enabled else None
-            url = _with_session(proxy_base, session) if session else proxy_base  # type: ignore[arg-type]
-            try:
-                result = _try_fetch_once(_build_api_from_url(url), video_id, langs)
-                if sticky_enabled and session:
-                    set_sticky_session(session)
-                    logger.info(
-                        "transcript: saved sticky session — reuse on next request"
-                    )
-                return result
-            except (IpBlocked, RequestBlocked) as exc:
-                last_exc = exc
-                logger.warning(
-                    "transcript: rotation #%d blocked for %s: %s",
-                    attempt_no, video_id, type(exc).__name__,
-                )
-                attempts_left -= 1
-            except TranscriptFetchError as exc:
-                last_exc = exc
-                if sticky_enabled and session and _is_proxy_auth_error(exc):
-                    logger.warning(
-                        "transcript: proxy plan rejects session pin (407) — disabling sticky and retrying"
-                    )
-                    mark_sticky_unsupported()
-                    sticky_enabled = False
-                    # do NOT decrement attempts_left — this round didn't really test the proxy
-                    continue
-                logger.warning(
-                    "transcript: rotation #%d error for %s: %s",
-                    attempt_no, video_id, exc,
-                )
-                attempts_left -= 1
-            if attempts_left > 0 and sleep_s > 0:
-                time.sleep(sleep_s)
-
-    # Step 3: direct IP fallback (server's own outbound IP, no proxy).
-    if proxy_configured and fallback_direct:
-        logger.warning(
-            "transcript: every proxy path failed for %s — trying direct IP",
-            video_id,
-        )
-        try:
-            return _try_fetch_once(_build_api_from_url(None), video_id, langs)
-        except (IpBlocked, RequestBlocked) as exc:
-            last_exc = exc
-            logger.warning(
-                "transcript: direct-IP fallback also blocked for %s: %s",
-                video_id, type(exc).__name__,
-            )
-        except TranscriptFetchError as exc:
-            last_exc = exc
-    elif not proxy_configured:
-        # No proxy at all — just try direct.
-        try:
-            return _try_fetch_once(_build_api_from_url(None), video_id, langs)
-        except (IpBlocked, RequestBlocked) as exc:
-            last_exc = exc
-        except TranscriptFetchError as exc:
-            last_exc = exc
-
-    if last_exc is not None:
-        first_line = str(last_exc).splitlines()[0][:300] if str(last_exc) else type(last_exc).__name__
-        raise TranscriptFetchError(f"{type(last_exc).__name__}: {first_line}") from last_exc
-    return (None, None)
+    return _fetch_transcript_with_ytdlp(video_id, langs)
 
 
 def _rows_to_segments(rows: list) -> List[dict]:
@@ -590,6 +624,25 @@ def import_sources(
             try:
                 rows, used_lang = fetch_transcript(vid, req.language, req.fallback_languages)
             except TranscriptFetchError as fetch_exc:
+                if _is_youtube_connection_block(fetch_exc):
+                    err_msg = (
+                        "YouTube/proxy bloqueado o sin conexión. "
+                        f"{str(fetch_exc)[:160]}"
+                    )
+                    _push(YouTubeImportItem(
+                        video_id=vid,
+                        status="error",
+                        error=err_msg,
+                    ))
+                    for remaining in video_ids[idx + 1:]:
+                        _push(YouTubeImportItem(
+                            video_id=remaining,
+                            status="error",
+                            error=err_msg,
+                        ))
+                    if on_progress:
+                        on_progress(total, total)
+                    break
                 _push(YouTubeImportItem(
                     video_id=vid,
                     status="error",
