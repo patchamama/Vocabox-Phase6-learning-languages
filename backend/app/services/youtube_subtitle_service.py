@@ -64,6 +64,21 @@ def parse_source(src: str) -> Optional[Tuple[str, str]]:
     return None
 
 
+def playlist_ids_from_sources(sources: List[str]) -> List[Tuple[str, str]]:
+    """Return unique playlist IDs plus their original source string."""
+    out: List[Tuple[str, str]] = []
+    seen: set[str] = set()
+    for src in sources:
+        parsed = parse_source(src)
+        if not parsed:
+            continue
+        kind, ident = parsed
+        if kind == "playlist" and ident not in seen:
+            seen.add(ident)
+            out.append((ident, src))
+    return out
+
+
 def list_playlist_videos(playlist_id: str, max_videos: int) -> List[str]:
     """Return list of video IDs for a playlist, capped at max_videos."""
     import yt_dlp  # imported lazily so tests not requiring yt-dlp still run
@@ -326,6 +341,7 @@ __all__ = [
     "NotImplementedYet",
     "import_sources",
     "parse_source",
+    "playlist_ids_from_sources",
     "list_playlist_videos",
     "fetch_transcript",
     "YouTubeImportItem",

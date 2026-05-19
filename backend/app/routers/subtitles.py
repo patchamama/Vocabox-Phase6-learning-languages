@@ -9,13 +9,14 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..database import SessionLocal, get_db
 from ..dependencies import get_current_user
-from ..models.subtitle import SubtitleFile, SubtitleSegment
+from ..models.subtitle import SubtitleFile, SubtitlePlaylist, SubtitleSegment
 from ..models.tema import Tema
 from ..models.user_word import UserWord
 from ..models.word_video_ref import WordVideoRef
 from ..schemas.subtitle import (
     FileRefCountOut, ReindexRequest, SegmentContextOut,
-    SubtitleFileOut, SubtitleFileUpdate, SubtitleSearchOut, WordVideoRefOut,
+    SubtitleBulkUpdate, SubtitleFileOut, SubtitleFileUpdate, SubtitlePlaylistOut,
+    SubtitlePlaylistUpdate, SubtitleSearchOut, WordVideoRefOut,
     YouTubeImportRequest, YouTubeImportResult, YouTubeImportItem,
 )
 from ..services.auth import decode_token
@@ -37,6 +38,38 @@ def _resolve_temas(db: Session, _user_id: int, tema_ids: List[int]) -> List[Tema
     if not tema_ids:
         return []
     return db.query(Tema).filter(Tema.id.in_(tema_ids)).all()
+
+
+def _fallback_csv(values: List[str]) -> str:
+    return ",".join([v.strip() for v in values if v and v.strip()])
+
+
+def _upsert_playlists_for_request(db: Session, user_id: int, req: YouTubeImportRequest) -> None:
+    playlist_sources = yts.playlist_ids_from_sources(req.sources)
+    if not playlist_sources:
+        return
+    temas = _resolve_temas(db, user_id, req.tema_ids)
+    fallback = _fallback_csv(req.fallback_languages)
+    stars = max(0, min(3, req.stars))
+    for playlist_id, source_url in playlist_sources:
+        pl = (
+            db.query(SubtitlePlaylist)
+            .filter(
+                SubtitlePlaylist.user_id == user_id,
+                SubtitlePlaylist.playlist_id == playlist_id,
+            )
+            .first()
+        )
+        if not pl:
+            pl = SubtitlePlaylist(user_id=user_id, playlist_id=playlist_id)
+            db.add(pl)
+        pl.source_url = source_url
+        pl.language = req.language.strip() or None
+        pl.fallback_languages = fallback
+        pl.max_videos = req.max_videos
+        pl.stars = stars
+        pl.temas = list(temas)
+    db.commit()
 
 
 @router.post("/upload", response_model=SubtitleFileOut, status_code=201)
@@ -106,6 +139,38 @@ async def upload_subtitle(
     return sub
 
 
+@router.patch("/bulk", response_model=List[SubtitleFileOut])
+def bulk_update_subtitles(
+    body: SubtitleBulkUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    ids = list(dict.fromkeys([int(x) for x in body.file_ids if int(x) > 0]))
+    if not ids:
+        raise HTTPException(400, "No subtitle files selected")
+    subs = (
+        db.query(SubtitleFile)
+        .filter(SubtitleFile.user_id == current_user.id, SubtitleFile.id.in_(ids))
+        .all()
+    )
+    if not subs:
+        raise HTTPException(404, "Archivos no encontrados")
+    temas = None
+    if body.tema_ids is not None:
+        temas = _resolve_temas(db, current_user.id, body.tema_ids)
+    for sub in subs:
+        if body.stars is not None:
+            sub.stars = max(0, min(3, body.stars))
+        if body.language is not None:
+            sub.language = body.language.strip() or None
+        if temas is not None:
+            sub.temas = list(temas)
+    db.commit()
+    for sub in subs:
+        db.refresh(sub)
+    return subs
+
+
 @router.patch("/{file_id}", response_model=SubtitleFileOut)
 def update_subtitle(
     file_id: int,
@@ -144,6 +209,124 @@ def list_subtitles(
         .order_by(SubtitleFile.created_at.desc())
         .all()
     )
+
+
+# ── Registered YouTube playlists ───────────────────────────────────────────────
+
+@router.get("/playlists", response_model=List[SubtitlePlaylistOut])
+def list_playlists(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return (
+        db.query(SubtitlePlaylist)
+        .filter(SubtitlePlaylist.user_id == current_user.id)
+        .order_by(SubtitlePlaylist.updated_at.desc(), SubtitlePlaylist.id.desc())
+        .all()
+    )
+
+
+@router.patch("/playlists/{playlist_db_id}", response_model=SubtitlePlaylistOut)
+def update_playlist(
+    playlist_db_id: int,
+    body: SubtitlePlaylistUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    pl = (
+        db.query(SubtitlePlaylist)
+        .filter(SubtitlePlaylist.id == playlist_db_id, SubtitlePlaylist.user_id == current_user.id)
+        .first()
+    )
+    if not pl:
+        raise HTTPException(404, "Playlist no encontrada")
+    if body.title is not None:
+        pl.title = body.title.strip() or None
+    if body.language is not None:
+        pl.language = body.language.strip() or None
+    if body.fallback_languages is not None:
+        pl.fallback_languages = _fallback_csv(body.fallback_languages)
+    if body.max_videos is not None:
+        pl.max_videos = body.max_videos
+    if body.stars is not None:
+        pl.stars = max(0, min(3, body.stars))
+    if body.tema_ids is not None:
+        pl.temas = _resolve_temas(db, current_user.id, body.tema_ids)
+    db.commit()
+    db.refresh(pl)
+    return pl
+
+
+@router.delete("/playlists/{playlist_db_id}", status_code=204)
+def delete_playlist(
+    playlist_db_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    pl = (
+        db.query(SubtitlePlaylist)
+        .filter(SubtitlePlaylist.id == playlist_db_id, SubtitlePlaylist.user_id == current_user.id)
+        .first()
+    )
+    if not pl:
+        return
+    db.delete(pl)
+    db.commit()
+
+
+@router.post("/playlists/{playlist_db_id}/refresh", status_code=202)
+def refresh_playlist(
+    playlist_db_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    pl = (
+        db.query(SubtitlePlaylist)
+        .filter(SubtitlePlaylist.id == playlist_db_id, SubtitlePlaylist.user_id == current_user.id)
+        .first()
+    )
+    if not pl:
+        raise HTTPException(404, "Playlist no encontrada")
+
+    req = YouTubeImportRequest(
+        sources=[pl.source_url or pl.playlist_id],
+        language=pl.language or "de",
+        fallback_languages=[x.strip() for x in (pl.fallback_languages or "").split(",") if x.strip()],
+        tema_ids=[tm.id for tm in pl.temas],
+        stars=pl.stars,
+        max_videos=pl.max_videos,
+    )
+    job_id = str(uuid.uuid4())
+    user_id = current_user.id
+    _yt_jobs[job_id] = {
+        "user_id": user_id,
+        "status": "pending",
+        "progress": 0,
+        "total": 0,
+        "result": None,
+        "error": None,
+    }
+
+    def _run() -> None:
+        db2 = SessionLocal()
+        try:
+            _yt_jobs[job_id]["status"] = "running"
+
+            def _progress(done: int, total: int) -> None:
+                _yt_jobs[job_id]["progress"] = done
+                _yt_jobs[job_id]["total"] = total
+
+            result = yts.import_sources(req, user_id, db2, on_progress=_progress)
+            _yt_jobs[job_id]["result"] = result.model_dump()
+            _yt_jobs[job_id]["status"] = "done"
+        except Exception as exc:  # noqa: BLE001
+            _yt_jobs[job_id]["status"] = "error"
+            _yt_jobs[job_id]["error"] = str(exc)
+        finally:
+            db2.close()
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"job_id": job_id}
 
 
 # ── Delete all refs (MUST come before /{file_id}) ─────────────────────────────
@@ -378,10 +561,12 @@ def search_subtitles(
 @router.post("/youtube-import", status_code=202)
 def start_youtube_import(
     req: YouTubeImportRequest,
+    db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     job_id = str(uuid.uuid4())
     user_id = current_user.id
+    _upsert_playlists_for_request(db, user_id, req)
     _yt_jobs[job_id] = {
         "user_id": user_id,
         "status": "pending",

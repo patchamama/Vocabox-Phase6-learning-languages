@@ -5,7 +5,7 @@ from .user_word import UserWord
 from .language_dict import LanguageDict
 from .word_translation import WordTranslation
 from .word_example import WordExample
-from .subtitle import SubtitleFile, SubtitleSegment
+from .subtitle import SubtitleFile, SubtitlePlaylist, SubtitleSegment
 from .word_video_ref import WordVideoRef
 from .grammar_exercise import GrammarExercise
 from .ai_provider import AIProvider
@@ -14,6 +14,6 @@ from .user_settings import UserSettings
 
 __all__ = [
     "User", "Tema", "Word", "UserWord", "LanguageDict", "WordTranslation",
-    "SubtitleFile", "SubtitleSegment", "WordVideoRef", "GrammarExercise",
+    "SubtitleFile", "SubtitlePlaylist", "SubtitleSegment", "WordVideoRef", "GrammarExercise",
     "AIProvider", "GrammarQueueItem", "UserSettings", "WordExample",
 ]

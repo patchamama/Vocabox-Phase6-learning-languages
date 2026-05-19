@@ -249,7 +249,7 @@ export const audioReviewApi = {
   }>(`/audio-review/jobs/${jobId}`),
 }
 
-import type { SegmentContext, SegmentRef, SubtitleFile, SubtitleSearchResult, WordVideoRef } from '../types'
+import type { SegmentContext, SegmentRef, SubtitleFile, SubtitlePlaylist, SubtitleSearchResult, WordVideoRef } from '../types'
 
 export const subtitlesApi = {
   upload: (file: File, youtubeId?: string, language?: string) => {
@@ -262,6 +262,10 @@ export const subtitlesApi = {
     })
   },
   list: () => api.get<SubtitleFile[]>('/subtitles'),
+  update: (id: number, data: { language?: string | null; stars?: number; tema_ids?: number[] }) =>
+    api.patch<SubtitleFile>(`/subtitles/${id}`, data),
+  bulkUpdate: (data: { file_ids: number[]; language?: string | null; stars?: number; tema_ids?: number[] }) =>
+    api.patch<SubtitleFile[]>('/subtitles/bulk', data),
   delete: (id: number) => api.delete(`/subtitles/${id}`),
   deleteAllRefs: () => api.delete('/subtitles/all-refs'),
   startReindex: (params?: {
@@ -302,6 +306,20 @@ export const subtitlesApi = {
     stars?: number
     max_videos?: number
   }) => api.post<{ job_id: string }>('/subtitles/youtube-import', req),
+  listPlaylists: () => api.get<SubtitlePlaylist[]>('/subtitles/playlists'),
+  updatePlaylist: (
+    id: number,
+    data: {
+      title?: string | null
+      language?: string | null
+      fallback_languages?: string[]
+      max_videos?: number
+      stars?: number
+      tema_ids?: number[]
+    },
+  ) => api.patch<SubtitlePlaylist>(`/subtitles/playlists/${id}`, data),
+  refreshPlaylist: (id: number) => api.post<{ job_id: string }>(`/subtitles/playlists/${id}/refresh`),
+  deletePlaylist: (id: number) => api.delete(`/subtitles/playlists/${id}`),
   getYoutubeJob: (jobId: string) =>
     api.get<{
       status: string

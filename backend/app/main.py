@@ -147,16 +147,38 @@ _migrate_word_examples()
 
 
 def _migrate_subtitle_files() -> None:
-    """Add stars column + subtitle_file_temas association if missing."""
+    """Add subtitle metadata tables/columns if missing."""
     from sqlalchemy import inspect, text
 
     inspector = inspect(engine)
-    if "subtitle_files" in inspector.get_table_names():
+    table_names = inspector.get_table_names()
+    if "subtitle_files" in table_names:
         existing = {c["name"] for c in inspector.get_columns("subtitle_files")}
         if "stars" not in existing:
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE subtitle_files ADD COLUMN stars INTEGER NOT NULL DEFAULT 0"))
-    if "subtitle_file_temas" not in inspect(engine).get_table_names():
+    if "subtitle_file_temas" not in table_names:
+        Base.metadata.create_all(bind=engine)
+    if "subtitle_playlists" not in table_names:
+        Base.metadata.create_all(bind=engine)
+        table_names = inspect(engine).get_table_names()
+    elif "subtitle_playlists" in table_names:
+        existing = {c["name"] for c in inspector.get_columns("subtitle_playlists")}
+        new_cols = [
+            ("title", "VARCHAR(500)"),
+            ("source_url", "VARCHAR(800)"),
+            ("language", "VARCHAR(10)"),
+            ("fallback_languages", "VARCHAR(120) NOT NULL DEFAULT ''"),
+            ("max_videos", "INTEGER NOT NULL DEFAULT 50"),
+            ("stars", "INTEGER NOT NULL DEFAULT 0"),
+            ("created_at", "DATETIME"),
+            ("updated_at", "DATETIME"),
+        ]
+        with engine.begin() as conn:
+            for col, typ in new_cols:
+                if col not in existing:
+                    conn.execute(text(f"ALTER TABLE subtitle_playlists ADD COLUMN {col} {typ}"))
+    if "subtitle_playlist_temas" not in table_names:
         Base.metadata.create_all(bind=engine)
 
 

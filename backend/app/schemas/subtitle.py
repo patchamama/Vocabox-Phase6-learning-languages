@@ -33,6 +33,13 @@ class SubtitleFileUpdate(BaseModel):
     language: Optional[str] = None
 
 
+class SubtitleBulkUpdate(BaseModel):
+    file_ids: List[int]
+    stars: Optional[int] = Field(default=None, ge=0, le=3)
+    tema_ids: Optional[List[int]] = None
+    language: Optional[str] = None
+
+
 class YouTubeImportRequest(BaseModel):
     sources: List[str]                       # mix of video URLs, video IDs, playlist URLs or playlist IDs
     language: str                            # e.g. "de"
@@ -40,6 +47,32 @@ class YouTubeImportRequest(BaseModel):
     tema_ids: List[int] = []
     stars: int = Field(default=0, ge=0, le=3)
     max_videos: int = Field(default=50, ge=1, le=500)
+
+
+class SubtitlePlaylistOut(BaseModel):
+    id: int
+    playlist_id: str
+    title: Optional[str] = None
+    source_url: Optional[str] = None
+    language: Optional[str] = None
+    fallback_languages: str = ""
+    max_videos: int = 50
+    stars: int = 0
+    created_at: datetime
+    updated_at: datetime
+    temas: List[TemaRef] = []
+
+    class Config:
+        from_attributes = True
+
+
+class SubtitlePlaylistUpdate(BaseModel):
+    title: Optional[str] = None
+    language: Optional[str] = None
+    fallback_languages: Optional[List[str]] = None
+    max_videos: Optional[int] = Field(default=None, ge=1, le=500)
+    stars: Optional[int] = Field(default=None, ge=0, le=3)
+    tema_ids: Optional[List[int]] = None
 
 
 class YouTubeImportItem(BaseModel):

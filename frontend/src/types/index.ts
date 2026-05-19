@@ -107,7 +107,23 @@ export interface SubtitleFile {
   youtube_id: string | null
   language: string | null
   total_segments: number
+  stars: number
   created_at: string
+  temas: Tema[]
+}
+
+export interface SubtitlePlaylist {
+  id: number
+  playlist_id: string
+  title: string | null
+  source_url: string | null
+  language: string | null
+  fallback_languages: string
+  max_videos: number
+  stars: number
+  created_at: string
+  updated_at: string
+  temas: Tema[]
 }
 
 export interface SegmentRefFile {

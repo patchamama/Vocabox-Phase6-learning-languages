@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import api, { subtitlesApi } from '../api/client'
+import api, { subtitlesApi, temasApi } from '../api/client'
 import type { YouTubeImportResult } from '../api/client'
 import VideoRefsModal from './VideoRefsModal'
 import { useSettingsStore } from '../stores/settingsStore'
-import type { SubtitleFile, WordVideoRef } from '../types'
+import type { SubtitleFile, SubtitlePlaylist, Tema, WordVideoRef } from '../types'
 
 interface ReindexState {
   status: 'running' | 'done' | 'error'
@@ -21,15 +21,33 @@ interface UploadResults {
   errors: string[]
 }
 
+interface PlaylistDraft {
+  title: string
+  language: string
+  fallback: string
+  maxVideos: number
+  stars: number
+  temaIds: number[]
+}
+
 export default function SubtitleManager() {
   const { t } = useTranslation()
   const { maxRefsPerWord, subtitleIndexPalabra, subtitleIndexAudioText, subtitleIndexSignificado } = useSettingsStore()
 
   // ── State ────────────────────────────────────────────────────────────────────
   const [files, setFiles] = useState<SubtitleFile[]>([])
+  const [temas, setTemas] = useState<Tema[]>([])
   const [isLoadingFiles, setIsLoadingFiles] = useState(true)
   // file_id → ref count
   const [fileRefCounts, setFileRefCounts] = useState<Map<number, number>>(new Map())
+  const [selectedFileIds, setSelectedFileIds] = useState<Set<number>>(new Set())
+  const [bulkLanguageEnabled, setBulkLanguageEnabled] = useState(false)
+  const [bulkLanguage, setBulkLanguage] = useState('')
+  const [bulkStars, setBulkStars] = useState('')
+  const [bulkTemasEnabled, setBulkTemasEnabled] = useState(false)
+  const [bulkTemaIds, setBulkTemaIds] = useState<number[]>([])
+  const [isBulkSaving, setIsBulkSaving] = useState(false)
+  const [bulkError, setBulkError] = useState<string | null>(null)
 
   // Upload
   const [uploadFiles, setUploadFiles] = useState<File[]>([])
@@ -61,6 +79,7 @@ export default function SubtitleManager() {
   const [ytFallback, setYtFallback] = useState('en')
   const [ytMaxVideos, setYtMaxVideos] = useState(20)
   const [ytStars, setYtStars] = useState(0)
+  const [ytTemaIds, setYtTemaIds] = useState<number[]>([])
   const [ytJobId, setYtJobId] = useState<string | null>(null)
   const [ytStatus, setYtStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const [ytProgress, setYtProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 })
@@ -74,6 +93,17 @@ export default function SubtitleManager() {
   const [isSearching, setIsSearching] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
   const [searchModal, setSearchModal] = useState<{ query: string; refs: WordVideoRef[] } | null>(null)
+
+  // Registered playlists
+  const [playlists, setPlaylists] = useState<SubtitlePlaylist[]>([])
+  const [playlistDrafts, setPlaylistDrafts] = useState<Record<number, PlaylistDraft>>({})
+  const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(true)
+  const [savingPlaylistId, setSavingPlaylistId] = useState<number | null>(null)
+  const [refreshingPlaylistId, setRefreshingPlaylistId] = useState<number | null>(null)
+  const [playlistDeletingId, setPlaylistDeletingId] = useState<number | null>(null)
+  const [playlistError, setPlaylistError] = useState<string | null>(null)
+  const [playlistRefreshProgress, setPlaylistRefreshProgress] = useState<{ current: number; total: number } | null>(null)
+  const playlistPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // ── Load ─────────────────────────────────────────────────────────────────────
   const loadFileCounts = useCallback(async () => {
@@ -91,19 +121,44 @@ export default function SubtitleManager() {
       .then(([fRes, cRes]) => {
         setFiles(fRes.data)
         setFileRefCounts(new Map(cRes.data.map((x) => [x.file_id, x.count])))
+        setSelectedFileIds((prev) => new Set([...prev].filter((id) => fRes.data.some((f) => f.id === id))))
       })
       .catch(() => {})
       .finally(() => setIsLoadingFiles(false))
   }, [])
 
+  const loadPlaylists = useCallback(() => {
+    setIsLoadingPlaylists(true)
+    subtitlesApi.listPlaylists()
+      .then((res) => {
+        setPlaylists(res.data)
+        setPlaylistDrafts(Object.fromEntries(res.data.map((pl) => [
+          pl.id,
+          {
+            title: pl.title ?? '',
+            language: pl.language ?? '',
+            fallback: pl.fallback_languages ?? '',
+            maxVideos: pl.max_videos,
+            stars: pl.stars,
+            temaIds: pl.temas.map((tm) => tm.id),
+          },
+        ])))
+      })
+      .catch(() => {})
+      .finally(() => setIsLoadingPlaylists(false))
+  }, [])
+
   useEffect(() => {
     load()
+    loadPlaylists()
+    temasApi.list().then((res) => setTemas(res.data)).catch(() => {})
     return () => {
       wsRef.current?.close()
       if (pollingRef.current) clearInterval(pollingRef.current)
       if (ytPollRef.current) clearInterval(ytPollRef.current)
+      if (playlistPollRef.current) clearInterval(playlistPollRef.current)
     }
-  }, [load])
+  }, [load, loadPlaylists])
 
   // ── YouTube import ───────────────────────────────────────────────────────────
   const handleYoutubeImport = async () => {
@@ -127,6 +182,7 @@ export default function SubtitleManager() {
         fallback_languages,
         max_videos: Math.max(1, Math.min(500, ytMaxVideos)),
         stars: ytStars,
+        tema_ids: ytTemaIds,
       })
       const jobId = res.data.job_id
       setYtJobId(jobId)
@@ -140,6 +196,7 @@ export default function SubtitleManager() {
             if (ytPollRef.current) clearInterval(ytPollRef.current)
             ytPollRef.current = null
             load()
+            loadPlaylists()
           } else if (j.data.status === 'error') {
             setYtError(j.data.error || 'Error')
             setYtStatus('error')
@@ -173,6 +230,139 @@ export default function SubtitleManager() {
     setYtProgress({ current: 0, total: 0 })
     setYtResult(null)
     setYtError(null)
+  }
+
+  // ── Bulk subtitle metadata ───────────────────────────────────────────────────
+  const toggleFileSelection = (id: number) => {
+    setSelectedFileIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleTemaId = (ids: number[], id: number) => (
+    ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]
+  )
+
+  const selectedIds = [...selectedFileIds]
+  const allVisibleSelected = files.length > 0 && files.every((f) => selectedFileIds.has(f.id))
+  const hasBulkChanges = bulkLanguageEnabled || bulkStars !== '' || bulkTemasEnabled
+
+  const handleBulkUpdate = async () => {
+    if (selectedIds.length === 0 || !hasBulkChanges) return
+    setIsBulkSaving(true)
+    setBulkError(null)
+    try {
+      const payload: { file_ids: number[]; language?: string | null; stars?: number; tema_ids?: number[] } = {
+        file_ids: selectedIds,
+      }
+      if (bulkLanguageEnabled) payload.language = bulkLanguage.trim() || null
+      if (bulkStars !== '') payload.stars = parseInt(bulkStars)
+      if (bulkTemasEnabled) payload.tema_ids = bulkTemaIds
+      const res = await subtitlesApi.bulkUpdate(payload)
+      setFiles((prev) => prev.map((f) => res.data.find((updated) => updated.id === f.id) ?? f))
+    } catch (err: unknown) {
+      setBulkError((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? t('import.subtitleBulkError'))
+    } finally {
+      setIsBulkSaving(false)
+    }
+  }
+
+  const updatePlaylistDraft = (id: number, patch: Partial<PlaylistDraft>) => {
+    setPlaylistDrafts((prev) => ({
+      ...prev,
+      [id]: { ...prev[id], ...patch },
+    }))
+  }
+
+  const handleSavePlaylist = async (playlist: SubtitlePlaylist) => {
+    const draft = playlistDrafts[playlist.id]
+    if (!draft) return
+    setSavingPlaylistId(playlist.id)
+    setPlaylistError(null)
+    try {
+      const res = await subtitlesApi.updatePlaylist(playlist.id, {
+        title: draft.title.trim() || null,
+        language: draft.language.trim() || null,
+        fallback_languages: draft.fallback.split(',').map((s) => s.trim()).filter(Boolean),
+        max_videos: Math.max(1, Math.min(500, draft.maxVideos || 1)),
+        stars: draft.stars,
+        tema_ids: draft.temaIds,
+      })
+      setPlaylists((prev) => prev.map((pl) => pl.id === playlist.id ? res.data : pl))
+    } catch (err: unknown) {
+      setPlaylistError((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? t('import.playlistSaveError'))
+    } finally {
+      setSavingPlaylistId(null)
+    }
+  }
+
+  const handleRefreshPlaylist = async (playlist: SubtitlePlaylist) => {
+    if (playlistPollRef.current) clearInterval(playlistPollRef.current)
+    setRefreshingPlaylistId(playlist.id)
+    setPlaylistRefreshProgress({ current: 0, total: 0 })
+    setPlaylistError(null)
+    try {
+      const draft = playlistDrafts[playlist.id]
+      if (draft) {
+        const saved = await subtitlesApi.updatePlaylist(playlist.id, {
+          title: draft.title.trim() || null,
+          language: draft.language.trim() || null,
+          fallback_languages: draft.fallback.split(',').map((s) => s.trim()).filter(Boolean),
+          max_videos: Math.max(1, Math.min(500, draft.maxVideos || 1)),
+          stars: draft.stars,
+          tema_ids: draft.temaIds,
+        })
+        setPlaylists((prev) => prev.map((pl) => pl.id === playlist.id ? saved.data : pl))
+      }
+      const res = await subtitlesApi.refreshPlaylist(playlist.id)
+      const jobId = res.data.job_id
+      playlistPollRef.current = setInterval(async () => {
+        try {
+          const j = await subtitlesApi.getYoutubeJob(jobId)
+          setPlaylistRefreshProgress({ current: j.data.progress, total: j.data.total })
+          if (j.data.status === 'done') {
+            if (playlistPollRef.current) clearInterval(playlistPollRef.current)
+            playlistPollRef.current = null
+            setRefreshingPlaylistId(null)
+            setPlaylistRefreshProgress(null)
+            load()
+            loadPlaylists()
+          } else if (j.data.status === 'error') {
+            throw new Error(j.data.error || t('import.playlistRefreshError'))
+          }
+        } catch (err: unknown) {
+          if (playlistPollRef.current) clearInterval(playlistPollRef.current)
+          playlistPollRef.current = null
+          setRefreshingPlaylistId(null)
+          setPlaylistError(err instanceof Error ? err.message : t('import.playlistRefreshError'))
+        }
+      }, 1000)
+    } catch (err: unknown) {
+      setRefreshingPlaylistId(null)
+      setPlaylistRefreshProgress(null)
+      setPlaylistError((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? t('import.playlistRefreshError'))
+    }
+  }
+
+  const handleDeletePlaylist = async (playlist: SubtitlePlaylist) => {
+    setPlaylistDeletingId(playlist.id)
+    setPlaylistError(null)
+    try {
+      await subtitlesApi.deletePlaylist(playlist.id)
+      setPlaylists((prev) => prev.filter((pl) => pl.id !== playlist.id))
+      setPlaylistDrafts((prev) => {
+        const next = { ...prev }
+        delete next[playlist.id]
+        return next
+      })
+    } catch (err: unknown) {
+      setPlaylistError((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? t('import.playlistDeleteError'))
+    } finally {
+      setPlaylistDeletingId(null)
+    }
   }
 
   // ── File selection ────────────────────────────────────────────────────────────
@@ -515,6 +705,33 @@ export default function SubtitleManager() {
           </div>
         </div>
 
+        {temas.length > 0 && (
+          <div>
+            <label className="text-xs text-slate-400 block mb-1">{t('import.subtitleThemes')}</label>
+            <div className="flex flex-wrap gap-1.5">
+              {temas.map((tm) => {
+                const active = ytTemaIds.includes(tm.id)
+                return (
+                  <button
+                    key={tm.id}
+                    type="button"
+                    onClick={() => setYtTemaIds((ids) => toggleTemaId(ids, tm.id))}
+                    disabled={ytStatus === 'running'}
+                    className={`text-xs px-2 py-1 rounded-lg border transition-colors disabled:opacity-50 ${
+                      active
+                        ? 'border-blue-500 bg-blue-500/20 text-blue-200'
+                        : 'border-slate-600 text-slate-400 hover:border-slate-400'
+                    }`}
+                  >
+                    <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: tm.color }} />
+                    {tm.nombre}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="text-xs text-slate-400 block mb-1">{t('import.ytMaxVideos')}</label>
@@ -617,6 +834,173 @@ export default function SubtitleManager() {
             </button>
           )}
         </div>
+      </div>
+
+      {/* ── Registered playlists ── */}
+      <div className="card space-y-3">
+        <div>
+          <h3 className="font-medium text-slate-200">{t('import.playlistsTitle')}</h3>
+          <p className="text-xs text-slate-400">{t('import.playlistsDesc')}</p>
+        </div>
+
+        {playlistError && <p className="text-red-400 text-xs">{playlistError}</p>}
+
+        {isLoadingPlaylists ? (
+          <p className="text-slate-500 text-sm">{t('common.loading')}</p>
+        ) : playlists.length === 0 ? (
+          <p className="text-slate-500 text-sm">{t('import.playlistsEmpty')}</p>
+        ) : (
+          <div className="space-y-3">
+            {playlists.map((pl) => {
+              const draft = playlistDrafts[pl.id]
+              if (!draft) return null
+              const isRefreshing = refreshingPlaylistId === pl.id
+              return (
+                <div key={pl.id} className="border border-slate-700 rounded-xl p-3 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm text-slate-200 truncate" title={pl.title ?? pl.playlist_id}>
+                        {pl.title || pl.playlist_id}
+                      </p>
+                      <a
+                        href={pl.source_url || `https://www.youtube.com/playlist?list=${pl.playlist_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-400 font-mono hover:text-blue-300 hover:underline"
+                      >
+                        {pl.playlist_id}
+                      </a>
+                    </div>
+                    <button
+                      onClick={() => handleDeletePlaylist(pl)}
+                      disabled={playlistDeletingId === pl.id || isRefreshing}
+                      className="text-slate-500 hover:text-red-400 transition-colors text-sm shrink-0 disabled:opacity-40"
+                      title={t('import.playlistDelete')}
+                    >
+                      🗑
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    <div className="col-span-2">
+                      <label className="text-xs text-slate-400 block mb-1">{t('import.playlistTitle')}</label>
+                      <input
+                        type="text"
+                        value={draft.title}
+                        onChange={(e) => updatePlaylistDraft(pl.id, { title: e.target.value })}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-400 block mb-1">{t('import.ytLanguage')}</label>
+                      <input
+                        type="text"
+                        value={draft.language}
+                        onChange={(e) => updatePlaylistDraft(pl.id, { language: e.target.value })}
+                        placeholder="de"
+                        className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-400 block mb-1">{t('import.ytStars')}</label>
+                      <select
+                        value={draft.stars}
+                        onChange={(e) => updatePlaylistDraft(pl.id, { stars: parseInt(e.target.value) })}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value={0}>0 ★</option>
+                        <option value={1}>1 ★</option>
+                        <option value={2}>2 ★</option>
+                        <option value={3}>3 ★</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-400 block mb-1">{t('import.ytFallback')}</label>
+                      <input
+                        type="text"
+                        value={draft.fallback}
+                        onChange={(e) => updatePlaylistDraft(pl.id, { fallback: e.target.value })}
+                        placeholder="en, es"
+                        className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-400 block mb-1">{t('import.ytMaxVideos')}</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={500}
+                        value={draft.maxVideos}
+                        onChange={(e) => updatePlaylistDraft(pl.id, { maxVideos: parseInt(e.target.value) || 1 })}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  {temas.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {temas.map((tm) => {
+                        const active = draft.temaIds.includes(tm.id)
+                        return (
+                          <button
+                            key={tm.id}
+                            type="button"
+                            onClick={() => updatePlaylistDraft(pl.id, { temaIds: toggleTemaId(draft.temaIds, tm.id) })}
+                            className={`text-xs px-2 py-1 rounded-lg border transition-colors ${
+                              active
+                                ? 'border-blue-500 bg-blue-500/20 text-blue-200'
+                                : 'border-slate-600 text-slate-400 hover:border-slate-400'
+                            }`}
+                          >
+                            <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: tm.color }} />
+                            {tm.nombre}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {isRefreshing && playlistRefreshProgress && (
+                    <div className="space-y-1">
+                      <div className="w-full bg-slate-700 rounded-full h-2">
+                        <div
+                          className="bg-red-500 h-2 rounded-full transition-all"
+                          style={{
+                            width: playlistRefreshProgress.total > 0
+                              ? `${(playlistRefreshProgress.current / playlistRefreshProgress.total) * 100}%`
+                              : '5%',
+                          }}
+                        />
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        {playlistRefreshProgress.total > 0
+                          ? t('import.ytProgress', { current: playlistRefreshProgress.current, total: playlistRefreshProgress.total })
+                          : t('import.ytExpandingSources')}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleSavePlaylist(pl)}
+                      disabled={savingPlaylistId === pl.id || isRefreshing}
+                      className="btn-secondary flex-1 text-sm disabled:opacity-40"
+                    >
+                      {savingPlaylistId === pl.id ? t('common.loading') : t('import.playlistSave')}
+                    </button>
+                    <button
+                      onClick={() => handleRefreshPlaylist(pl)}
+                      disabled={refreshingPlaylistId !== null || savingPlaylistId === pl.id}
+                      className="btn-primary flex-1 text-sm disabled:opacity-40"
+                    >
+                      {isRefreshing ? t('import.playlistRefreshing') : t('import.playlistRefresh')}
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* ── Search section ── */}
@@ -795,8 +1179,123 @@ export default function SubtitleManager() {
 
       {/* ── Subtitle file list ── */}
       <div className="card p-0 overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-700 text-xs text-slate-400 uppercase tracking-wide">
-          {t('import.subtitleList')} · {files.length}
+        <div className="px-4 py-3 border-b border-slate-700 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs text-slate-400 uppercase tracking-wide">
+              {t('import.subtitleList')} · {files.length}
+            </div>
+            {files.length > 0 && (
+              <label className="flex items-center gap-2 text-xs text-slate-400 normal-case tracking-normal">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={(e) => {
+                    setSelectedFileIds(e.target.checked ? new Set(files.map((f) => f.id)) : new Set())
+                  }}
+                  className="rounded border-slate-600 bg-slate-800"
+                />
+                {t('import.subtitleSelectAll')}
+              </label>
+            )}
+          </div>
+
+          {selectedFileIds.size > 0 && (
+            <div className="bg-slate-800/70 border border-slate-700 rounded-xl p-3 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-slate-300">
+                  {t('import.subtitleSelected', { count: selectedFileIds.size })}
+                </p>
+                <button
+                  onClick={() => setSelectedFileIds(new Set())}
+                  className="text-xs text-slate-500 hover:text-slate-300"
+                >
+                  {t('words.bulkCancel')}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <label className="space-y-1">
+                  <span className="flex items-center gap-2 text-xs text-slate-400">
+                    <input
+                      type="checkbox"
+                      checked={bulkLanguageEnabled}
+                      onChange={(e) => setBulkLanguageEnabled(e.target.checked)}
+                      className="rounded border-slate-600 bg-slate-800"
+                    />
+                    {t('import.subtitleBulkLanguage')}
+                  </span>
+                  <input
+                    type="text"
+                    value={bulkLanguage}
+                    onChange={(e) => setBulkLanguage(e.target.value)}
+                    disabled={!bulkLanguageEnabled}
+                    placeholder="de, es, en…"
+                    className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-40"
+                  />
+                </label>
+
+                <label className="space-y-1">
+                  <span className="text-xs text-slate-400">{t('import.subtitleBulkStars')}</span>
+                  <select
+                    value={bulkStars}
+                    onChange={(e) => setBulkStars(e.target.value)}
+                    className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">{t('import.subtitleNoChange')}</option>
+                    <option value={0}>0 ★</option>
+                    <option value={1}>1 ★</option>
+                    <option value={2}>2 ★</option>
+                    <option value={3}>3 ★</option>
+                  </select>
+                </label>
+
+                <div className="space-y-1">
+                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                    <input
+                      type="checkbox"
+                      checked={bulkTemasEnabled}
+                      onChange={(e) => setBulkTemasEnabled(e.target.checked)}
+                      className="rounded border-slate-600 bg-slate-800"
+                    />
+                    {t('import.subtitleBulkThemes')}
+                  </label>
+                  <div className={`flex flex-wrap gap-1.5 ${bulkTemasEnabled ? '' : 'opacity-40 pointer-events-none'}`}>
+                    {temas.map((tm) => {
+                      const active = bulkTemaIds.includes(tm.id)
+                      return (
+                        <button
+                          key={tm.id}
+                          type="button"
+                          onClick={() => setBulkTemaIds((ids) => toggleTemaId(ids, tm.id))}
+                          className={`text-xs px-2 py-1 rounded-lg border transition-colors ${
+                            active
+                              ? 'border-blue-500 bg-blue-500/20 text-blue-200'
+                              : 'border-slate-600 text-slate-400 hover:border-slate-400'
+                          }`}
+                        >
+                          <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: tm.color }} />
+                          {tm.nombre}
+                        </button>
+                      )
+                    })}
+                    {temas.length === 0 && (
+                      <span className="text-xs text-slate-500">{t('import.subtitleNoThemes')}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {bulkError && <p className="text-red-400 text-xs">{bulkError}</p>}
+
+              <button
+                onClick={handleBulkUpdate}
+                disabled={isBulkSaving || selectedFileIds.size === 0 || !hasBulkChanges}
+                className="btn-primary w-full text-sm disabled:opacity-40"
+              >
+                {isBulkSaving ? t('common.loading') : t('import.subtitleApplyBulk')}
+              </button>
+            </div>
+          )}
         </div>
 
         {isLoadingFiles ? (
@@ -832,6 +1331,13 @@ export default function SubtitleManager() {
                     </div>
                   ) : (
                     <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedFileIds.has(f.id)}
+                        onChange={() => toggleFileSelection(f.id)}
+                        className="mt-1 rounded border-slate-600 bg-slate-800 shrink-0"
+                        aria-label={t('import.subtitleSelectOne')}
+                      />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-sm text-slate-200 truncate" title={f.filename}>{f.filename}</p>
@@ -862,6 +1368,13 @@ export default function SubtitleManager() {
                           {f.language && (
                             <span className="text-xs bg-slate-700 px-1.5 py-0.5 rounded-full">{f.language}</span>
                           )}
+                          <span className="text-xs text-amber-300">{'★'.repeat(f.stars)}{f.stars === 0 ? '0 ★' : ''}</span>
+                          {f.temas.map((tm) => (
+                            <span key={tm.id} className="text-xs border border-slate-600 px-1.5 py-0.5 rounded-full text-slate-300">
+                              <span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: tm.color }} />
+                              {tm.nombre}
+                            </span>
+                          ))}
                         </div>
                       </div>
                       <button
