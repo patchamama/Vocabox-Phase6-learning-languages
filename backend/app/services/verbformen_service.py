@@ -26,6 +26,10 @@ HEADERS = {
 _INFINITIVE_MP3_RE = re.compile(
     r'href="(https://www\.verbformen\.de/konjugation/infinitiv/[^"]+\.mp3)"'
 )
+_TRANSLATION_RE = re.compile(
+    r'<dd lang="([a-z]{2,3})"[^>]*>.*?<span>([^<]+)</span>\s*</dd>',
+    re.DOTALL,
+)
 _STAMMFORMEN_RE = re.compile(
     r"Die Stammformen von „([^“]+)“ sind „([^“]+)“, „([^“]+)“ und „([^“]+)“"
 )
@@ -48,6 +52,14 @@ class VerbformenExample(TypedDict, total=False):
     traduccion: Optional[str]
 
 
+class StammformenVariant(TypedDict, total=False):
+    lemma: str
+    presente: str
+    praeteritum: str
+    perfekt: str
+    palabra_formatted: str
+
+
 class VerbformenResult(TypedDict, total=False):
     lemma: str
     palabra_formatted: str
@@ -57,6 +69,9 @@ class VerbformenResult(TypedDict, total=False):
     audio_url: Optional[str]
     examples: List[str]
     examples_full: List[VerbformenExample]
+    stammformen_options: List[StammformenVariant]
+    translations: dict
+    translation_en: Optional[str]
     source_url: str
 
 
@@ -91,9 +106,32 @@ def _extract_stammformen(html: str) -> Optional[tuple[str, str, str, str]]:
     return m.group(1), m.group(2), m.group(3), m.group(4)
 
 
+def _extract_all_stammformen(html: str) -> List[tuple[str, str, str, str]]:
+    seen: set[tuple[str, str, str, str]] = set()
+    out: List[tuple[str, str, str, str]] = []
+    for m in _STAMMFORMEN_RE.finditer(html):
+        t = (m.group(1), m.group(2), m.group(3), m.group(4))
+        if t in seen:
+            continue
+        seen.add(t)
+        out.append(t)
+    return out
+
+
 def _extract_audio_url(html: str) -> Optional[str]:
     m = _INFINITIVE_MP3_RE.search(html)
     return m.group(1) if m else None
+
+
+def _extract_translations(html: str) -> dict:
+    out: dict[str, str] = {}
+    for m in _TRANSLATION_RE.finditer(html):
+        lang = m.group(1)
+        text = _clean_text(m.group(2))
+        if not text or lang in out:
+            continue
+        out[lang] = text
+    return out
 
 
 def _extract_examples(html: str, limit: int = 12) -> List[VerbformenExample]:
@@ -129,17 +167,29 @@ def lookup(word: str, example_limit: int = 12) -> VerbformenResult:
 
     html = _fetch_html(word)
 
-    stamm = _extract_stammformen(html)
-    lemma = _extract_lemma(html) or (stamm[0] if stamm else word)
-
-    if not stamm:
+    all_stamm = _extract_all_stammformen(html)
+    if not all_stamm:
         # Page exists but isn't a verb conjugation page
         raise ValueError(f"No conjugation data for '{word}'")
 
-    _, presente, praeteritum, perfekt = stamm
+    page_lemma = _extract_lemma(html)
+    primary = all_stamm[0]
+    lemma = page_lemma or primary[0]
+    _, presente, praeteritum, perfekt = primary
     palabra_formatted = f"{lemma} | {presente} - {praeteritum} - {perfekt}"
 
+    options: List[StammformenVariant] = []
+    for v_lemma, v_pres, v_prat, v_perf in all_stamm:
+        options.append(StammformenVariant(
+            lemma=v_lemma,
+            presente=v_pres,
+            praeteritum=v_prat,
+            perfekt=v_perf,
+            palabra_formatted=f"{v_lemma} | {v_pres} - {v_prat} - {v_perf}",
+        ))
+
     examples_full = _extract_examples(html, limit=example_limit)
+    translations = _extract_translations(html)
     return VerbformenResult(
         lemma=lemma,
         palabra_formatted=palabra_formatted,
@@ -149,5 +199,8 @@ def lookup(word: str, example_limit: int = 12) -> VerbformenResult:
         audio_url=_extract_audio_url(html),
         examples=[e["texto"] for e in examples_full],
         examples_full=examples_full,
+        stammformen_options=options,
+        translations=translations,
+        translation_en=translations.get("en"),
         source_url=f"https://www.verbformen.de/?w={urllib.parse.quote(word, safe='')}",
     )

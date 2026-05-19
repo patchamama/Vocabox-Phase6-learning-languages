@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
 # deploy.sh — Build frontend and integrate it into the backend (macOS / Linux)
-# Usage: bash deploy.sh [--skip-install]
+# Usage: bash deploy.sh [--skip-install] [--clean-frontend-deps]
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -10,9 +10,13 @@ FRONTEND_DIR="$SCRIPT_DIR/frontend"
 BACKEND_DIR="$SCRIPT_DIR/backend"
 STATIC_DIR="$BACKEND_DIR/app/static"
 SKIP_INSTALL=false
+CLEAN_FRONTEND_DEPS=false
 
 for arg in "$@"; do
-  [[ "$arg" == "--skip-install" ]] && SKIP_INSTALL=true
+  case "$arg" in
+    --skip-install) SKIP_INSTALL=true ;;
+    --clean-frontend-deps) CLEAN_FRONTEND_DEPS=true ;;
+  esac
 done
 
 echo ""
@@ -26,10 +30,14 @@ cd "$FRONTEND_DIR"
 
 if [ "$SKIP_INSTALL" = false ]; then
   echo "[1/4] Installing frontend dependencies..."
-  npm install --silent
+  npm install --include=dev --silent
   echo "      Done."
 else
   echo "[1/4] Skipping npm install (--skip-install)."
+  if [ ! -x "$FRONTEND_DIR/node_modules/.bin/vite" ] || [ ! -x "$FRONTEND_DIR/node_modules/.bin/tsc" ]; then
+    echo "      ERROR: frontend dependencies are missing. Run without --skip-install once."
+    exit 1
+  fi
 fi
 
 # ── 2. Build frontend ─────────────────────────────────────────────────────────
@@ -43,10 +51,14 @@ rm -rf "$STATIC_DIR"
 cp -r "$FRONTEND_DIR/dist" "$STATIC_DIR"
 echo "      Copied → $STATIC_DIR"
 
-# ── 3.5 Clean up frontend ────────────────────────────────────────────────────
-echo "[3.5/4] Cleaning up frontend dependencies..."
-rm -rf "$FRONTEND_DIR/node_modules"
-echo "      Deleted → $FRONTEND_DIR/node_modules"
+# ── 3.5 Optional frontend cleanup ─────────────────────────────────────────────
+if [ "$CLEAN_FRONTEND_DEPS" = true ]; then
+  echo "[3.5/4] Cleaning up frontend dependencies..."
+  rm -rf "$FRONTEND_DIR/node_modules"
+  echo "      Deleted → $FRONTEND_DIR/node_modules"
+else
+  echo "[3.5/4] Keeping frontend dependencies for faster future deploys."
+fi
 
 # ── 4. Backend dependencies ───────────────────────────────────────────────────
 cd "$BACKEND_DIR"
@@ -78,6 +90,6 @@ echo ""
 echo "✓ Deploy complete."
 echo ""
 echo "  Start the server:   cd backend && bash start.sh"
-echo "  App URL:            http://localhost:9009"
+echo "  App URL:            http://localhost:9009/vocabox/"
 echo "  API docs:           http://localhost:9009/docs"
 echo ""

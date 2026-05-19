@@ -12,6 +12,7 @@ class WordExample(Base):
     texto = Column(Text, nullable=False)
     traduccion = Column(Text, nullable=True)
     source = Column(String(50), nullable=True)  # e.g. 'verbformen', 'manual'
+    audio_url = Column(String(500), nullable=True)
     orden = Column(Integer, nullable=False, default=0)
 
     word = relationship("Word", back_populates="examples")

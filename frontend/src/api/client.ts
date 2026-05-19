@@ -127,6 +127,14 @@ export interface VerbformenExample {
   traduccion: string | null
 }
 
+export interface StammformenVariant {
+  lemma: string
+  presente: string
+  praeteritum: string
+  perfekt: string
+  palabra_formatted: string
+}
+
 export interface VerbformenResult {
   lemma: string
   palabra_formatted: string
@@ -136,6 +144,9 @@ export interface VerbformenResult {
   audio_url: string | null
   examples: string[]
   examples_full: VerbformenExample[]
+  stammformen_options?: StammformenVariant[]
+  translations?: Record<string, string>
+  translation_en?: string | null
   source_url: string
 }
 
@@ -152,6 +163,7 @@ export interface WordExample {
   texto: string
   traduccion: string | null
   source: string | null
+  audio_url: string | null
   orden: number
 }
 
@@ -159,6 +171,7 @@ export interface WordExampleInput {
   texto: string
   traduccion?: string | null
   source?: string | null
+  audio_url?: string | null
   orden?: number
 }
 
@@ -280,6 +293,41 @@ export const subtitlesApi = {
     status: string; progress: number; total: number;
     refs_created: number; error: string | null
   }>(`/subtitles/jobs/${jobId}`),
+
+  youtubeImport: (req: {
+    sources: string[]
+    language: string
+    fallback_languages?: string[]
+    tema_ids?: number[]
+    stars?: number
+    max_videos?: number
+  }) => api.post<{ job_id: string }>('/subtitles/youtube-import', req),
+  getYoutubeJob: (jobId: string) =>
+    api.get<{
+      status: string
+      progress: number
+      total: number
+      result: YouTubeImportResult | null
+      error: string | null
+    }>(`/subtitles/youtube-jobs/${jobId}`),
+  deleteYoutubeJob: (jobId: string) =>
+    api.delete(`/subtitles/youtube-jobs/${jobId}`),
+}
+
+export interface YouTubeImportItem {
+  video_id: string
+  status: 'created' | 'skipped' | 'error'
+  file_id: number | null
+  filename: string | null
+  segments: number
+  error: string | null
+}
+
+export interface YouTubeImportResult {
+  items: YouTubeImportItem[]
+  created: number
+  skipped: number
+  errors: number
 }
 
 export const ollamaApi = {

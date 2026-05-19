@@ -259,7 +259,7 @@ def save_exercise(
 
 @router.get("/exercises")
 def list_exercises(
-    filter: str = Query("all", regex="^(all|private|global)$"),
+    filter: str = Query("all", pattern="^(all|private|global)$"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -277,7 +277,7 @@ def list_exercises(
 def explore_exercises(
     search: Optional[str] = Query(None),
     cefr_level: Optional[str] = Query(None),
-    filter: str = Query("global", regex="^(global|all)$"),
+    filter: str = Query("global", pattern="^(global|all)$"),
     language: str = Query("de"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

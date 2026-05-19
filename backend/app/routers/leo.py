@@ -7,6 +7,7 @@ result in each requested extra language pair and returns structured data
 (text + audio URL) without requiring user interaction.
 """
 
+import re
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -28,6 +29,35 @@ _LANG_TO_PAIR = {
     "it": "itde",
     "pt": "ptde",
 }
+
+_DE_ARTICLES = {
+    "der", "die", "das", "den", "dem", "des",
+    "ein", "eine", "einer", "einen", "einem", "eines",
+}
+_GENDER_MARKERS_RE = re.compile(r"\b(?:Adv|adv|Adj|adj|n|m|f|pl)\.", re.IGNORECASE)
+
+
+def _sanitize_de_query(word: str) -> str:
+    """
+    Reduce a German lemma to a LEO-friendly query.
+
+    Strips Pl./wiss. tails, [annotations], | verb-form |, etw./jmd. case markers
+    and leading articles. Without this, LEO would match short fragments (article,
+    separable-verb prefix) and return unrelated entries.
+    """
+    s = word.strip()
+    if " | " in s:
+        s = s.split(" | ", 1)[0]
+    s = re.sub(r"\bPl\.:.*$", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"\bwiss\.:.*$", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"\[[^\]]*\]", "", s)
+    s = re.sub(r"\|[^|]*\|?", "", s)
+    s = re.sub(r"\b(?:etw|jmd|jmdn|jmdm|jmds)\.?(?:Akk|Dat|Gen|Nom)\.?", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"\b(?:Akk|Dat|Gen|Nom|Abk)\.?", "", s, flags=re.IGNORECASE)
+    tokens = [t for t in s.split() if t.lower() not in _DE_ARTICLES]
+    tokens = [t for t in tokens if not _GENDER_MARKERS_RE.fullmatch(t)]
+    cleaned = " ".join(tokens).strip(" ,.")
+    return cleaned or word.strip()
 
 
 @router.get("/lookup")
@@ -73,7 +103,9 @@ def auto_fetch_extras(
     Never raises — returns empty list on total failure.
     """
     results: List[ExtraTranslation] = []
-    word = body.word.strip()
+    word = _sanitize_de_query(body.word)
+    if not word:
+        return results
 
     for lang in body.extra_langs:
         lp = _LANG_TO_PAIR.get(lang)

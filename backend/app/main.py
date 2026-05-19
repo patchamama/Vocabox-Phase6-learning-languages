@@ -131,11 +131,16 @@ _migrate_user_settings()
 
 
 def _migrate_word_examples() -> None:
-    """Ensure word_examples table exists (create_all handles it; safety net)."""
-    from sqlalchemy import inspect
+    """Ensure word_examples table exists and has the audio_url column."""
+    from sqlalchemy import inspect, text
     inspector = inspect(engine)
     if "word_examples" not in inspector.get_table_names():
         Base.metadata.create_all(bind=engine)
+        return
+    existing = {c["name"] for c in inspector.get_columns("word_examples")}
+    if "audio_url" not in existing:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE word_examples ADD COLUMN audio_url VARCHAR(500)"))
 
 
 _migrate_word_examples()

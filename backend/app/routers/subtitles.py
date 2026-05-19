@@ -27,6 +27,7 @@ router = APIRouter(prefix="/subtitles", tags=["subtitles"])
 
 # In-memory job store (same pattern as audio_review)
 _jobs: dict[str, dict] = {}
+_yt_jobs: dict[str, dict] = {}
 
 
 # ── Upload ─────────────────────────────────────────────────────────────────────
@@ -370,6 +371,78 @@ def search_subtitles(
         .all()
     )
     return {"results": segs, "total": len(segs)}
+
+
+# ── YouTube import — start job ─────────────────────────────────────────────────
+
+@router.post("/youtube-import", status_code=202)
+def start_youtube_import(
+    req: YouTubeImportRequest,
+    current_user=Depends(get_current_user),
+):
+    job_id = str(uuid.uuid4())
+    user_id = current_user.id
+    _yt_jobs[job_id] = {
+        "user_id": user_id,
+        "status": "pending",
+        "progress": 0,
+        "total": 0,
+        "result": None,
+        "error": None,
+    }
+
+    def _run() -> None:
+        db2 = SessionLocal()
+        try:
+            _yt_jobs[job_id]["status"] = "running"
+
+            def _progress(done: int, total: int) -> None:
+                _yt_jobs[job_id]["progress"] = done
+                _yt_jobs[job_id]["total"] = total
+
+            result = yts.import_sources(req, user_id, db2, on_progress=_progress)
+            _yt_jobs[job_id]["result"] = result.model_dump()
+            _yt_jobs[job_id]["status"] = "done"
+        except Exception as exc:  # noqa: BLE001
+            _yt_jobs[job_id]["status"] = "error"
+            _yt_jobs[job_id]["error"] = str(exc)
+        finally:
+            db2.close()
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"job_id": job_id}
+
+
+@router.get("/youtube-jobs/{job_id}")
+def get_youtube_job(
+    job_id: str,
+    current_user=Depends(get_current_user),
+):
+    job = _yt_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job["user_id"] != current_user.id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return {
+        "status":   job["status"],
+        "progress": job["progress"],
+        "total":    job["total"],
+        "result":   job["result"],
+        "error":    job["error"],
+    }
+
+
+@router.delete("/youtube-jobs/{job_id}", status_code=204)
+def delete_youtube_job(
+    job_id: str,
+    current_user=Depends(get_current_user),
+):
+    job = _yt_jobs.get(job_id)
+    if not job:
+        return
+    if job["user_id"] != current_user.id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    _yt_jobs.pop(job_id, None)
 
 
 # ── Reindex — WebSocket progress ───────────────────────────────────────────────

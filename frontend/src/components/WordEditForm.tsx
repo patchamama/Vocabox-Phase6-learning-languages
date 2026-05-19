@@ -128,15 +128,27 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
   const [vfLoading, setVfLoading] = useState(false)
   const [vfResult, setVfResult] = useState<VerbformenResult | null>(null)
   const [vfError, setVfError] = useState<string | null>(null)
-  const [vfChecks, setVfChecks] = useState<{ palabra: boolean; audio: boolean; examples: boolean[] }>({
+  const [vfChecks, setVfChecks] = useState<{
+    palabra: boolean
+    audio: boolean
+    examples: boolean[]
+    translationEn: boolean
+    translationEnAudio: boolean
+  }>({
     palabra: true,
     audio: true,
     examples: [],
+    translationEn: true,
+    translationEnAudio: true,
   })
+  const [vfVariantIdx, setVfVariantIdx] = useState(0)
+  const [vfEnAudio, setVfEnAudio] = useState<{ url: string; text: string } | null>(null)
+  const [vfEnAudioLoading, setVfEnAudioLoading] = useState(false)
+  const [vfEnAudioTried, setVfEnAudioTried] = useState(false)
   const vfRef = useRef<HTMLDivElement>(null)
 
   // Local examples editor (id < 0 means new, not yet persisted)
-  type LocalExample = { id: number; texto: string; traduccion: string | null; source: string | null }
+  type LocalExample = { id: number; texto: string; traduccion: string | null; source: string | null; audio_url: string | null }
   const [examples, setExamples] = useState<LocalExample[]>([])
   const [originalExampleIds, setOriginalExampleIds] = useState<number[]>([])
   const nextNegIdRef = useRef(-1)
@@ -158,6 +170,7 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
           texto: e.texto,
           traduccion: e.traduccion,
           source: e.source,
+          audio_url: e.audio_url,
         })))
         setOriginalExampleIds(items.map((e) => e.id))
       }).catch(() => {})
@@ -264,6 +277,7 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
             texto: ex.texto,
             traduccion: ex.traduccion,
             source: ex.source ?? 'manual',
+            audio_url: ex.audio_url,
             orden: i,
           }
           if (ex.id < 0) {
@@ -502,11 +516,16 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
     try {
       const { data } = await verbformenApi.lookup(query)
       setVfResult(data)
+      setVfVariantIdx(0)
       setVfChecks({
         palabra: true,
         audio: !!data.audio_url,
         examples: data.examples.map(() => true),
+        translationEn: !!data.translation_en,
+        translationEnAudio: true,
       })
+      setVfEnAudio(null)
+      setVfEnAudioTried(false)
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status
       setVfError(status === 404 ? t('wordEdit.vfNotFound') : t('wordEdit.vfError'))
@@ -515,14 +534,39 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
     }
   }
 
+  const handleFetchVfEnAudio = async () => {
+    if (!vfResult?.translation_en) return
+    const lemma = vfResult.lemma || form.palabra.trim().split('|')[0].trim()
+    if (!lemma) return
+    setVfEnAudioLoading(true)
+    setVfEnAudioTried(true)
+    try {
+      const { data } = await leoApi.autoFetchExtras(lemma, ['en'])
+      const en = (data as Array<{ idioma: string; texto: string; audio_url: string | null; audio_text: string | null }>)
+        .find((x) => x.idioma === 'en')
+      if (en?.audio_url) {
+        setVfEnAudio({ url: en.audio_url, text: en.audio_text ?? en.texto })
+      } else {
+        setVfEnAudio(null)
+      }
+    } catch {
+      setVfEnAudio(null)
+    } finally {
+      setVfEnAudioLoading(false)
+    }
+  }
+
   const handleApplyVerbformen = () => {
     if (!vfResult) return
+    const variant = vfResult.stammformen_options?.[vfVariantIdx]
+    const palabra = variant?.palabra_formatted ?? vfResult.palabra_formatted
     setForm((f) => ({
       ...f,
-      ...(vfChecks.palabra ? { palabra: vfResult.palabra_formatted } : {}),
+      ...(vfChecks.palabra ? { palabra } : {}),
       ...(vfChecks.audio && vfResult.audio_url ? { audio_url: vfResult.audio_url } : {}),
     }))
     const source = vfResult.examples_full ?? vfResult.examples.map((texto) => ({ texto, traduccion: null }))
+    const lemmaAudio = vfResult.audio_url ?? null
     const newExamples = source
       .filter((_, i) => vfChecks.examples[i])
       .map<LocalExample>((e) => ({
@@ -530,15 +574,38 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
         texto: e.texto,
         traduccion: e.traduccion,
         source: 'verbformen',
+        audio_url: lemmaAudio,
       }))
     if (newExamples.length > 0) {
       setExamples((prev) => [...prev, ...newExamples])
     }
-    if (!showAdvanced && (vfChecks.audio || newExamples.length > 0)) {
+    // Apply EN translation to extra translations
+    if (vfChecks.translationEn && vfResult.translation_en) {
+      const useAudio = vfChecks.translationEnAudio && vfEnAudio
+      const entry: WordTranslation = {
+        id: 0,
+        word_id: word.word_id,
+        idioma: 'en',
+        texto: vfResult.translation_en,
+        audio_url: useAudio ? vfEnAudio!.url : null,
+        audio_text: useAudio ? vfEnAudio!.text : null,
+        source: useAudio ? 'verbformen+leo' : 'verbformen',
+      }
+      setExtraTranslations((prev) => {
+        const merged = [...prev]
+        const idx = merged.findIndex((x) => x.idioma === 'en')
+        if (idx >= 0) merged[idx] = entry
+        else merged.push(entry)
+        return merged
+      })
+    }
+    if (!showAdvanced && (vfChecks.audio || newExamples.length > 0 || (vfChecks.translationEn && vfResult.translation_en))) {
       setShowAdvanced(true)
     }
     setVfResult(null)
     setVfError(null)
+    setVfEnAudio(null)
+    setVfEnAudioTried(false)
   }
 
   const handleApplyOllama = () => {
@@ -616,8 +683,8 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
           />
         </div>
 
-        {/* LEO lookup button */}
-        <div className="flex flex-col gap-1.5 shrink-0">
+        {/* LEO / Ollama / Verbformen buttons — horizontal row */}
+        <div className="flex flex-row gap-1.5 shrink-0">
         <div className="relative" ref={leoRef}>
           <button
             type="button"
@@ -867,6 +934,22 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
                       </a>
                     </div>
                     <div className="divide-y divide-slate-700/50 max-h-96 overflow-y-auto">
+                      {(vfResult.stammformen_options?.length ?? 0) > 1 && (
+                        <div className="px-3 py-2 bg-slate-900/40">
+                          <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">
+                            {t('wordEdit.vfVariantSelect')}
+                          </p>
+                          <select
+                            className="input text-xs w-full"
+                            value={vfVariantIdx}
+                            onChange={(e) => setVfVariantIdx(parseInt(e.target.value))}
+                          >
+                            {vfResult.stammformen_options!.map((v, i) => (
+                              <option key={i} value={i}>{v.palabra_formatted}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                       <label className="flex items-start gap-2.5 px-3 py-2.5 hover:bg-slate-700/40 cursor-pointer">
                         <input
                           type="checkbox"
@@ -876,7 +959,9 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
                         />
                         <div className="min-w-0">
                           <p className="text-xs text-slate-400 uppercase tracking-wide mb-0.5">{t('wordEdit.vfFieldPalabra')}</p>
-                          <p className="text-sm text-slate-100 font-mono break-words">{vfResult.palabra_formatted}</p>
+                          <p className="text-sm text-slate-100 font-mono break-words">
+                            {vfResult.stammformen_options?.[vfVariantIdx]?.palabra_formatted ?? vfResult.palabra_formatted}
+                          </p>
                         </div>
                       </label>
                       {vfResult.audio_url && (
@@ -891,7 +976,7 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
                             <span className="text-xs text-slate-400 uppercase tracking-wide">{t('wordEdit.vfFieldAudio')}</span>
                             <button
                               type="button"
-                              onClick={(e) => { e.preventDefault(); playAudio(new Audio(vfResult.audio_url!)) }}
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); playAudio(new Audio(vfResult.audio_url!)) }}
                               className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-0.5 rounded transition-colors"
                             >
                               ▶
@@ -899,6 +984,66 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
                             <span className="text-[10px] text-slate-500 truncate">{vfResult.audio_url}</span>
                           </div>
                         </label>
+                      )}
+                      {vfResult.translation_en && (
+                        <div className="px-3 py-2.5 bg-slate-900/30 space-y-1.5">
+                          <label className="flex items-start gap-2.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={vfChecks.translationEn}
+                              onChange={(e) => setVfChecks((c) => ({ ...c, translationEn: e.target.checked }))}
+                              className="mt-0.5 shrink-0 accent-amber-500"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs text-slate-400 uppercase tracking-wide mb-0.5 flex items-center gap-1.5">
+                                <span className="text-xs font-mono bg-slate-700 text-slate-300 rounded px-1.5 py-0.5 uppercase">EN</span>
+                                {t('wordEdit.vfFieldTranslationEn')}
+                              </p>
+                              <p className="text-sm text-slate-100">{vfResult.translation_en}</p>
+                            </div>
+                          </label>
+                          {vfChecks.translationEn && (
+                            <div className="pl-6 flex items-center gap-2 flex-wrap">
+                              {!vfEnAudioTried && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleFetchVfEnAudio() }}
+                                  disabled={vfEnAudioLoading}
+                                  className="text-[11px] bg-blue-900/40 hover:bg-blue-700 text-blue-300 hover:text-white px-2 py-0.5 rounded transition-colors disabled:opacity-40"
+                                >
+                                  {vfEnAudioLoading ? '⟳ ' + t('common.loading') : '🔊 ' + t('wordEdit.vfFetchEnAudio')}
+                                </button>
+                              )}
+                              {vfEnAudioTried && vfEnAudioLoading && (
+                                <span className="text-[11px] text-slate-400 animate-pulse">⟳ {t('common.loading')}</span>
+                              )}
+                              {vfEnAudioTried && !vfEnAudioLoading && !vfEnAudio && (
+                                <span className="text-[11px] text-slate-500 italic">{t('wordEdit.vfEnAudioNotFound')}</span>
+                              )}
+                              {vfEnAudio && (
+                                <>
+                                  <label className="flex items-center gap-1.5 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={vfChecks.translationEnAudio}
+                                      onChange={(e) => setVfChecks((c) => ({ ...c, translationEnAudio: e.target.checked }))}
+                                      className="shrink-0 accent-amber-500"
+                                    />
+                                    <span className="text-[11px] text-slate-300">{t('wordEdit.vfIncludeEnAudio')}</span>
+                                  </label>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); playAudio(new Audio(vfEnAudio.url)) }}
+                                    className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-0.5 rounded transition-colors"
+                                  >
+                                    ▶
+                                  </button>
+                                  <span className="text-[10px] text-slate-500 truncate max-w-[150px]">{vfEnAudio.url}</span>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       )}
                       {vfResult.examples.length > 0 && (
                         <div className="px-3 py-2">
@@ -1134,7 +1279,7 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
                   type="button"
                   onClick={() => setExamples((prev) => [
                     ...prev,
-                    { id: nextNegIdRef.current--, texto: '', traduccion: null, source: 'manual' },
+                    { id: nextNegIdRef.current--, texto: '', traduccion: null, source: 'manual', audio_url: null },
                   ])}
                   className="text-xs text-blue-400 hover:text-blue-300"
                 >
@@ -1166,6 +1311,27 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
                         setExamples((prev) => prev.map((x) => x.id === ex.id ? { ...x, traduccion: e.target.value || null } : x))
                       }
                     />
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        className="input text-xs flex-1 min-w-0"
+                        placeholder={t('wordEdit.exampleAudioPlaceholder')}
+                        value={ex.audio_url ?? ''}
+                        onChange={(e) =>
+                          setExamples((prev) => prev.map((x) => x.id === ex.id ? { ...x, audio_url: e.target.value || null } : x))
+                        }
+                      />
+                      {ex.audio_url && (
+                        <button
+                          type="button"
+                          onClick={() => playAudio(new Audio(ex.audio_url!))}
+                          className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1 rounded transition-colors shrink-0"
+                          title={t('wordEdit.examplePlayAudio')}
+                        >
+                          ▶
+                        </button>
+                      )}
+                    </div>
                   </div>
                   {ex.source && (
                     <span className="text-[10px] font-mono bg-slate-700 text-slate-400 rounded px-1.5 py-0.5 uppercase mt-1.5 shrink-0">

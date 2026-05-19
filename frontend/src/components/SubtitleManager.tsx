@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import api, { subtitlesApi } from '../api/client'
+import type { YouTubeImportResult } from '../api/client'
 import VideoRefsModal from './VideoRefsModal'
 import { useSettingsStore } from '../stores/settingsStore'
 import type { SubtitleFile, WordVideoRef } from '../types'
@@ -54,6 +55,19 @@ export default function SubtitleManager() {
   const wsRef      = useRef<WebSocket | null>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // YouTube import
+  const [ytSources, setYtSources] = useState('')
+  const [ytLanguage, setYtLanguage] = useState('de')
+  const [ytFallback, setYtFallback] = useState('en')
+  const [ytMaxVideos, setYtMaxVideos] = useState(20)
+  const [ytStars, setYtStars] = useState(0)
+  const [ytJobId, setYtJobId] = useState<string | null>(null)
+  const [ytStatus, setYtStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [ytProgress, setYtProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 })
+  const [ytResult, setYtResult] = useState<YouTubeImportResult | null>(null)
+  const [ytError, setYtError] = useState<string | null>(null)
+  const ytPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   // Search
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<WordVideoRef[] | null>(null)
@@ -87,8 +101,79 @@ export default function SubtitleManager() {
     return () => {
       wsRef.current?.close()
       if (pollingRef.current) clearInterval(pollingRef.current)
+      if (ytPollRef.current) clearInterval(ytPollRef.current)
     }
   }, [load])
+
+  // ── YouTube import ───────────────────────────────────────────────────────────
+  const handleYoutubeImport = async () => {
+    const sources = ytSources
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (sources.length === 0) return
+    const fallback_languages = ytFallback
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    setYtStatus('running')
+    setYtProgress({ current: 0, total: 0 })
+    setYtResult(null)
+    setYtError(null)
+    try {
+      const res = await subtitlesApi.youtubeImport({
+        sources,
+        language: ytLanguage.trim() || 'de',
+        fallback_languages,
+        max_videos: Math.max(1, Math.min(500, ytMaxVideos)),
+        stars: ytStars,
+      })
+      const jobId = res.data.job_id
+      setYtJobId(jobId)
+      ytPollRef.current = setInterval(async () => {
+        try {
+          const j = await subtitlesApi.getYoutubeJob(jobId)
+          setYtProgress({ current: j.data.progress, total: j.data.total })
+          if (j.data.status === 'done') {
+            setYtResult(j.data.result)
+            setYtStatus('done')
+            if (ytPollRef.current) clearInterval(ytPollRef.current)
+            ytPollRef.current = null
+            load()
+          } else if (j.data.status === 'error') {
+            setYtError(j.data.error || 'Error')
+            setYtStatus('error')
+            if (ytPollRef.current) clearInterval(ytPollRef.current)
+            ytPollRef.current = null
+          }
+        } catch {
+          setYtError(t('import.ytError'))
+          setYtStatus('error')
+          if (ytPollRef.current) clearInterval(ytPollRef.current)
+          ytPollRef.current = null
+        }
+      }, 1000)
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        ?? t('import.ytError')
+      setYtError(msg)
+      setYtStatus('error')
+    }
+  }
+
+  const handleYoutubeReset = () => {
+    if (ytJobId) {
+      subtitlesApi.deleteYoutubeJob(ytJobId).catch(() => {})
+    }
+    if (ytPollRef.current) clearInterval(ytPollRef.current)
+    ytPollRef.current = null
+    setYtJobId(null)
+    setYtStatus('idle')
+    setYtProgress({ current: 0, total: 0 })
+    setYtResult(null)
+    setYtError(null)
+  }
 
   // ── File selection ────────────────────────────────────────────────────────────
   const handleFilesSelected = (fileList: FileList | null) => {
@@ -385,6 +470,153 @@ export default function SubtitleManager() {
               ? t('import.subtitleUploadN', { count: uploadFiles.length })
               : t('import.subtitleUpload')}
         </button>
+      </div>
+
+      {/* ── YouTube import section ── */}
+      <div className="card space-y-3">
+        <h3 className="font-medium text-slate-200">{t('import.ytImportTitle')}</h3>
+        <p className="text-xs text-slate-400">{t('import.ytImportDesc')}</p>
+
+        <div>
+          <label className="text-xs text-slate-400 block mb-1">{t('import.ytSources')}</label>
+          <textarea
+            value={ytSources}
+            onChange={(e) => setYtSources(e.target.value)}
+            placeholder={t('import.ytSourcesPlaceholder')}
+            rows={5}
+            disabled={ytStatus === 'running'}
+            className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm font-mono placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50"
+          />
+          <p className="text-xs text-slate-500 mt-0.5">{t('import.ytSourcesHint')}</p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs text-slate-400 block mb-1">{t('import.ytLanguage')}</label>
+            <input
+              type="text"
+              value={ytLanguage}
+              onChange={(e) => setYtLanguage(e.target.value)}
+              placeholder="de"
+              disabled={ytStatus === 'running'}
+              className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 block mb-1">{t('import.ytFallback')}</label>
+            <input
+              type="text"
+              value={ytFallback}
+              onChange={(e) => setYtFallback(e.target.value)}
+              placeholder="en, es"
+              disabled={ytStatus === 'running'}
+              className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs text-slate-400 block mb-1">{t('import.ytMaxVideos')}</label>
+            <input
+              type="number"
+              min={1}
+              max={500}
+              value={ytMaxVideos}
+              onChange={(e) => setYtMaxVideos(parseInt(e.target.value) || 20)}
+              disabled={ytStatus === 'running'}
+              className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 block mb-1">{t('import.ytStars')}</label>
+            <select
+              value={ytStars}
+              onChange={(e) => setYtStars(parseInt(e.target.value))}
+              disabled={ytStatus === 'running'}
+              className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50"
+            >
+              <option value={0}>0 ★</option>
+              <option value={1}>1 ★</option>
+              <option value={2}>2 ★</option>
+              <option value={3}>3 ★</option>
+            </select>
+          </div>
+        </div>
+
+        {ytStatus === 'running' && (
+          <div className="space-y-1">
+            <div className="w-full bg-slate-700 rounded-full h-2">
+              <div
+                className="bg-red-500 h-2 rounded-full transition-all"
+                style={{
+                  width: ytProgress.total > 0
+                    ? `${(ytProgress.current / ytProgress.total) * 100}%`
+                    : '5%',
+                }}
+              />
+            </div>
+            <p className="text-xs text-slate-400">
+              {ytProgress.total > 0
+                ? t('import.ytProgress', { current: ytProgress.current, total: ytProgress.total })
+                : t('import.ytExpandingSources')}
+            </p>
+          </div>
+        )}
+
+        {ytError && <p className="text-red-400 text-xs">{ytError}</p>}
+
+        {ytResult && (
+          <div className="space-y-1 max-h-64 overflow-y-auto bg-slate-800/50 rounded-xl p-2">
+            <p className="text-xs text-slate-300 font-medium">
+              {t('import.ytResultSummary', {
+                created: ytResult.created,
+                skipped: ytResult.skipped,
+                errors: ytResult.errors,
+              })}
+            </p>
+            {ytResult.items.map((it, i) => (
+              <div key={i} className="flex items-start gap-2 text-xs">
+                <span
+                  className={`shrink-0 font-mono px-1.5 py-0.5 rounded uppercase ${
+                    it.status === 'created'
+                      ? 'bg-green-900/50 text-green-300'
+                      : it.status === 'skipped'
+                        ? 'bg-amber-900/50 text-amber-300'
+                        : 'bg-red-900/50 text-red-300'
+                  }`}
+                >
+                  {it.status}
+                </span>
+                <span className="font-mono text-slate-400">{it.video_id}</span>
+                {it.status === 'created' && (
+                  <span className="text-slate-500">· {it.segments} {t('import.ytSegments')}</span>
+                )}
+                {it.error && it.status !== 'skipped' && (
+                  <span className="text-red-400 truncate">· {it.error}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <button
+            onClick={handleYoutubeImport}
+            disabled={ytStatus === 'running' || ytSources.trim().length === 0}
+            className="btn-primary flex-1"
+          >
+            {ytStatus === 'running' ? t('import.ytImporting') : t('import.ytStart')}
+          </button>
+          {(ytStatus === 'done' || ytStatus === 'error') && (
+            <button
+              onClick={handleYoutubeReset}
+              className="btn-secondary"
+            >
+              {t('import.ytReset')}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Search section ── */}

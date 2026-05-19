@@ -1,37 +1,333 @@
-"""YouTube subtitle import service — WIP scaffold.
+"""YouTube subtitle import service.
 
-Endpoint + schemas exist in routers/subtitles.py and schemas/subtitle.py
-(YouTubeImportRequest/Item/Result). This module will house the actual
-yt-dlp + transcript fetching pipeline that turns a list of video/playlist
-sources into SubtitleFile rows.
-
-Not implemented yet. Importing this module is a no-op so the router can
-keep its `from ..services import youtube_subtitle_service as yts` line
-without breaking at startup.
+Pipeline:
+- parse_source: detect video ID / playlist ID from raw URL or ID
+- list_playlist_videos: yt-dlp flat-playlist extraction
+- fetch_transcript: youtube-transcript-api with language preference + fallbacks
+- import_sources: orchestrator, persists SubtitleFile + SubtitleSegment rows
 """
 
 from __future__ import annotations
 
-from typing import List
+import re
+import urllib.parse
+from typing import Callable, List, Optional, Tuple
 
-from ..schemas.subtitle import YouTubeImportItem, YouTubeImportRequest, YouTubeImportResult
+from sqlalchemy.orm import Session
+
+from ..models.subtitle import SubtitleFile, SubtitleSegment
+from ..models.tema import Tema
+from ..schemas.subtitle import (
+    YouTubeImportItem,
+    YouTubeImportRequest,
+    YouTubeImportResult,
+)
+
+_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+_PLAYLIST_ID_RE = re.compile(r"^(PL|UU|FL|RD|OLAK5uy_)[A-Za-z0-9_-]{10,}$")
 
 
 class NotImplementedYet(RuntimeError):
     pass
 
 
-def import_sources(_req: YouTubeImportRequest, _user_id: int) -> YouTubeImportResult:
-    """Placeholder for the youtube import pipeline.
+def parse_source(src: str) -> Optional[Tuple[str, str]]:
+    """Return ('video'|'playlist', id) or None if unrecognised."""
+    s = (src or "").strip()
+    if not s:
+        return None
+    if _VIDEO_ID_RE.match(s):
+        return ("video", s)
+    if _PLAYLIST_ID_RE.match(s):
+        return ("playlist", s)
+    try:
+        u = urllib.parse.urlparse(s)
+    except Exception:
+        return None
+    if not u.netloc:
+        return None
+    qs = urllib.parse.parse_qs(u.query)
+    if "list" in qs and qs["list"]:
+        return ("playlist", qs["list"][0])
+    if "v" in qs and qs["v"]:
+        vid = qs["v"][0]
+        if _VIDEO_ID_RE.match(vid):
+            return ("video", vid)
+    if u.netloc.endswith("youtu.be") and u.path:
+        vid = u.path.lstrip("/").split("/")[0]
+        if _VIDEO_ID_RE.match(vid):
+            return ("video", vid)
+    parts = [p for p in u.path.split("/") if p]
+    if len(parts) >= 2 and parts[0] in ("shorts", "embed", "v"):
+        if _VIDEO_ID_RE.match(parts[1]):
+            return ("video", parts[1])
+    return None
 
-    Raises NotImplementedYet until the yt-dlp + transcript fetcher lands.
+
+def list_playlist_videos(playlist_id: str, max_videos: int) -> List[str]:
+    """Return list of video IDs for a playlist, capped at max_videos."""
+    import yt_dlp  # imported lazily so tests not requiring yt-dlp still run
+
+    opts = {
+        "extract_flat": True,
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "playlistend": max_videos,
+    }
+    url = f"https://www.youtube.com/playlist?list={playlist_id}"
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+    entries = (info or {}).get("entries") or []
+    out: List[str] = []
+    for e in entries:
+        vid = (e or {}).get("id") or (e or {}).get("url")
+        if isinstance(vid, str) and _VIDEO_ID_RE.match(vid):
+            out.append(vid)
+        if len(out) >= max_videos:
+            break
+    return out
+
+
+def fetch_transcript(
+    video_id: str,
+    language: str,
+    fallback_languages: List[str],
+) -> Tuple[Optional[list], Optional[str]]:
+    """Return (snippets, used_lang) or (None, None) if no transcript available.
+
+    snippets is an iterable of FetchedTranscriptSnippet (attrs: text, start, duration).
     """
-    raise NotImplementedYet("youtube_subtitle_service.import_sources is not implemented yet")
+    from youtube_transcript_api import YouTubeTranscriptApi
+    from youtube_transcript_api._errors import (
+        NoTranscriptFound,
+        TranscriptsDisabled,
+        VideoUnavailable,
+    )
+
+    langs: List[str] = [language] + [l for l in fallback_languages if l and l != language]
+    api = YouTubeTranscriptApi()
+    try:
+        tl = api.list(video_id)
+    except (TranscriptsDisabled, VideoUnavailable):
+        return (None, None)
+    except Exception:
+        return (None, None)
+
+    # Prefer manually-created
+    for lang in langs:
+        try:
+            t = tl.find_manually_created_transcript([lang])
+            fetched = t.fetch()
+            return (list(fetched), t.language_code)
+        except NoTranscriptFound:
+            continue
+        except Exception:
+            continue
+    # Fallback to auto-generated
+    for lang in langs:
+        try:
+            t = tl.find_generated_transcript([lang])
+            fetched = t.fetch()
+            return (list(fetched), t.language_code)
+        except NoTranscriptFound:
+            continue
+        except Exception:
+            continue
+    return (None, None)
 
 
-__all__: List[str] = [
+def _rows_to_segments(rows: list) -> List[dict]:
+    """Convert FetchedTranscriptSnippet items (or dict rows) to segment payloads."""
+    out: List[dict] = []
+    for r in rows:
+        if isinstance(r, dict):
+            start_val = r.get("start", 0)
+            dur_val = r.get("duration", 0)
+            text_val = r.get("text") or ""
+        else:
+            start_val = getattr(r, "start", 0)
+            dur_val = getattr(r, "duration", 0)
+            text_val = getattr(r, "text", "") or ""
+        try:
+            start = float(start_val or 0)
+            dur = float(dur_val or 0)
+        except (TypeError, ValueError):
+            continue
+        text = (text_val or "").strip()
+        if not text:
+            continue
+        out.append({
+            "start_ms": int(start * 1000),
+            "end_ms": int((start + dur) * 1000),
+            "text": text,
+            "text_lower": text.lower(),
+        })
+    return out
+
+
+def _expand_sources(
+    sources: List[str],
+    max_videos: int,
+) -> Tuple[List[str], List[YouTubeImportItem]]:
+    video_ids: List[str] = []
+    seen: set[str] = set()
+    errors: List[YouTubeImportItem] = []
+
+    for raw in sources:
+        if len(video_ids) >= max_videos:
+            break
+        parsed = parse_source(raw)
+        if not parsed:
+            errors.append(YouTubeImportItem(
+                video_id=(raw or "")[:32],
+                status="error",
+                error="Invalid source",
+            ))
+            continue
+        kind, ident = parsed
+        if kind == "video":
+            if ident not in seen:
+                seen.add(ident)
+                video_ids.append(ident)
+        else:
+            remaining = max_videos - len(video_ids)
+            try:
+                pl_ids = list_playlist_videos(ident, remaining)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(YouTubeImportItem(
+                    video_id=ident,
+                    status="error",
+                    error=f"Playlist error: {exc}",
+                ))
+                continue
+            for v in pl_ids:
+                if v in seen:
+                    continue
+                seen.add(v)
+                video_ids.append(v)
+                if len(video_ids) >= max_videos:
+                    break
+    return video_ids[:max_videos], errors
+
+
+def import_sources(
+    req: YouTubeImportRequest,
+    user_id: int,
+    db: Session,
+    on_progress: Optional[Callable[[int, int], None]] = None,
+) -> YouTubeImportResult:
+    items: List[YouTubeImportItem] = []
+    video_ids, parse_errors = _expand_sources(req.sources, req.max_videos)
+    items.extend(parse_errors)
+
+    total = len(video_ids)
+    if on_progress:
+        on_progress(0, total)
+
+    temas: List[Tema] = []
+    if req.tema_ids:
+        temas = db.query(Tema).filter(Tema.id.in_(req.tema_ids)).all()
+    stars = max(0, min(3, req.stars))
+
+    for idx, vid in enumerate(video_ids):
+        existing = (
+            db.query(SubtitleFile)
+            .filter(
+                SubtitleFile.user_id == user_id,
+                SubtitleFile.youtube_id == vid,
+            )
+            .first()
+        )
+        if existing:
+            items.append(YouTubeImportItem(
+                video_id=vid,
+                status="skipped",
+                file_id=existing.id,
+                filename=existing.filename,
+                segments=existing.total_segments,
+                error="Already imported",
+            ))
+            if on_progress:
+                on_progress(idx + 1, total)
+            continue
+
+        try:
+            rows, used_lang = fetch_transcript(vid, req.language, req.fallback_languages)
+            if not rows:
+                items.append(YouTubeImportItem(
+                    video_id=vid,
+                    status="error",
+                    error="No transcript available",
+                ))
+                if on_progress:
+                    on_progress(idx + 1, total)
+                continue
+            segs = _rows_to_segments(rows)
+            if not segs:
+                items.append(YouTubeImportItem(
+                    video_id=vid,
+                    status="error",
+                    error="Empty transcript",
+                ))
+                if on_progress:
+                    on_progress(idx + 1, total)
+                continue
+
+            filename = f"{vid}.{used_lang or req.language}.vtt"
+            sub = SubtitleFile(
+                user_id=user_id,
+                filename=filename,
+                youtube_id=vid,
+                language=used_lang or req.language,
+                total_segments=len(segs),
+                stars=stars,
+            )
+            if temas:
+                sub.temas = list(temas)
+            db.add(sub)
+            db.flush()
+
+            db.bulk_insert_mappings(
+                SubtitleSegment,
+                [{"file_id": sub.id, **s} for s in segs],
+            )
+            db.commit()
+
+            items.append(YouTubeImportItem(
+                video_id=vid,
+                status="created",
+                file_id=sub.id,
+                filename=sub.filename,
+                segments=len(segs),
+            ))
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            items.append(YouTubeImportItem(
+                video_id=vid,
+                status="error",
+                error=str(exc)[:200],
+            ))
+        if on_progress:
+            on_progress(idx + 1, total)
+
+    created = sum(1 for i in items if i.status == "created")
+    skipped = sum(1 for i in items if i.status == "skipped")
+    errors = sum(1 for i in items if i.status == "error")
+    return YouTubeImportResult(
+        items=items,
+        created=created,
+        skipped=skipped,
+        errors=errors,
+    )
+
+
+__all__ = [
     "NotImplementedYet",
     "import_sources",
+    "parse_source",
+    "list_playlist_videos",
+    "fetch_transcript",
     "YouTubeImportItem",
     "YouTubeImportRequest",
     "YouTubeImportResult",

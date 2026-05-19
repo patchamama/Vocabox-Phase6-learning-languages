@@ -38,6 +38,7 @@ class WordExampleBase(BaseModel):
     texto: str
     traduccion: Optional[str] = None
     source: Optional[str] = None
+    audio_url: Optional[str] = None
     orden: int = 0
 
 
