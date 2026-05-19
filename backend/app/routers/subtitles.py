@@ -369,6 +369,9 @@ def refresh_playlist(
         "status": "pending",
         "progress": 0,
         "total": 0,
+        "created": 0,
+        "skipped": 0,
+        "errors": 0,
         "result": None,
         "error": None,
     }
@@ -382,7 +385,12 @@ def refresh_playlist(
                 _yt_jobs[job_id]["progress"] = done
                 _yt_jobs[job_id]["total"] = total
 
-            result = yts.import_sources(req, user_id, db2, on_progress=_progress)
+            def _item(it) -> None:
+                key = {"created": "created", "skipped": "skipped", "error": "errors"}.get(it.status)
+                if key:
+                    _yt_jobs[job_id][key] = _yt_jobs[job_id].get(key, 0) + 1
+
+            result = yts.import_sources(req, user_id, db2, on_progress=_progress, on_item=_item)
             _yt_jobs[job_id]["result"] = result.model_dump()
             _yt_jobs[job_id]["status"] = "done"
         except Exception as exc:  # noqa: BLE001
@@ -642,6 +650,9 @@ def start_youtube_import(
         "status": "pending",
         "progress": 0,
         "total": 0,
+        "created": 0,
+        "skipped": 0,
+        "errors": 0,
         "result": None,
         "error": None,
     }
@@ -655,7 +666,12 @@ def start_youtube_import(
                 _yt_jobs[job_id]["progress"] = done
                 _yt_jobs[job_id]["total"] = total
 
-            result = yts.import_sources(req, user_id, db2, on_progress=_progress)
+            def _item(it) -> None:
+                key = {"created": "created", "skipped": "skipped", "error": "errors"}.get(it.status)
+                if key:
+                    _yt_jobs[job_id][key] = _yt_jobs[job_id].get(key, 0) + 1
+
+            result = yts.import_sources(req, user_id, db2, on_progress=_progress, on_item=_item)
             if req.create_internal_playlist:
                 _create_internal_playlist_for_result(db2, user_id, req, result)
             _yt_jobs[job_id]["result"] = result.model_dump()
@@ -684,6 +700,9 @@ def get_youtube_job(
         "status":   job["status"],
         "progress": job["progress"],
         "total":    job["total"],
+        "created":  job.get("created", 0),
+        "skipped":  job.get("skipped", 0),
+        "errors":   job.get("errors", 0),
         "result":   job["result"],
         "error":    job["error"],
     }

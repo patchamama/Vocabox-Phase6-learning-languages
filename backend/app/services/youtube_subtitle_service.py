@@ -533,12 +533,23 @@ def import_sources(
     user_id: int,
     db: Session,
     on_progress: Optional[Callable[[int, int], None]] = None,
+    on_item: Optional[Callable[[YouTubeImportItem], None]] = None,
 ) -> YouTubeImportResult:
     from youtube_transcript_api._errors import IpBlocked
 
     items: List[YouTubeImportItem] = []
+
+    def _push(it: YouTubeImportItem) -> None:
+        items.append(it)
+        if on_item:
+            try:
+                on_item(it)
+            except Exception:  # noqa: BLE001
+                logger.exception("on_item callback failed")
+
     video_ids, known_titles, parse_errors = _expand_sources(req.sources, req.max_videos)
-    items.extend(parse_errors)
+    for pe in parse_errors:
+        _push(pe)
 
     total = len(video_ids)
     if on_progress:
@@ -563,7 +574,7 @@ def import_sources(
             .first()
         )
         if existing:
-            items.append(YouTubeImportItem(
+            _push(YouTubeImportItem(
                 video_id=vid,
                 status="skipped",
                 file_id=existing.id,
@@ -579,7 +590,7 @@ def import_sources(
             try:
                 rows, used_lang = fetch_transcript(vid, req.language, req.fallback_languages)
             except TranscriptFetchError as fetch_exc:
-                items.append(YouTubeImportItem(
+                _push(YouTubeImportItem(
                     video_id=vid,
                     status="error",
                     error=str(fetch_exc)[:200],
@@ -588,7 +599,7 @@ def import_sources(
                     on_progress(idx + 1, total)
                 continue
             if not rows:
-                items.append(YouTubeImportItem(
+                _push(YouTubeImportItem(
                     video_id=vid,
                     status="error",
                     error="No transcript available",
@@ -598,7 +609,7 @@ def import_sources(
                 continue
             segs = _rows_to_segments(rows)
             if not segs:
-                items.append(YouTubeImportItem(
+                _push(YouTubeImportItem(
                     video_id=vid,
                     status="error",
                     error="Empty transcript",
@@ -629,7 +640,7 @@ def import_sources(
             )
             db.commit()
 
-            items.append(YouTubeImportItem(
+            _push(YouTubeImportItem(
                 video_id=vid,
                 status="created",
                 file_id=sub.id,
@@ -639,16 +650,16 @@ def import_sources(
         except IpBlocked as exc:
             db.rollback()
             ip_msg = "IP bloqueada por YouTube — configurá YOUTUBE_PROXY_URL en el servidor"
-            items.append(YouTubeImportItem(video_id=vid, status="error", error=ip_msg))
+            _push(YouTubeImportItem(video_id=vid, status="error", error=ip_msg))
             # No point retrying remaining videos — bail out and mark all as failed
             for remaining in video_ids[idx + 1:]:
-                items.append(YouTubeImportItem(video_id=remaining, status="error", error=ip_msg))
+                _push(YouTubeImportItem(video_id=remaining, status="error", error=ip_msg))
             if on_progress:
                 on_progress(total, total)
             break
         except Exception as exc:  # noqa: BLE001
             db.rollback()
-            items.append(YouTubeImportItem(
+            _push(YouTubeImportItem(
                 video_id=vid,
                 status="error",
                 error=str(exc)[:200],

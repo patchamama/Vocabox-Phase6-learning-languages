@@ -328,6 +328,9 @@ export const subtitlesApi = {
       status: string
       progress: number
       total: number
+      created: number
+      skipped: number
+      errors: number
       result: YouTubeImportResult | null
       error: string | null
     }>(`/subtitles/youtube-jobs/${jobId}`),

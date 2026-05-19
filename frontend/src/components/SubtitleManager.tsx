@@ -30,6 +30,22 @@ interface PlaylistDraft {
   temaIds: number[]
 }
 
+interface YouTubeJobProgress {
+  current: number
+  total: number
+  created: number
+  skipped: number
+  errors: number
+}
+
+const emptyYouTubeJobProgress: YouTubeJobProgress = {
+  current: 0,
+  total: 0,
+  created: 0,
+  skipped: 0,
+  errors: 0,
+}
+
 export default function SubtitleManager() {
   const { t } = useTranslation()
   const { maxRefsPerWord, subtitleIndexPalabra, subtitleIndexAudioText, subtitleIndexSignificado } = useSettingsStore()
@@ -86,7 +102,7 @@ export default function SubtitleManager() {
   const [ytInternalPlaylistTitle, setYtInternalPlaylistTitle] = useState('')
   const [ytJobId, setYtJobId] = useState<string | null>(null)
   const [ytStatus, setYtStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
-  const [ytProgress, setYtProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 })
+  const [ytProgress, setYtProgress] = useState<YouTubeJobProgress>(emptyYouTubeJobProgress)
   const [ytResult, setYtResult] = useState<YouTubeImportResult | null>(null)
   const [ytError, setYtError] = useState<string | null>(null)
   const ytPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -106,7 +122,7 @@ export default function SubtitleManager() {
   const [refreshingPlaylistId, setRefreshingPlaylistId] = useState<number | null>(null)
   const [playlistDeletingId, setPlaylistDeletingId] = useState<number | null>(null)
   const [playlistError, setPlaylistError] = useState<string | null>(null)
-  const [playlistRefreshProgress, setPlaylistRefreshProgress] = useState<{ current: number; total: number } | null>(null)
+  const [playlistRefreshProgress, setPlaylistRefreshProgress] = useState<YouTubeJobProgress | null>(null)
   const playlistPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // List filters
@@ -115,6 +131,81 @@ export default function SubtitleManager() {
   const [filterTemaId, setFilterTemaId] = useState('')
   const [filterStars, setFilterStars] = useState('')
   const [filterPlaylistId, setFilterPlaylistId] = useState('')
+
+  const makeYouTubeProgress = (data: {
+    progress: number
+    total: number
+    created: number
+    skipped: number
+    errors: number
+  }): YouTubeJobProgress => ({
+    current: data.progress,
+    total: data.total,
+    created: data.created,
+    skipped: data.skipped,
+    errors: data.errors,
+  })
+
+  const renderYouTubeProgress = (progress: YouTubeJobProgress) => {
+    const processed = progress.created + progress.skipped + progress.errors
+    const barTotal = Math.max(progress.total, processed, 1)
+    const createdPct = (progress.created / barTotal) * 100
+    const skippedPct = (progress.skipped / barTotal) * 100
+    const errorPct = (progress.errors / barTotal) * 100
+
+    return (
+      <div className="space-y-2">
+        <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden flex">
+          {progress.total > 0 || processed > 0 ? (
+            <>
+              <div
+                className="bg-emerald-500 h-2 transition-all"
+                style={{ width: `${createdPct}%` }}
+                title={`OK: ${progress.created}`}
+              />
+              <div
+                className="bg-slate-500 h-2 transition-all"
+                style={{ width: `${skippedPct}%` }}
+                title={`Skipped: ${progress.skipped}`}
+              />
+              <div
+                className="bg-red-500 h-2 transition-all"
+                style={{ width: `${errorPct}%` }}
+                title={`Errors: ${progress.errors}`}
+              />
+            </>
+          ) : (
+            <div className="bg-slate-500 h-2 animate-pulse" style={{ width: '5%' }} />
+          )}
+        </div>
+        <p className="text-xs text-slate-400">
+          {progress.total > 0
+            ? t('import.ytProgressDetailed', {
+                current: progress.current,
+                total: progress.total,
+                ok: progress.created,
+                skipped: progress.skipped,
+                errors: progress.errors,
+                defaultValue: '{{current}}/{{total}} — OK {{ok}} · skip {{skipped}} · err {{errors}}',
+              })
+            : t('import.ytExpandingSources')}
+        </p>
+        {(progress.total > 0 || processed > 0) && (
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+            <span className="text-emerald-400">
+              {t('import.ytProgressSuccess', { count: progress.created, defaultValue: 'Subtítulos OK: {{count}}' })}
+            </span>
+            <span className="text-slate-400">
+              {t('import.ytProgressSkipped', { count: progress.skipped, defaultValue: 'Omitidos: {{count}}' })}
+            </span>
+            <span className="text-red-400">
+              {t('import.ytProgressErrors', { count: progress.errors, defaultValue: 'Errores: {{count}}' })}
+            </span>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   // ── Load ─────────────────────────────────────────────────────────────────────
   const loadFileCounts = useCallback(async () => {
@@ -183,7 +274,7 @@ export default function SubtitleManager() {
       .map((s) => s.trim())
       .filter(Boolean)
     setYtStatus('running')
-    setYtProgress({ current: 0, total: 0 })
+    setYtProgress(emptyYouTubeJobProgress)
     setYtResult(null)
     setYtError(null)
     try {
@@ -202,7 +293,7 @@ export default function SubtitleManager() {
       ytPollRef.current = setInterval(async () => {
         try {
           const j = await subtitlesApi.getYoutubeJob(jobId)
-          setYtProgress({ current: j.data.progress, total: j.data.total })
+          setYtProgress(makeYouTubeProgress(j.data))
           if (j.data.status === 'done') {
             setYtResult(j.data.result)
             setYtStatus('done')
@@ -240,7 +331,7 @@ export default function SubtitleManager() {
     ytPollRef.current = null
     setYtJobId(null)
     setYtStatus('idle')
-    setYtProgress({ current: 0, total: 0 })
+    setYtProgress(emptyYouTubeJobProgress)
     setYtResult(null)
     setYtError(null)
   }
@@ -342,7 +433,7 @@ export default function SubtitleManager() {
   const handleRefreshPlaylist = async (playlist: SubtitlePlaylist) => {
     if (playlistPollRef.current) clearInterval(playlistPollRef.current)
     setRefreshingPlaylistId(playlist.id)
-    setPlaylistRefreshProgress({ current: 0, total: 0 })
+    setPlaylistRefreshProgress(emptyYouTubeJobProgress)
     setPlaylistError(null)
     try {
       const draft = playlistDrafts[playlist.id]
@@ -362,7 +453,7 @@ export default function SubtitleManager() {
       playlistPollRef.current = setInterval(async () => {
         try {
           const j = await subtitlesApi.getYoutubeJob(jobId)
-          setPlaylistRefreshProgress({ current: j.data.progress, total: j.data.total })
+          setPlaylistRefreshProgress(makeYouTubeProgress(j.data))
           if (j.data.status === 'done') {
             if (playlistPollRef.current) clearInterval(playlistPollRef.current)
             playlistPollRef.current = null
@@ -828,23 +919,7 @@ export default function SubtitleManager() {
         </div>
 
         {ytStatus === 'running' && (
-          <div className="space-y-1">
-            <div className="w-full bg-slate-700 rounded-full h-2">
-              <div
-                className="bg-red-500 h-2 rounded-full transition-all"
-                style={{
-                  width: ytProgress.total > 0
-                    ? `${(ytProgress.current / ytProgress.total) * 100}%`
-                    : '5%',
-                }}
-              />
-            </div>
-            <p className="text-xs text-slate-400">
-              {ytProgress.total > 0
-                ? t('import.ytProgress', { current: ytProgress.current, total: ytProgress.total })
-                : t('import.ytExpandingSources')}
-            </p>
-          </div>
+          renderYouTubeProgress(ytProgress)
         )}
 
         {ytError && <p className="text-red-400 text-xs">{ytError}</p>}
@@ -1033,23 +1108,7 @@ export default function SubtitleManager() {
                   )}
 
                   {isRefreshing && playlistRefreshProgress && (
-                    <div className="space-y-1">
-                      <div className="w-full bg-slate-700 rounded-full h-2">
-                        <div
-                          className="bg-red-500 h-2 rounded-full transition-all"
-                          style={{
-                            width: playlistRefreshProgress.total > 0
-                              ? `${(playlistRefreshProgress.current / playlistRefreshProgress.total) * 100}%`
-                              : '5%',
-                          }}
-                        />
-                      </div>
-                      <p className="text-xs text-slate-400">
-                        {playlistRefreshProgress.total > 0
-                          ? t('import.ytProgress', { current: playlistRefreshProgress.current, total: playlistRefreshProgress.total })
-                          : t('import.ytExpandingSources')}
-                      </p>
-                    </div>
+                    renderYouTubeProgress(playlistRefreshProgress)
                   )}
 
                   <div className="flex gap-2">
