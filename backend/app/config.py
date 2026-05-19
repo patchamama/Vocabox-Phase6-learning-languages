@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 43200
     PORT: int = 9009
 
-    model_config = {"env_file": ".env"}
+    model_config = {"env_file": ".env", "extra": "ignore"}
 
 
 settings = Settings()
