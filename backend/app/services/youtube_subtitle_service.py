@@ -10,8 +10,9 @@ Pipeline:
 from __future__ import annotations
 
 import re
+import unicodedata
 import urllib.parse
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -93,15 +94,61 @@ def list_playlist_videos(playlist_id: str, max_videos: int) -> List[str]:
     url = f"https://www.youtube.com/playlist?list={playlist_id}"
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=False)
+    return [video_id for video_id, _title in _playlist_entries_from_info(info, max_videos)]
+
+
+def _playlist_entries_from_info(info: dict | None, max_videos: int) -> List[Tuple[str, Optional[str]]]:
     entries = (info or {}).get("entries") or []
-    out: List[str] = []
+    out: List[Tuple[str, Optional[str]]] = []
     for e in entries:
         vid = (e or {}).get("id") or (e or {}).get("url")
         if isinstance(vid, str) and _VIDEO_ID_RE.match(vid):
-            out.append(vid)
+            title = (e or {}).get("title")
+            out.append((vid, title if isinstance(title, str) else None))
         if len(out) >= max_videos:
             break
     return out
+
+
+def list_playlist_video_entries(playlist_id: str, max_videos: int) -> List[Tuple[str, Optional[str]]]:
+    import yt_dlp
+
+    opts = {
+        "extract_flat": True,
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "playlistend": max_videos,
+    }
+    url = f"https://www.youtube.com/playlist?list={playlist_id}"
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+    return _playlist_entries_from_info(info, max_videos)
+
+
+def fetch_video_title(video_id: str) -> Optional[str]:
+    try:
+        import yt_dlp
+
+        opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "skip_download": True,
+        }
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
+        title = (info or {}).get("title")
+        return title if isinstance(title, str) and title.strip() else None
+    except Exception:
+        return None
+
+
+def _safe_filename_title(title: str, fallback: str) -> str:
+    normalized = unicodedata.normalize("NFKD", title or "")
+    ascii_title = normalized.encode("ascii", "ignore").decode("ascii")
+    cleaned = re.sub(r"[^A-Za-z0-9._ -]+", "", ascii_title)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ._-")
+    return (cleaned or fallback)[:140]
 
 
 def fetch_transcript(
@@ -184,8 +231,9 @@ def _rows_to_segments(rows: list) -> List[dict]:
 def _expand_sources(
     sources: List[str],
     max_videos: int,
-) -> Tuple[List[str], List[YouTubeImportItem]]:
+) -> Tuple[List[str], Dict[str, str], List[YouTubeImportItem]]:
     video_ids: List[str] = []
+    titles: Dict[str, str] = {}
     seen: set[str] = set()
     errors: List[YouTubeImportItem] = []
 
@@ -208,7 +256,7 @@ def _expand_sources(
         else:
             remaining = max_videos - len(video_ids)
             try:
-                pl_ids = list_playlist_videos(ident, remaining)
+                pl_ids = list_playlist_video_entries(ident, remaining)
             except Exception as exc:  # noqa: BLE001
                 errors.append(YouTubeImportItem(
                     video_id=ident,
@@ -216,14 +264,16 @@ def _expand_sources(
                     error=f"Playlist error: {exc}",
                 ))
                 continue
-            for v in pl_ids:
+            for v, title in pl_ids:
                 if v in seen:
                     continue
                 seen.add(v)
                 video_ids.append(v)
+                if title:
+                    titles[v] = title
                 if len(video_ids) >= max_videos:
                     break
-    return video_ids[:max_videos], errors
+    return video_ids[:max_videos], titles, errors
 
 
 def import_sources(
@@ -233,7 +283,7 @@ def import_sources(
     on_progress: Optional[Callable[[int, int], None]] = None,
 ) -> YouTubeImportResult:
     items: List[YouTubeImportItem] = []
-    video_ids, parse_errors = _expand_sources(req.sources, req.max_videos)
+    video_ids, known_titles, parse_errors = _expand_sources(req.sources, req.max_videos)
     items.extend(parse_errors)
 
     total = len(video_ids)
@@ -289,7 +339,9 @@ def import_sources(
                     on_progress(idx + 1, total)
                 continue
 
-            filename = f"{vid}.{used_lang or req.language}.vtt"
+            title = known_titles.get(vid) or fetch_video_title(vid) or vid
+            safe_title = _safe_filename_title(title, vid)
+            filename = f"{safe_title}.{used_lang or req.language}.vtt"
             sub = SubtitleFile(
                 user_id=user_id,
                 filename=filename,

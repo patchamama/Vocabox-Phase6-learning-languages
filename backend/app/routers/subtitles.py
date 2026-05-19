@@ -1,6 +1,7 @@
 import asyncio
 import threading
 import uuid
+from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
@@ -61,7 +62,7 @@ def _upsert_playlists_for_request(db: Session, user_id: int, req: YouTubeImportR
             .first()
         )
         if not pl:
-            pl = SubtitlePlaylist(user_id=user_id, playlist_id=playlist_id)
+            pl = SubtitlePlaylist(user_id=user_id, playlist_id=playlist_id, is_internal=False)
             db.add(pl)
         pl.source_url = source_url
         pl.language = req.language.strip() or None
@@ -69,6 +70,50 @@ def _upsert_playlists_for_request(db: Session, user_id: int, req: YouTubeImportR
         pl.max_videos = req.max_videos
         pl.stars = stars
         pl.temas = list(temas)
+    db.commit()
+
+
+def _create_internal_playlist_for_result(
+    db: Session,
+    user_id: int,
+    req: YouTubeImportRequest,
+    result: YouTubeImportResult,
+) -> None:
+    file_ids = [
+        int(item.file_id)
+        for item in result.items
+        if item.file_id and item.status in {"created", "skipped"}
+    ]
+    file_ids = list(dict.fromkeys(file_ids))[:9999]
+    if not file_ids:
+        return
+
+    files = (
+        db.query(SubtitleFile)
+        .filter(SubtitleFile.user_id == user_id, SubtitleFile.id.in_(file_ids))
+        .all()
+    )
+    if not files:
+        return
+
+    title = (req.internal_playlist_title or "").strip()
+    if not title:
+        title = f"Import {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}"
+
+    pl = SubtitlePlaylist(
+        user_id=user_id,
+        playlist_id=f"internal:{uuid.uuid4().hex[:16]}",
+        title=title[:500],
+        source_url=None,
+        is_internal=True,
+        language=req.language.strip() or None,
+        fallback_languages=_fallback_csv(req.fallback_languages),
+        max_videos=min(9999, max(1, req.max_videos)),
+        stars=max(0, min(3, req.stars)),
+    )
+    pl.temas = _resolve_temas(db, user_id, req.tema_ids)
+    pl.files = files
+    db.add(pl)
     db.commit()
 
 
@@ -287,6 +332,8 @@ def refresh_playlist(
     )
     if not pl:
         raise HTTPException(404, "Playlist no encontrada")
+    if pl.is_internal:
+        raise HTTPException(400, "Las playlists internas no se refrescan desde YouTube")
 
     req = YouTubeImportRequest(
         sources=[pl.source_url or pl.playlist_id],
@@ -294,7 +341,7 @@ def refresh_playlist(
         fallback_languages=[x.strip() for x in (pl.fallback_languages or "").split(",") if x.strip()],
         tema_ids=[tm.id for tm in pl.temas],
         stars=pl.stars,
-        max_videos=pl.max_videos,
+        max_videos=min(9999, max(1, pl.max_videos)),
     )
     job_id = str(uuid.uuid4())
     user_id = current_user.id
@@ -586,6 +633,8 @@ def start_youtube_import(
                 _yt_jobs[job_id]["total"] = total
 
             result = yts.import_sources(req, user_id, db2, on_progress=_progress)
+            if req.create_internal_playlist:
+                _create_internal_playlist_for_result(db2, user_id, req, result)
             _yt_jobs[job_id]["result"] = result.model_dump()
             _yt_jobs[job_id]["status"] = "done"
         except Exception as exc:  # noqa: BLE001

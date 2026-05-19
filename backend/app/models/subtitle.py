@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Table, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Table, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from ..database import Base
@@ -24,6 +24,15 @@ subtitle_playlist_temas = Table(
 )
 
 
+subtitle_playlist_files = Table(
+    "subtitle_playlist_files",
+    Base.metadata,
+    Column("subtitle_playlist_id", Integer, ForeignKey("subtitle_playlists.id", ondelete="CASCADE"), primary_key=True),
+    Column("subtitle_file_id", Integer, ForeignKey("subtitle_files.id", ondelete="CASCADE"), primary_key=True),
+    Index("ix_subtitle_playlist_files_file_id", "subtitle_file_id"),
+)
+
+
 class SubtitleFile(Base):
     __tablename__ = "subtitle_files"
 
@@ -38,6 +47,7 @@ class SubtitleFile(Base):
 
     segments = relationship("SubtitleSegment", back_populates="file", cascade="all, delete-orphan")
     temas = relationship("Tema", secondary=subtitle_file_temas, lazy="selectin")
+    playlists = relationship("SubtitlePlaylist", secondary=subtitle_playlist_files, back_populates="files", lazy="selectin")
 
 
 class SubtitlePlaylist(Base):
@@ -48,6 +58,7 @@ class SubtitlePlaylist(Base):
     playlist_id = Column(String(120), nullable=False)
     title = Column(String(500), nullable=True)
     source_url = Column(String(800), nullable=True)
+    is_internal = Column(Boolean, nullable=False, default=False)
     language = Column(String(10), nullable=True)
     fallback_languages = Column(String(120), nullable=False, default="")
     max_videos = Column(Integer, nullable=False, default=50)
@@ -56,10 +67,15 @@ class SubtitlePlaylist(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     temas = relationship("Tema", secondary=subtitle_playlist_temas, lazy="selectin")
+    files = relationship("SubtitleFile", secondary=subtitle_playlist_files, back_populates="playlists", lazy="selectin")
 
     __table_args__ = (
         UniqueConstraint("user_id", "playlist_id", name="uq_subtitle_playlist_user_playlist"),
     )
+
+    @property
+    def file_count(self) -> int:
+        return len(self.files or [])
 
 
 class SubtitleSegment(Base):

@@ -10,6 +10,7 @@ interface AuthState {
   error: string | null
   login: (username: string, password: string) => Promise<void>
   register: (username: string, email: string, password: string) => Promise<void>
+  refreshUser: () => Promise<void>
   logout: () => void
   clearError: () => void
 }
@@ -56,6 +57,18 @@ export const useAuthStore = create<AuthState>()(
                   ?.detail ?? 'Error al registrarse'
           set({ error: msg, isLoading: false })
           throw err
+        }
+      },
+
+      refreshUser: async () => {
+        const token = localStorage.getItem('token')
+        if (!token) return
+        try {
+          const { data: user } = await authApi.me()
+          set({ user, token })
+        } catch {
+          localStorage.removeItem('token')
+          set({ user: null, token: null })
         }
       },
 

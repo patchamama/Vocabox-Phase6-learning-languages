@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { RoundType } from '../stores/settingsStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import { aiProvidersApi, grammarApi, ollamaApi, temasApi } from '../api/client'
-import type { AIProviderInfo, ExtraGrammarCategory } from '../api/client'
+import { aiProvidersApi, backupsApi, grammarApi, ollamaApi, temasApi } from '../api/client'
+import type { AIProviderInfo, BackupInfo, ExtraGrammarCategory } from '../api/client'
+import { useAuthStore } from '../stores/authStore'
 import AIProvidersModal from '../components/AIProvidersModal'
 import Import from './Import'
 import type { Tema } from '../types'
@@ -271,6 +272,143 @@ function ThemesManager() {
                 className="text-xs text-red-400 hover:text-red-300 transition-colors px-2"
               >
                 {t('settings.delete')}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Admin Backups ───────────────────────────────────────────────────────────
+
+function formatBackupDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date)
+}
+
+function formatBackupSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function AdminBackups() {
+  const { t } = useTranslation()
+  const [backups, setBackups] = useState<BackupInfo[]>([])
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
+  const [downloading, setDownloading] = useState<string | null>(null)
+  const [error, setError] = useState('')
+
+  const loadBackups = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const { data } = await backupsApi.list()
+      setBackups(data)
+    } catch {
+      setError(t('settings.backupsError', 'No se pudieron cargar las copias de seguridad.'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { void loadBackups() }, [])
+
+  const handleCreate = async () => {
+    setCreating(true)
+    setError('')
+    try {
+      const { data } = await backupsApi.create()
+      setBackups((prev) => [data, ...prev.filter((item) => item.filename !== data.filename)])
+    } catch {
+      setError(t('settings.backupsCreateError', 'No se pudo crear la copia de seguridad.'))
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const handleDownload = async (backup: BackupInfo) => {
+    setDownloading(backup.filename)
+    setError('')
+    try {
+      const { data } = await backupsApi.download(backup.filename)
+      const url = URL.createObjectURL(data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = backup.filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch {
+      setError(t('settings.backupsDownloadError', 'No se pudo descargar la copia de seguridad.'))
+    } finally {
+      setDownloading(null)
+    }
+  }
+
+  return (
+    <div className="card space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="font-semibold text-slate-800 dark:text-slate-200">
+            {t('settings.backupsTitle', 'Copias de seguridad')}
+          </h2>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+            {t('settings.backupsDesc', 'Crea y descarga copias completas de la base de datos.')}
+          </p>
+        </div>
+        <button
+          onClick={handleCreate}
+          disabled={creating}
+          className="px-3 py-2 rounded-lg bg-blue-500/15 border border-blue-500/40 text-blue-300 text-xs font-medium hover:bg-blue-500/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {creating ? t('settings.backupsCreating', 'Creando...') : t('settings.backupsCreate', 'Crear copia')}
+        </button>
+      </div>
+
+      {error && (
+        <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <p className="text-xs text-slate-400 dark:text-slate-500">{t('common.loading')}</p>
+      ) : backups.length === 0 ? (
+        <p className="text-xs text-slate-400 dark:text-slate-500">
+          {t('settings.backupsEmpty', 'Todavía no hay copias de seguridad.')}
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {backups.map((backup) => (
+            <div
+              key={backup.filename}
+              className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-800 dark:text-slate-100 truncate">
+                  {formatBackupDate(backup.created_at)}
+                </p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 truncate">
+                  {backup.filename} · {formatBackupSize(backup.size_bytes)}
+                </p>
+              </div>
+              <button
+                onClick={() => handleDownload(backup)}
+                disabled={downloading === backup.filename}
+                className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 text-xs font-medium hover:border-blue-400 hover:text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {downloading === backup.filename
+                  ? t('settings.backupsDownloading', 'Descargando...')
+                  : t('settings.backupsDownload', 'Descargar')}
               </button>
             </div>
           ))}
@@ -624,6 +762,7 @@ const DELAY_OPTIONS = [1, 2, 3, 5]
 
 export default function Settings() {
   const { t, i18n } = useTranslation()
+  const user = useAuthStore((s) => s.user)
   const uiLang = (['es', 'en', 'de', 'fr'].includes(i18n.language) ? i18n.language : 'es') as 'es' | 'en' | 'de' | 'fr'
   const {
     reviewMode, wordsPerSession, transitionDelay, transitionType,
@@ -738,6 +877,8 @@ export default function Settings() {
     <>
     <div className="p-4 pt-8 space-y-6">
       <h1 className="text-2xl font-bold">{t('settings.title')}</h1>
+
+      {user?.is_admin && <AdminBackups />}
 
       {/* Review mode */}
       <div className="card space-y-3">

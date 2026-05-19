@@ -80,6 +80,8 @@ export default function SubtitleManager() {
   const [ytMaxVideos, setYtMaxVideos] = useState(20)
   const [ytStars, setYtStars] = useState(0)
   const [ytTemaIds, setYtTemaIds] = useState<number[]>([])
+  const [ytCreateInternalPlaylist, setYtCreateInternalPlaylist] = useState(false)
+  const [ytInternalPlaylistTitle, setYtInternalPlaylistTitle] = useState('')
   const [ytJobId, setYtJobId] = useState<string | null>(null)
   const [ytStatus, setYtStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const [ytProgress, setYtProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 })
@@ -104,6 +106,13 @@ export default function SubtitleManager() {
   const [playlistError, setPlaylistError] = useState<string | null>(null)
   const [playlistRefreshProgress, setPlaylistRefreshProgress] = useState<{ current: number; total: number } | null>(null)
   const playlistPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // List filters
+  const [filterName, setFilterName] = useState('')
+  const [filterLanguage, setFilterLanguage] = useState('')
+  const [filterTemaId, setFilterTemaId] = useState('')
+  const [filterStars, setFilterStars] = useState('')
+  const [filterPlaylistId, setFilterPlaylistId] = useState('')
 
   // ── Load ─────────────────────────────────────────────────────────────────────
   const loadFileCounts = useCallback(async () => {
@@ -180,9 +189,11 @@ export default function SubtitleManager() {
         sources,
         language: ytLanguage.trim() || 'de',
         fallback_languages,
-        max_videos: Math.max(1, Math.min(500, ytMaxVideos)),
+        max_videos: Math.max(1, Math.min(9999, ytMaxVideos)),
         stars: ytStars,
         tema_ids: ytTemaIds,
+        create_internal_playlist: ytCreateInternalPlaylist,
+        internal_playlist_title: ytInternalPlaylistTitle.trim() || undefined,
       })
       const jobId = res.data.job_id
       setYtJobId(jobId)
@@ -247,7 +258,17 @@ export default function SubtitleManager() {
   )
 
   const selectedIds = [...selectedFileIds]
-  const allVisibleSelected = files.length > 0 && files.every((f) => selectedFileIds.has(f.id))
+  const filteredFiles = files.filter((f) => {
+    const name = filterName.trim().toLowerCase()
+    if (name && !f.filename.toLowerCase().includes(name)) return false
+    const lang = filterLanguage.trim().toLowerCase()
+    if (lang && (f.language ?? '').toLowerCase() !== lang) return false
+    if (filterTemaId && !f.temas.some((tm) => String(tm.id) === filterTemaId)) return false
+    if (filterStars !== '' && f.stars !== Number(filterStars)) return false
+    if (filterPlaylistId && !f.playlists.some((pl) => String(pl.id) === filterPlaylistId)) return false
+    return true
+  })
+  const allVisibleSelected = filteredFiles.length > 0 && filteredFiles.every((f) => selectedFileIds.has(f.id))
   const hasBulkChanges = bulkLanguageEnabled || bulkStars !== '' || bulkTemasEnabled
 
   const handleBulkUpdate = async () => {
@@ -287,7 +308,7 @@ export default function SubtitleManager() {
         title: draft.title.trim() || null,
         language: draft.language.trim() || null,
         fallback_languages: draft.fallback.split(',').map((s) => s.trim()).filter(Boolean),
-        max_videos: Math.max(1, Math.min(500, draft.maxVideos || 1)),
+        max_videos: Math.max(1, Math.min(9999, draft.maxVideos || 1)),
         stars: draft.stars,
         tema_ids: draft.temaIds,
       })
@@ -311,7 +332,7 @@ export default function SubtitleManager() {
           title: draft.title.trim() || null,
           language: draft.language.trim() || null,
           fallback_languages: draft.fallback.split(',').map((s) => s.trim()).filter(Boolean),
-          max_videos: Math.max(1, Math.min(500, draft.maxVideos || 1)),
+          max_videos: Math.max(1, Math.min(9999, draft.maxVideos || 1)),
           stars: draft.stars,
           tema_ids: draft.temaIds,
         })
@@ -738,7 +759,7 @@ export default function SubtitleManager() {
             <input
               type="number"
               min={1}
-              max={500}
+              max={9999}
               value={ytMaxVideos}
               onChange={(e) => setYtMaxVideos(parseInt(e.target.value) || 20)}
               disabled={ytStatus === 'running'}
@@ -759,6 +780,32 @@ export default function SubtitleManager() {
               <option value={3}>3 ★</option>
             </select>
           </div>
+        </div>
+
+        <div className="space-y-2 rounded-xl border border-slate-700 bg-slate-800/40 p-3">
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={ytCreateInternalPlaylist}
+              onChange={(e) => setYtCreateInternalPlaylist(e.target.checked)}
+              disabled={ytStatus === 'running'}
+              className="mt-0.5 rounded border-slate-600 bg-slate-800"
+            />
+            <span>
+              <span className="block text-sm text-slate-200">{t('import.ytCreateInternalPlaylist', 'Crear playlist interna con esta importación')}</span>
+              <span className="block text-xs text-slate-500">{t('import.ytCreateInternalPlaylistDesc', 'Incluye los videos individuales y los videos encontrados dentro de las playlists especificadas.')}</span>
+            </span>
+          </label>
+          {ytCreateInternalPlaylist && (
+            <input
+              type="text"
+              value={ytInternalPlaylistTitle}
+              onChange={(e) => setYtInternalPlaylistTitle(e.target.value)}
+              placeholder={t('import.ytInternalPlaylistTitle', 'Nombre de la playlist interna')}
+              disabled={ytStatus === 'running'}
+              className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50"
+            />
+          )}
         </div>
 
         {ytStatus === 'running' && (
@@ -862,14 +909,20 @@ export default function SubtitleManager() {
                       <p className="text-sm text-slate-200 truncate" title={pl.title ?? pl.playlist_id}>
                         {pl.title || pl.playlist_id}
                       </p>
-                      <a
-                        href={pl.source_url || `https://www.youtube.com/playlist?list=${pl.playlist_id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-blue-400 font-mono hover:text-blue-300 hover:underline"
-                      >
-                        {pl.playlist_id}
-                      </a>
+                      {pl.is_internal ? (
+                        <p className="text-xs text-emerald-300 font-mono">
+                          {t('import.playlistInternal', 'interna')} · {pl.file_count} videos
+                        </p>
+                      ) : (
+                        <a
+                          href={pl.source_url || `https://www.youtube.com/playlist?list=${pl.playlist_id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-400 font-mono hover:text-blue-300 hover:underline"
+                        >
+                          {pl.playlist_id}
+                        </a>
+                      )}
                     </div>
                     <button
                       onClick={() => handleDeletePlaylist(pl)}
@@ -929,7 +982,7 @@ export default function SubtitleManager() {
                       <input
                         type="number"
                         min={1}
-                        max={500}
+                        max={9999}
                         value={draft.maxVideos}
                         onChange={(e) => updatePlaylistDraft(pl.id, { maxVideos: parseInt(e.target.value) || 1 })}
                         className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -990,8 +1043,9 @@ export default function SubtitleManager() {
                     </button>
                     <button
                       onClick={() => handleRefreshPlaylist(pl)}
-                      disabled={refreshingPlaylistId !== null || savingPlaylistId === pl.id}
+                      disabled={pl.is_internal || refreshingPlaylistId !== null || savingPlaylistId === pl.id}
                       className="btn-primary flex-1 text-sm disabled:opacity-40"
+                      title={pl.is_internal ? t('import.playlistInternalNoRefresh', 'Las playlists internas no se refrescan desde YouTube') : undefined}
                     >
                       {isRefreshing ? t('import.playlistRefreshing') : t('import.playlistRefresh')}
                     </button>
@@ -1182,7 +1236,7 @@ export default function SubtitleManager() {
         <div className="px-4 py-3 border-b border-slate-700 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div className="text-xs text-slate-400 uppercase tracking-wide">
-              {t('import.subtitleList')} · {files.length}
+              {t('import.subtitleList')} · {filteredFiles.length}/{files.length}
             </div>
             {files.length > 0 && (
               <label className="flex items-center gap-2 text-xs text-slate-400 normal-case tracking-normal">
@@ -1190,7 +1244,7 @@ export default function SubtitleManager() {
                   type="checkbox"
                   checked={allVisibleSelected}
                   onChange={(e) => {
-                    setSelectedFileIds(e.target.checked ? new Set(files.map((f) => f.id)) : new Set())
+                    setSelectedFileIds(e.target.checked ? new Set(filteredFiles.map((f) => f.id)) : new Set())
                   }}
                   className="rounded border-slate-600 bg-slate-800"
                 />
@@ -1198,6 +1252,56 @@ export default function SubtitleManager() {
               </label>
             )}
           </div>
+
+          {files.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+              <input
+                type="text"
+                value={filterName}
+                onChange={(e) => setFilterName(e.target.value)}
+                placeholder={t('import.subtitleFilterName', 'Nombre')}
+                className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <input
+                type="text"
+                value={filterLanguage}
+                onChange={(e) => setFilterLanguage(e.target.value)}
+                placeholder={t('import.subtitleFilterLanguage', 'Idioma')}
+                className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <select
+                value={filterTemaId}
+                onChange={(e) => setFilterTemaId(e.target.value)}
+                className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">{t('import.subtitleFilterTheme', 'Tema')}</option>
+                {temas.map((tm) => <option key={tm.id} value={tm.id}>{tm.nombre}</option>)}
+              </select>
+              <select
+                value={filterStars}
+                onChange={(e) => setFilterStars(e.target.value)}
+                className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">{t('import.subtitleFilterStars', 'Estrellas')}</option>
+                <option value={0}>0 ★</option>
+                <option value={1}>1 ★</option>
+                <option value={2}>2 ★</option>
+                <option value={3}>3 ★</option>
+              </select>
+              <select
+                value={filterPlaylistId}
+                onChange={(e) => setFilterPlaylistId(e.target.value)}
+                className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">{t('import.subtitleFilterPlaylist', 'Playlist')}</option>
+                {playlists.map((pl) => (
+                  <option key={pl.id} value={pl.id}>
+                    {pl.title || pl.playlist_id}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {selectedFileIds.size > 0 && (
             <div className="bg-slate-800/70 border border-slate-700 rounded-xl p-3 space-y-3">
@@ -1302,9 +1406,11 @@ export default function SubtitleManager() {
           <div className="px-4 py-4 text-slate-500 text-sm">{t('common.loading')}</div>
         ) : files.length === 0 ? (
           <div className="px-4 py-4 text-slate-500 text-sm">{t('import.subtitleNoFiles')}</div>
+        ) : filteredFiles.length === 0 ? (
+          <div className="px-4 py-4 text-slate-500 text-sm">{t('import.subtitleNoFilterResults', 'No hay subtítulos con esos filtros.')}</div>
         ) : (
           <div className="divide-y divide-slate-700/50">
-            {files.map((f) => {
+            {filteredFiles.map((f) => {
               const refCount = fileRefCounts.get(f.id)
               return (
                 <div key={f.id} className="px-4 py-3">
@@ -1373,6 +1479,11 @@ export default function SubtitleManager() {
                             <span key={tm.id} className="text-xs border border-slate-600 px-1.5 py-0.5 rounded-full text-slate-300">
                               <span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: tm.color }} />
                               {tm.nombre}
+                            </span>
+                          ))}
+                          {f.playlists.map((pl) => (
+                            <span key={pl.id} className="text-xs border border-emerald-600/60 px-1.5 py-0.5 rounded-full text-emerald-300">
+                              {pl.is_internal ? '▣' : '▶'} {pl.title || pl.playlist_id}
                             </span>
                           ))}
                         </div>

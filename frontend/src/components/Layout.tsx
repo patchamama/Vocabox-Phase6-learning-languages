@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import NavBar from './NavBar'
 import { loadSettingsFromBackend } from '../stores/settingsStore'
+import { useAuthStore } from '../stores/authStore'
 import Dashboard from '../pages/Dashboard'
 import Review from '../pages/Review'
 import Words from '../pages/Words'
@@ -31,6 +32,7 @@ function isActive(pagePath: string, exact: boolean | undefined, currentPath: str
 
 export default function Layout() {
   const { pathname } = useLocation()
+  const refreshUser = useAuthStore((s) => s.refreshUser)
   const scrollPositions = useRef<Map<string, number>>(new Map())
   const prevPath = useRef<string | null>(null)
   const mainRef = useRef<HTMLElement>(null)
@@ -38,7 +40,8 @@ export default function Layout() {
   // Load settings from backend once on mount (after auth)
   useEffect(() => {
     loadSettingsFromBackend()
-  }, [])
+    void refreshUser()
+  }, [refreshUser])
 
   useEffect(() => {
     const el = mainRef.current

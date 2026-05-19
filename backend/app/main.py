@@ -130,6 +130,28 @@ def _migrate_user_settings() -> None:
 _migrate_user_settings()
 
 
+def _migrate_users_admin() -> None:
+    """Add admin flag and make the first existing user the initial admin."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return
+
+    existing = {c["name"] for c in inspector.get_columns("users")}
+    with engine.begin() as conn:
+        if "is_admin" not in existing:
+            conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT 0"))
+        admin_count = conn.execute(text("SELECT COUNT(*) FROM users WHERE is_admin = 1")).scalar() or 0
+        if admin_count == 0:
+            first_user_id = conn.execute(text("SELECT MIN(id) FROM users")).scalar()
+            if first_user_id is not None:
+                conn.execute(text("UPDATE users SET is_admin = 1 WHERE id = :id"), {"id": first_user_id})
+
+
+_migrate_users_admin()
+
+
 def _migrate_word_examples() -> None:
     """Ensure word_examples table exists and has the audio_url column."""
     from sqlalchemy import inspect, text
@@ -167,6 +189,7 @@ def _migrate_subtitle_files() -> None:
         new_cols = [
             ("title", "VARCHAR(500)"),
             ("source_url", "VARCHAR(800)"),
+            ("is_internal", "BOOLEAN NOT NULL DEFAULT 0"),
             ("language", "VARCHAR(10)"),
             ("fallback_languages", "VARCHAR(120) NOT NULL DEFAULT ''"),
             ("max_videos", "INTEGER NOT NULL DEFAULT 50"),
@@ -180,11 +203,13 @@ def _migrate_subtitle_files() -> None:
                     conn.execute(text(f"ALTER TABLE subtitle_playlists ADD COLUMN {col} {typ}"))
     if "subtitle_playlist_temas" not in table_names:
         Base.metadata.create_all(bind=engine)
+    if "subtitle_playlist_files" not in table_names:
+        Base.metadata.create_all(bind=engine)
 
 
 _migrate_subtitle_files()
 
-from .routers import ai_providers, audio_review, auth, grammar, grammar_queue, import_router, languages, leo, ollama, review, stats, subtitles, temas, test_mode, user_settings, verbformen, words
+from .routers import ai_providers, audio_review, auth, backups, grammar, grammar_queue, import_router, languages, leo, ollama, review, stats, subtitles, temas, test_mode, user_settings, verbformen, words
 
 # ── Language dictionary seed data ─────────────────────────────────────────────
 
@@ -287,6 +312,7 @@ app.include_router(grammar.router,       prefix="/api")
 app.include_router(grammar_queue.router,  prefix="/api")
 app.include_router(ai_providers.router,   prefix="/api")
 app.include_router(user_settings.router,  prefix="/api")
+app.include_router(backups.router,        prefix="/api")
 
 # ── Health & WebSocket connectivity probe ─────────────────────────────────────
 

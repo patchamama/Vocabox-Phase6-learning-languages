@@ -2,6 +2,7 @@ export interface User {
   id: number
   username: string
   email: string
+  is_admin: boolean
 }
 
 export interface Tema {
@@ -110,6 +111,14 @@ export interface SubtitleFile {
   stars: number
   created_at: string
   temas: Tema[]
+  playlists: SubtitlePlaylistRef[]
+}
+
+export interface SubtitlePlaylistRef {
+  id: number
+  playlist_id: string
+  title: string | null
+  is_internal: boolean
 }
 
 export interface SubtitlePlaylist {
@@ -117,6 +126,7 @@ export interface SubtitlePlaylist {
   playlist_id: string
   title: string | null
   source_url: string | null
+  is_internal: boolean
   language: string | null
   fallback_languages: string
   max_videos: number
@@ -124,6 +134,7 @@ export interface SubtitlePlaylist {
   created_at: string
   updated_at: string
   temas: Tema[]
+  file_count: number
 }
 
 export interface SegmentRefFile {

@@ -13,6 +13,16 @@ class TemaRef(BaseModel):
         from_attributes = True
 
 
+class SubtitlePlaylistRef(BaseModel):
+    id: int
+    playlist_id: str
+    title: Optional[str] = None
+    is_internal: bool = False
+
+    class Config:
+        from_attributes = True
+
+
 class SubtitleFileOut(BaseModel):
     id: int
     filename: str
@@ -22,6 +32,7 @@ class SubtitleFileOut(BaseModel):
     stars: int = 0
     created_at: datetime
     temas: List[TemaRef] = []
+    playlists: List[SubtitlePlaylistRef] = []
 
     class Config:
         from_attributes = True
@@ -46,7 +57,9 @@ class YouTubeImportRequest(BaseModel):
     fallback_languages: List[str] = []       # tried in order if requested lang missing
     tema_ids: List[int] = []
     stars: int = Field(default=0, ge=0, le=3)
-    max_videos: int = Field(default=50, ge=1, le=500)
+    max_videos: int = Field(default=50, ge=1, le=9999)
+    create_internal_playlist: bool = False
+    internal_playlist_title: Optional[str] = None
 
 
 class SubtitlePlaylistOut(BaseModel):
@@ -54,6 +67,7 @@ class SubtitlePlaylistOut(BaseModel):
     playlist_id: str
     title: Optional[str] = None
     source_url: Optional[str] = None
+    is_internal: bool = False
     language: Optional[str] = None
     fallback_languages: str = ""
     max_videos: int = 50
@@ -61,6 +75,7 @@ class SubtitlePlaylistOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     temas: List[TemaRef] = []
+    file_count: int = 0
 
     class Config:
         from_attributes = True
@@ -70,7 +85,7 @@ class SubtitlePlaylistUpdate(BaseModel):
     title: Optional[str] = None
     language: Optional[str] = None
     fallback_languages: Optional[List[str]] = None
-    max_videos: Optional[int] = Field(default=None, ge=1, le=500)
+    max_videos: Optional[int] = Field(default=None, ge=1, le=9999)
     stars: Optional[int] = Field(default=None, ge=0, le=3)
     tema_ids: Optional[List[int]] = None
 

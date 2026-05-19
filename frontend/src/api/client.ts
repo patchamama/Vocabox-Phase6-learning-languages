@@ -305,6 +305,8 @@ export const subtitlesApi = {
     tema_ids?: number[]
     stars?: number
     max_videos?: number
+    create_internal_playlist?: boolean
+    internal_playlist_title?: string
   }) => api.post<{ job_id: string }>('/subtitles/youtube-import', req),
   listPlaylists: () => api.get<SubtitlePlaylist[]>('/subtitles/playlists'),
   updatePlaylist: (
@@ -587,4 +589,19 @@ export const aiProvidersApi = {
 export const userSettingsApi = {
   get: () => api.get<Record<string, unknown>>('/user-settings'),
   save: (settings: Record<string, unknown>) => api.put('/user-settings', { settings }),
+}
+
+// ── Admin Backups ────────────────────────────────────────────────────────────
+
+export interface BackupInfo {
+  filename: string
+  created_at: string
+  size_bytes: number
+}
+
+export const backupsApi = {
+  list: () => api.get<BackupInfo[]>('/backups'),
+  create: () => api.post<BackupInfo>('/backups'),
+  download: (filename: string) =>
+    api.get(`/backups/${encodeURIComponent(filename)}/download`, { responseType: 'blob' }),
 }
