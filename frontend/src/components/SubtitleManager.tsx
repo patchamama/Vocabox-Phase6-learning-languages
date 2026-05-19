@@ -47,6 +47,8 @@ export default function SubtitleManager() {
   const [bulkTemasEnabled, setBulkTemasEnabled] = useState(false)
   const [bulkTemaIds, setBulkTemaIds] = useState<number[]>([])
   const [isBulkSaving, setIsBulkSaving] = useState(false)
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false)
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
   const [bulkError, setBulkError] = useState<string | null>(null)
 
   // Upload
@@ -288,6 +290,23 @@ export default function SubtitleManager() {
       setBulkError((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? t('import.subtitleBulkError'))
     } finally {
       setIsBulkSaving(false)
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return
+    setIsBulkDeleting(true)
+    setBulkError(null)
+    try {
+      await subtitlesApi.bulkDelete(selectedIds)
+      setFiles((prev) => prev.filter((f) => !selectedFileIds.has(f.id)))
+      setSelectedFileIds(new Set())
+      setBulkDeleteConfirm(false)
+      loadFileCounts()
+    } catch (err: unknown) {
+      setBulkError((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? t('import.subtitleBulkError'))
+    } finally {
+      setIsBulkDeleting(false)
     }
   }
 
@@ -1391,13 +1410,42 @@ export default function SubtitleManager() {
 
               {bulkError && <p className="text-red-400 text-xs">{bulkError}</p>}
 
-              <button
-                onClick={handleBulkUpdate}
-                disabled={isBulkSaving || selectedFileIds.size === 0 || !hasBulkChanges}
-                className="btn-primary w-full text-sm disabled:opacity-40"
-              >
-                {isBulkSaving ? t('common.loading') : t('import.subtitleApplyBulk')}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleBulkUpdate}
+                  disabled={isBulkSaving || isBulkDeleting || selectedFileIds.size === 0 || !hasBulkChanges}
+                  className="btn-primary flex-1 text-sm disabled:opacity-40"
+                >
+                  {isBulkSaving ? t('common.loading') : t('import.subtitleApplyBulk')}
+                </button>
+                {bulkDeleteConfirm ? (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setBulkDeleteConfirm(false)}
+                      disabled={isBulkDeleting}
+                      className="btn-secondary text-xs px-3 py-2"
+                    >
+                      {t('words.bulkCancel')}
+                    </button>
+                    <button
+                      onClick={handleBulkDelete}
+                      disabled={isBulkDeleting}
+                      className="bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded-xl px-3 py-2 text-xs font-medium transition-colors flex items-center gap-1.5"
+                    >
+                      {isBulkDeleting && <span className="inline-block w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+                      {t('import.subtitleBulkDeleteConfirm')}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setBulkDeleteConfirm(true)}
+                    disabled={isBulkSaving || isBulkDeleting || selectedFileIds.size === 0}
+                    className="bg-red-600/20 hover:bg-red-600/40 border border-red-500/40 text-red-300 disabled:opacity-40 rounded-xl px-3 py-2 text-xs font-medium transition-colors"
+                  >
+                    {t('import.subtitleBulkDelete', { count: selectedFileIds.size })}
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>

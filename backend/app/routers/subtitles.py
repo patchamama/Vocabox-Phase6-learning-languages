@@ -16,7 +16,7 @@ from ..models.user_word import UserWord
 from ..models.word_video_ref import WordVideoRef
 from ..schemas.subtitle import (
     FileRefCountOut, ReindexRequest, SegmentContextOut,
-    SubtitleBulkUpdate, SubtitleFileOut, SubtitleFileUpdate, SubtitlePlaylistOut,
+    SubtitleBulkDelete, SubtitleBulkUpdate, SubtitleFileOut, SubtitleFileUpdate, SubtitlePlaylistOut,
     SubtitlePlaylistUpdate, SubtitleSearchOut, WordVideoRefOut,
     YouTubeImportRequest, YouTubeImportResult, YouTubeImportItem,
 )
@@ -214,6 +214,25 @@ def bulk_update_subtitles(
     for sub in subs:
         db.refresh(sub)
     return subs
+
+
+@router.delete("/bulk", status_code=204)
+def bulk_delete_subtitles(
+    body: SubtitleBulkDelete,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    ids = list(dict.fromkeys([int(x) for x in body.file_ids if int(x) > 0]))
+    if not ids:
+        raise HTTPException(400, "No subtitle files selected")
+    subs = (
+        db.query(SubtitleFile)
+        .filter(SubtitleFile.user_id == current_user.id, SubtitleFile.id.in_(ids))
+        .all()
+    )
+    for sub in subs:
+        db.delete(sub)
+    db.commit()
 
 
 @router.patch("/{file_id}", response_model=SubtitleFileOut)
@@ -613,7 +632,11 @@ def start_youtube_import(
 ):
     job_id = str(uuid.uuid4())
     user_id = current_user.id
-    _upsert_playlists_for_request(db, user_id, req)
+    # When the user opts into an internal combined playlist, ONLY register that
+    # one (created after the job finishes). Otherwise, register each source
+    # YouTube playlist as-is.
+    if not req.create_internal_playlist:
+        _upsert_playlists_for_request(db, user_id, req)
     _yt_jobs[job_id] = {
         "user_id": user_id,
         "status": "pending",

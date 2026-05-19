@@ -9,10 +9,13 @@ Pipeline:
 
 from __future__ import annotations
 
+import logging
 import re
 import unicodedata
 import urllib.parse
 from typing import Callable, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy.orm import Session
 
@@ -151,6 +154,21 @@ def _safe_filename_title(title: str, fallback: str) -> str:
     return (cleaned or fallback)[:140]
 
 
+def _build_api() -> "YouTubeTranscriptApi":  # type: ignore[name-defined]
+    import os
+    from youtube_transcript_api import YouTubeTranscriptApi
+    from youtube_transcript_api.proxies import GenericProxyConfig
+
+    proxy_url = os.environ.get("YOUTUBE_PROXY_URL", "").strip() or None
+    if proxy_url:
+        return YouTubeTranscriptApi(proxy_config=GenericProxyConfig(http_url=proxy_url, https_url=proxy_url))
+    return YouTubeTranscriptApi()
+
+
+class TranscriptFetchError(RuntimeError):
+    """Raised by fetch_transcript for a non-IpBlocked failure with a meaningful message."""
+
+
 def fetch_transcript(
     video_id: str,
     language: str,
@@ -158,23 +176,32 @@ def fetch_transcript(
 ) -> Tuple[Optional[list], Optional[str]]:
     """Return (snippets, used_lang) or (None, None) if no transcript available.
 
-    snippets is an iterable of FetchedTranscriptSnippet (attrs: text, start, duration).
+    Raises IpBlocked if YouTube blocks the server IP — callers should handle this
+    by aborting the batch rather than retrying per-video.
+    Raises TranscriptFetchError on unexpected fetch errors (network, proxy, etc.)
+    so the caller can surface the real cause instead of "No transcript available".
     """
-    from youtube_transcript_api import YouTubeTranscriptApi
     from youtube_transcript_api._errors import (
+        IpBlocked,
         NoTranscriptFound,
         TranscriptsDisabled,
         VideoUnavailable,
     )
 
     langs: List[str] = [language] + [l for l in fallback_languages if l and l != language]
-    api = YouTubeTranscriptApi()
+    api = _build_api()
     try:
         tl = api.list(video_id)
+    except IpBlocked:
+        raise
     except (TranscriptsDisabled, VideoUnavailable):
         return (None, None)
-    except Exception:
-        return (None, None)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("transcript list() failed for %s: %s: %s",
+                       video_id, type(exc).__name__, exc)
+        raise TranscriptFetchError(f"{type(exc).__name__}: {exc}") from exc
+
+    last_unexpected: Optional[Exception] = None
 
     # Prefer manually-created
     for lang in langs:
@@ -182,9 +209,14 @@ def fetch_transcript(
             t = tl.find_manually_created_transcript([lang])
             fetched = t.fetch()
             return (list(fetched), t.language_code)
+        except IpBlocked:
+            raise
         except NoTranscriptFound:
             continue
-        except Exception:
+        except Exception as exc:  # noqa: BLE001
+            last_unexpected = exc
+            logger.warning("manual transcript fetch failed for %s [%s]: %s: %s",
+                           video_id, lang, type(exc).__name__, exc)
             continue
     # Fallback to auto-generated
     for lang in langs:
@@ -192,10 +224,20 @@ def fetch_transcript(
             t = tl.find_generated_transcript([lang])
             fetched = t.fetch()
             return (list(fetched), t.language_code)
+        except IpBlocked:
+            raise
         except NoTranscriptFound:
             continue
-        except Exception:
+        except Exception as exc:  # noqa: BLE001
+            last_unexpected = exc
+            logger.warning("generated transcript fetch failed for %s [%s]: %s: %s",
+                           video_id, lang, type(exc).__name__, exc)
             continue
+
+    if last_unexpected is not None:
+        raise TranscriptFetchError(
+            f"{type(last_unexpected).__name__}: {last_unexpected}"
+        ) from last_unexpected
     return (None, None)
 
 
@@ -282,6 +324,8 @@ def import_sources(
     db: Session,
     on_progress: Optional[Callable[[int, int], None]] = None,
 ) -> YouTubeImportResult:
+    from youtube_transcript_api._errors import IpBlocked
+
     items: List[YouTubeImportItem] = []
     video_ids, known_titles, parse_errors = _expand_sources(req.sources, req.max_videos)
     items.extend(parse_errors)
@@ -318,7 +362,17 @@ def import_sources(
             continue
 
         try:
-            rows, used_lang = fetch_transcript(vid, req.language, req.fallback_languages)
+            try:
+                rows, used_lang = fetch_transcript(vid, req.language, req.fallback_languages)
+            except TranscriptFetchError as fetch_exc:
+                items.append(YouTubeImportItem(
+                    video_id=vid,
+                    status="error",
+                    error=str(fetch_exc)[:200],
+                ))
+                if on_progress:
+                    on_progress(idx + 1, total)
+                continue
             if not rows:
                 items.append(YouTubeImportItem(
                     video_id=vid,
@@ -368,6 +422,16 @@ def import_sources(
                 filename=sub.filename,
                 segments=len(segs),
             ))
+        except IpBlocked as exc:
+            db.rollback()
+            ip_msg = "IP bloqueada por YouTube — configurá YOUTUBE_PROXY_URL en el servidor"
+            items.append(YouTubeImportItem(video_id=vid, status="error", error=ip_msg))
+            # No point retrying remaining videos — bail out and mark all as failed
+            for remaining in video_ids[idx + 1:]:
+                items.append(YouTubeImportItem(video_id=remaining, status="error", error=ip_msg))
+            if on_progress:
+                on_progress(total, total)
+            break
         except Exception as exc:  # noqa: BLE001
             db.rollback()
             items.append(YouTubeImportItem(

@@ -388,6 +388,8 @@
     "subtitleNoChange": "Sin cambios",
     "subtitleNoThemes": "No hay temas",
     "subtitleApplyBulk": "Aplicar cambios",
+    "subtitleBulkDelete": "Eliminar ({{count}})",
+    "subtitleBulkDeleteConfirm": "¿Confirmar eliminación?",
     "subtitleBulkError": "Error al actualizar subtítulos",
     "subtitleSegments": "{{count}} segmentos",
     "subtitleDelete": "Eliminar",

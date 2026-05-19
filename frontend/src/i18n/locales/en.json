@@ -388,6 +388,8 @@
     "subtitleNoChange": "No change",
     "subtitleNoThemes": "No themes",
     "subtitleApplyBulk": "Apply changes",
+    "subtitleBulkDelete": "Delete ({{count}})",
+    "subtitleBulkDeleteConfirm": "Confirm deletion?",
     "subtitleBulkError": "Error updating subtitles",
     "subtitleSegments": "{{count}} segments",
     "subtitleDelete": "Delete",

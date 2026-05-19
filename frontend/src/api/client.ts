@@ -267,6 +267,7 @@ export const subtitlesApi = {
   bulkUpdate: (data: { file_ids: number[]; language?: string | null; stars?: number; tema_ids?: number[] }) =>
     api.patch<SubtitleFile[]>('/subtitles/bulk', data),
   delete: (id: number) => api.delete(`/subtitles/${id}`),
+  bulkDelete: (fileIds: number[]) => api.delete('/subtitles/bulk', { data: { file_ids: fileIds } }),
   deleteAllRefs: () => api.delete('/subtitles/all-refs'),
   startReindex: (params?: {
     minRefs?: number

@@ -51,6 +51,10 @@ class SubtitleBulkUpdate(BaseModel):
     language: Optional[str] = None
 
 
+class SubtitleBulkDelete(BaseModel):
+    file_ids: List[int]
+
+
 class YouTubeImportRequest(BaseModel):
     sources: List[str]                       # mix of video URLs, video IDs, playlist URLs or playlist IDs
     language: str                            # e.g. "de"

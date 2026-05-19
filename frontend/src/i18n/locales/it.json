@@ -368,6 +368,8 @@
     "subtitleList": "Sottotitoli caricati",
     "subtitleNoFiles": "Nessun sottotitolo caricato",
     "subtitleSegments": "{{count}} segmenti",
+    "subtitleBulkDelete": "Elimina ({{count}})",
+    "subtitleBulkDeleteConfirm": "Confermare l'eliminazione?",
     "subtitleDelete": "Elimina",
     "subtitleDeleteConfirm": "Eliminare questo sottotitolo e i suoi riferimenti ai clip?",
     "subtitleDeleteAllRefs": "Elimina tutti i riferimenti ai clip",

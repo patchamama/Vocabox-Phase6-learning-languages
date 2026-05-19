@@ -368,6 +368,8 @@
     "subtitleList": "Geladene Untertitel",
     "subtitleNoFiles": "Noch keine Untertitel geladen",
     "subtitleSegments": "{{count}} Segmente",
+    "subtitleBulkDelete": "Löschen ({{count}})",
+    "subtitleBulkDeleteConfirm": "Löschen bestätigen?",
     "subtitleDelete": "Löschen",
     "subtitleDeleteConfirm": "Diesen Untertitel und seine Clip-Referenzen löschen?",
     "subtitleDeleteAllRefs": "Alle Clip-Referenzen löschen",

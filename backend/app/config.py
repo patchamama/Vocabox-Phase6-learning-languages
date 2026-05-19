@@ -1,4 +1,10 @@
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
+
+# Populate os.environ from .env so non-Settings code (e.g. YOUTUBE_PROXY_URL
+# read directly via os.environ.get) sees the values. Pydantic-settings alone
+# only fills the Settings instance.
+load_dotenv()
 
 
 class Settings(BaseSettings):
