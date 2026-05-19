@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { RoundType } from '../stores/settingsStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import { aiProvidersApi, backupsApi, grammarApi, ollamaApi, temasApi } from '../api/client'
-import type { AIProviderInfo, BackupInfo, ExtraGrammarCategory } from '../api/client'
+import { aiProvidersApi, backupsApi, grammarApi, ollamaApi, systemSettingsApi, temasApi } from '../api/client'
+import type { AIProviderInfo, BackupInfo, ExtraGrammarCategory, YouTubeProxyCheckItem, YouTubeProxyInfo, YouTubeProxyTestResult } from '../api/client'
 import { useAuthStore } from '../stores/authStore'
 import AIProvidersModal from '../components/AIProvidersModal'
 import Import from './Import'
@@ -413,6 +413,368 @@ function AdminBackups() {
             </div>
           ))}
         </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Admin YouTube Proxy ─────────────────────────────────────────────────────
+
+function AdminYoutubeProxy() {
+  const { t } = useTranslation()
+  const [info, setInfo] = useState<YouTubeProxyInfo | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<YouTubeProxyTestResult | null>(null)
+  const [error, setError] = useState('')
+  const [draft, setDraft] = useState('')
+  const [probeText, setProbeText] = useState('')
+  const [probeSamples, setProbeSamples] = useState(3)
+  const [probing, setProbing] = useState(false)
+  const [probeResults, setProbeResults] = useState<YouTubeProxyCheckItem[] | null>(null)
+
+  const load = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const { data } = await systemSettingsApi.getYoutubeProxy()
+      setInfo(data)
+    } catch {
+      setError(t('settings.proxyLoadError', 'No se pudo cargar el proxy.'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { void load() }, [])
+
+  const handleSave = async () => {
+    setSaving(true)
+    setError('')
+    setTestResult(null)
+    try {
+      const { data } = await systemSettingsApi.setYoutubeProxy(draft.trim())
+      setInfo(data)
+      setDraft('')
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || t('settings.proxySaveError', 'No se pudo guardar el proxy.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleClear = async () => {
+    setSaving(true)
+    setError('')
+    setTestResult(null)
+    try {
+      const { data } = await systemSettingsApi.clearYoutubeProxy()
+      setInfo(data)
+    } catch {
+      setError(t('settings.proxyClearError', 'No se pudo limpiar el proxy.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleTest = async () => {
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const { data } = await systemSettingsApi.testYoutubeProxy()
+      setTestResult(data)
+    } catch (e: any) {
+      setTestResult({ ok: false, detail: e?.message || 'request failed' })
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const handleResetSticky = async () => {
+    setSaving(true)
+    setError('')
+    try {
+      const { data } = await systemSettingsApi.resetSticky()
+      setInfo(data)
+    } catch {
+      setError(t('settings.proxyStickyResetError', 'No se pudo reiniciar la sticky session.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleProbe = async () => {
+    const urls = probeText
+      .split(/\r?\n/)
+      .map((u) => u.trim())
+      .filter(Boolean)
+    setProbing(true)
+    setProbeResults(null)
+    setError('')
+    try {
+      const { data } = await systemSettingsApi.checkYoutubeProxies(urls, probeSamples)
+      setProbeResults(data.results)
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || t('settings.proxyProbeError', 'No se pudo probar contra YouTube.'))
+    } finally {
+      setProbing(false)
+    }
+  }
+
+  const handleUseRow = async (urlMasked: string) => {
+    // Match the masked URL back to one of the input lines.
+    // For the common pattern http://u:p@host:port/ we mask user:pass to ***:***,
+    // so we can match by host:port suffix.
+    const tail = urlMasked.replace(/^[a-z0-9+]+:\/\/[^@]+@/i, '')
+    const lines = probeText.split(/\r?\n/).map((u) => u.trim()).filter(Boolean)
+    const match = lines.find((line) => line.replace(/^[a-z0-9+]+:\/\/[^@]+@/i, '') === tail)
+    if (!match) {
+      setError(t('settings.proxyUseRowNotFound', 'No pude recuperar la URL completa de esa fila. Pegala en el campo de arriba y guardala.'))
+      return
+    }
+    setDraft(match)
+    setSaving(true)
+    setError('')
+    try {
+      const { data } = await systemSettingsApi.setYoutubeProxy(match)
+      setInfo(data)
+      setDraft('')
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || t('settings.proxySaveError', 'No se pudo guardar el proxy.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const sourceLabel = (s: YouTubeProxyInfo['source']) => {
+    if (s === 'db') return t('settings.proxySourceDb', 'override del frontend (DB)')
+    if (s === 'env') return t('settings.proxySourceEnv', '.env del backend')
+    return t('settings.proxySourceNone', 'sin configurar')
+  }
+
+  return (
+    <div className="card space-y-4">
+      <div>
+        <h2 className="font-semibold text-slate-800 dark:text-slate-200">
+          {t('settings.proxyTitle', 'Proxy de YouTube')}
+        </h2>
+        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+          {t(
+            'settings.proxyDesc',
+            'Se usa para descargar subtítulos y listar playlists cuando YouTube bloquea la IP del servidor. Pegá la URL de Webshare (u otro proveedor) en el formato http://user:pass@host:port/. El valor guardado acá anula el del .env.'
+          )}
+        </p>
+      </div>
+
+      {loading ? (
+        <p className="text-xs text-slate-400 dark:text-slate-500">{t('common.loading')}</p>
+      ) : (
+        <>
+          <div className="rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 p-3 text-xs space-y-1">
+            <div>
+              <span className="text-slate-500 dark:text-slate-400">{t('settings.proxyEffective', 'Efectivo')}: </span>
+              <span className="font-mono text-slate-800 dark:text-slate-100">
+                {info?.masked_url ?? t('settings.proxyNone', '(ninguno)')}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500 dark:text-slate-400">{t('settings.proxySource', 'Origen')}: </span>
+              <span className="text-slate-800 dark:text-slate-100">{sourceLabel(info?.source ?? 'none')}</span>
+            </div>
+            <div className="text-slate-500 dark:text-slate-400">
+              {info?.db_override_set
+                ? t('settings.proxyDbActive', 'Override DB activo — el .env queda ignorado.')
+                : info?.env_set
+                  ? t('settings.proxyEnvActive', 'Usando el valor del .env. Guardá uno acá para sobreescribirlo.')
+                  : t('settings.proxyEmpty', 'No hay proxy configurado.')}
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              <span className="text-slate-500 dark:text-slate-400">{t('settings.proxySticky', 'Sticky IP')}:</span>
+              {info?.sticky_supported ? (
+                info?.sticky_active ? (
+                  <span className="inline-block px-2 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 text-[10px]">
+                    {t('settings.proxyStickyActive', 'activa')}
+                  </span>
+                ) : (
+                  <span className="inline-block px-2 py-0.5 rounded border border-slate-500/40 bg-slate-500/10 text-slate-300 text-[10px]">
+                    {t('settings.proxyStickyIdle', 'soportada, sin sesión guardada')}
+                  </span>
+                )
+              ) : (
+                <span className="inline-block px-2 py-0.5 rounded border border-amber-500/40 bg-amber-500/10 text-amber-300 text-[10px]">
+                  {t('settings.proxyStickyUnsupported', 'no soportada por el plan')}
+                </span>
+              )}
+              <button
+                onClick={handleResetSticky}
+                disabled={saving}
+                className="ml-auto px-2 py-1 rounded border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 text-[10px] hover:border-blue-400 hover:text-blue-300 disabled:opacity-50"
+              >
+                {t('settings.proxyStickyReset', 'Reiniciar sticky')}
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="http://user:pass@host:port/"
+              className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm font-mono"
+            />
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={handleSave}
+                disabled={saving || !draft.trim()}
+                className="px-3 py-2 rounded-lg bg-blue-500/15 border border-blue-500/40 text-blue-300 text-xs font-medium hover:bg-blue-500/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? t('settings.proxySaving', 'Guardando...') : t('settings.proxySave', 'Guardar override')}
+              </button>
+              <button
+                onClick={handleClear}
+                disabled={saving || !info?.db_override_set}
+                className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 text-xs font-medium hover:border-red-400 hover:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {t('settings.proxyClear', 'Quitar override')}
+              </button>
+              <button
+                onClick={handleTest}
+                disabled={testing || !info?.has_value}
+                className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 text-xs font-medium hover:border-blue-400 hover:text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {testing ? t('settings.proxyTesting', 'Probando...') : t('settings.proxyTest', 'Probar proxy')}
+              </button>
+            </div>
+          </div>
+
+          {error && (
+            <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+              {error}
+            </div>
+          )}
+
+          {testResult && (
+            <div
+              className={`rounded-xl border px-3 py-2 text-xs ${
+                testResult.ok
+                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                  : 'border-red-500/40 bg-red-500/10 text-red-300'
+              }`}
+            >
+              {testResult.ok
+                ? t('settings.proxyTestOk', 'OK ({{code}}) — IP de salida: {{origin}}', {
+                    code: testResult.status_code ?? '?',
+                    origin: testResult.origin ?? '?',
+                  })
+                : t('settings.proxyTestFail', 'Falla: {{detail}}', { detail: testResult.detail ?? '?' })}
+            </div>
+          )}
+
+          <div className="pt-4 border-t border-slate-200 dark:border-slate-700 space-y-2">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                {t('settings.proxyProbeTitle', 'Probar contra YouTube (varias IPs)')}
+              </h3>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                {t(
+                  'settings.proxyProbeDesc',
+                  'Pegá una o varias URLs de proxy (una por línea). Cada una se prueba contra YouTube para detectar si la IP está bloqueada. Para proxies rotativos, aumentá las muestras para ver varias salidas.'
+                )}
+              </p>
+            </div>
+            <textarea
+              value={probeText}
+              onChange={(e) => setProbeText(e.target.value)}
+              placeholder={'http://user:pass@host:port/\nhttp://user:pass@other-host:port/'}
+              rows={4}
+              className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs font-mono"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                {t('settings.proxyProbeSamples', 'Muestras por URL')}:
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={probeSamples}
+                  onChange={(e) => setProbeSamples(Math.max(1, Math.min(10, Number(e.target.value) || 1)))}
+                  className="w-16 px-2 py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs"
+                />
+              </label>
+              <button
+                onClick={handleProbe}
+                disabled={probing}
+                className="px-3 py-2 rounded-lg bg-blue-500/15 border border-blue-500/40 text-blue-300 text-xs font-medium hover:bg-blue-500/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {probing
+                  ? t('settings.proxyProbing', 'Probando...')
+                  : probeText.trim()
+                    ? t('settings.proxyProbeRun', 'Probar URLs')
+                    : t('settings.proxyProbeRunCurrent', 'Probar proxy actual')}
+              </button>
+            </div>
+
+            {probeResults && (
+              probeResults.length === 0 ? (
+                <p className="text-xs text-slate-400 dark:text-slate-500">
+                  {t('settings.proxyProbeEmpty', 'No hay nada para probar.')}
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="text-slate-500 dark:text-slate-400">
+                      <tr>
+                        <th className="text-left py-1 pr-2">{t('settings.proxyColUrl', 'Proxy')}</th>
+                        <th className="text-left py-1 pr-2">{t('settings.proxyColEgress', 'IP salida')}</th>
+                        <th className="text-left py-1 pr-2">YouTube</th>
+                        <th className="text-left py-1 pr-2">{t('settings.proxyColDetail', 'Detalle')}</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {probeResults.map((row, i) => {
+                        const badge = row.youtube_ok
+                          ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                          : row.youtube_blocked
+                            ? 'border-red-500/40 bg-red-500/10 text-red-300'
+                            : 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+                        const label = row.youtube_ok
+                          ? t('settings.proxyYtOk', 'OK')
+                          : row.youtube_blocked
+                            ? t('settings.proxyYtBlocked', 'BLOQUEADO')
+                            : row.reachable
+                              ? t('settings.proxyYtError', 'ERROR')
+                              : t('settings.proxyYtUnreachable', 'NO LLEGA')
+                        return (
+                          <tr key={i} className="border-t border-slate-200 dark:border-slate-700 align-top">
+                            <td className="py-2 pr-2 font-mono break-all">{row.url_masked}</td>
+                            <td className="py-2 pr-2 font-mono">{row.egress_ip ?? '—'}</td>
+                            <td className="py-2 pr-2">
+                              <span className={`inline-block px-2 py-0.5 rounded border ${badge}`}>{label}</span>
+                            </td>
+                            <td className="py-2 pr-2 text-slate-500 dark:text-slate-400 break-all">{row.detail ?? '—'}</td>
+                            <td className="py-2 pr-2">
+                              {row.youtube_ok && (
+                                <button
+                                  onClick={() => handleUseRow(row.url_masked)}
+                                  className="px-2 py-1 rounded border border-blue-500/40 bg-blue-500/15 text-blue-300 text-xs hover:bg-blue-500/25"
+                                >
+                                  {t('settings.proxyUseRow', 'Usar esta')}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            )}
+          </div>
+        </>
       )}
     </div>
   )
@@ -879,6 +1241,7 @@ export default function Settings() {
       <h1 className="text-2xl font-bold">{t('settings.title')}</h1>
 
       {user?.is_admin && <AdminBackups />}
+      {user?.is_admin && <AdminYoutubeProxy />}
 
       {/* Review mode */}
       <div className="card space-y-3">

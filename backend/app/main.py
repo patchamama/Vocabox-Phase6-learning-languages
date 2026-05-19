@@ -209,7 +209,7 @@ def _migrate_subtitle_files() -> None:
 
 _migrate_subtitle_files()
 
-from .routers import ai_providers, audio_review, auth, backups, grammar, grammar_queue, import_router, languages, leo, ollama, review, stats, subtitles, temas, test_mode, user_settings, verbformen, words
+from .routers import ai_providers, audio_review, auth, backups, grammar, grammar_queue, import_router, languages, leo, ollama, review, stats, subtitles, system_settings, temas, test_mode, user_settings, verbformen, words
 
 # ── Language dictionary seed data ─────────────────────────────────────────────
 
@@ -313,6 +313,7 @@ app.include_router(grammar_queue.router,  prefix="/api")
 app.include_router(ai_providers.router,   prefix="/api")
 app.include_router(user_settings.router,  prefix="/api")
 app.include_router(backups.router,        prefix="/api")
+app.include_router(system_settings.router, prefix="/api")
 
 # ── Health & WebSocket connectivity probe ─────────────────────────────────────
 

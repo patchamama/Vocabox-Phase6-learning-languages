@@ -606,3 +606,49 @@ export const backupsApi = {
   download: (filename: string) =>
     api.get(`/backups/${encodeURIComponent(filename)}/download`, { responseType: 'blob' }),
 }
+
+// ── Admin System Settings (YouTube proxy) ────────────────────────────────────
+
+export interface YouTubeProxyInfo {
+  masked_url: string | null
+  source: 'db' | 'env' | 'none'
+  has_value: boolean
+  db_override_set: boolean
+  env_set: boolean
+  sticky_supported: boolean
+  sticky_active: boolean
+}
+
+export interface YouTubeProxyTestResult {
+  ok: boolean
+  status_code?: number | null
+  detail?: string | null
+  origin?: string | null
+}
+
+export interface YouTubeProxyCheckItem {
+  url_masked: string
+  reachable: boolean
+  egress_ip: string | null
+  youtube_ok: boolean
+  youtube_blocked: boolean
+  youtube_status: 'ok' | 'blocked' | 'error' | 'unreachable'
+  detail: string | null
+}
+
+export interface YouTubeProxyCheckResponse {
+  results: YouTubeProxyCheckItem[]
+}
+
+export const systemSettingsApi = {
+  getYoutubeProxy: () => api.get<YouTubeProxyInfo>('/system-settings/youtube-proxy'),
+  setYoutubeProxy: (url: string) =>
+    api.put<YouTubeProxyInfo>('/system-settings/youtube-proxy', { url }),
+  clearYoutubeProxy: () => api.delete<YouTubeProxyInfo>('/system-settings/youtube-proxy'),
+  testYoutubeProxy: () =>
+    api.post<YouTubeProxyTestResult>('/system-settings/youtube-proxy/test'),
+  checkYoutubeProxies: (urls: string[], samples: number) =>
+    api.post<YouTubeProxyCheckResponse>('/system-settings/youtube-proxy/check', { urls, samples }),
+  resetSticky: () =>
+    api.post<YouTubeProxyInfo>('/system-settings/youtube-proxy/sticky/reset'),
+}

@@ -11,9 +11,10 @@ from .grammar_exercise import GrammarExercise
 from .ai_provider import AIProvider
 from .grammar_queue_item import GrammarQueueItem
 from .user_settings import UserSettings
+from .system_setting import SystemSetting
 
 __all__ = [
     "User", "Tema", "Word", "UserWord", "LanguageDict", "WordTranslation",
     "SubtitleFile", "SubtitlePlaylist", "SubtitleSegment", "WordVideoRef", "GrammarExercise",
-    "AIProvider", "GrammarQueueItem", "UserSettings", "WordExample",
+    "AIProvider", "GrammarQueueItem", "UserSettings", "WordExample", "SystemSetting",
 ]
