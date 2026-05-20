@@ -1336,6 +1336,7 @@ export default function Settings() {
   const [extraGrammarCategories, setExtraGrammarCategories] = useState<ExtraGrammarCategory[]>([])
   const [showAIProviders, setShowAIProviders] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [showYoutubeConfig, setShowYoutubeConfig] = useState(false)
   const [ollamaEnvTab, setOllamaEnvTab] = useState<'windows' | 'macos' | 'linux'>('windows')
   const ollamaChecked = useRef(false)
   const frontendOllamaBase = buildOllamaBaseUrl(frontendOllamaUrl, frontendOllamaPort)
@@ -1418,8 +1419,30 @@ export default function Settings() {
       <h1 className="text-2xl font-bold">{t('settings.title')}</h1>
 
       {user?.is_admin && <AdminBackups />}
-      {user?.is_admin && <AdminYoutubeProxy />}
-      {user?.is_admin && <AdminYoutubeCookies />}
+      {user?.is_admin && (
+        <div className="card space-y-4">
+          <button
+            onClick={() => setShowYoutubeConfig((v) => !v)}
+            className="w-full flex items-center justify-between text-left"
+          >
+            <div>
+              <h2 className="font-semibold text-slate-800 dark:text-slate-200">
+                {t('settings.youtubeConfigTitle', 'Configuración YouTube')}
+              </h2>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                {t('settings.youtubeConfigDesc', 'Proxy y cookies para descarga de subtítulos.')}
+              </p>
+            </div>
+            <span className="text-slate-400 text-sm shrink-0 ml-2">{showYoutubeConfig ? '▲' : '▼'}</span>
+          </button>
+          {showYoutubeConfig && (
+            <div className="space-y-6 border-t border-slate-200 dark:border-slate-700 pt-4">
+              <AdminYoutubeProxy />
+              <AdminYoutubeCookies />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Review mode */}
       <div className="card space-y-3">

@@ -120,6 +120,7 @@ export default function SubtitleManager() {
   const [searchModal, setSearchModal] = useState<{ query: string; refs: WordVideoRef[] } | null>(null)
 
   // Registered playlists
+  const [showPlaylists, setShowPlaylists] = useState(false)
   const [playlists, setPlaylists] = useState<SubtitlePlaylist[]>([])
   const [playlistDrafts, setPlaylistDrafts] = useState<Record<number, PlaylistDraft>>({})
   const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(true)
@@ -1077,11 +1078,19 @@ export default function SubtitleManager() {
 
       {/* ── Registered playlists ── */}
       <div className="card space-y-3">
-        <div>
-          <h3 className="font-medium text-slate-200">{t('import.playlistsTitle')}</h3>
-          <p className="text-xs text-slate-400">{t('import.playlistsDesc')}</p>
-        </div>
+        <button
+          onClick={() => setShowPlaylists((v) => !v)}
+          className="w-full flex items-center justify-between text-left"
+        >
+          <div>
+            <h3 className="font-medium text-slate-200">{t('import.playlistsTitle')}</h3>
+            <p className="text-xs text-slate-400">{t('import.playlistsDesc')}</p>
+          </div>
+          <span className="text-slate-400 text-sm shrink-0 ml-2">{showPlaylists ? '▲' : '▼'}</span>
+        </button>
 
+        {showPlaylists && (
+          <>
         {playlistError && <p className="text-red-400 text-xs">{playlistError}</p>}
 
         {isLoadingPlaylists ? (
@@ -1230,6 +1239,8 @@ export default function SubtitleManager() {
               )
             })}
           </div>
+        )}
+          </>
         )}
       </div>
 

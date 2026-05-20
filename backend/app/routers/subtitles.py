@@ -45,6 +45,45 @@ def _fallback_csv(values: List[str]) -> str:
     return ",".join([v.strip() for v in values if v and v.strip()])
 
 
+def _get_or_create_internal_playlist(
+    db: Session,
+    user_id: int,
+    title: str,
+    language: Optional[str],
+    fallback_languages: str,
+    max_videos: int,
+    stars: int,
+    temas: list,
+) -> SubtitlePlaylist:
+    """Reuse an existing internal playlist with the same title, or create a new one."""
+    if title:
+        existing = (
+            db.query(SubtitlePlaylist)
+            .filter(
+                SubtitlePlaylist.user_id == user_id,
+                SubtitlePlaylist.is_internal == True,
+                SubtitlePlaylist.title == title,
+            )
+            .first()
+        )
+        if existing:
+            return existing
+    pl = SubtitlePlaylist(
+        user_id=user_id,
+        playlist_id=f"internal:{uuid.uuid4().hex[:16]}",
+        title=title[:500] if title else None,
+        source_url=None,
+        is_internal=True,
+        language=language,
+        fallback_languages=fallback_languages,
+        max_videos=max_videos,
+        stars=stars,
+    )
+    pl.temas = temas
+    db.add(pl)
+    return pl
+
+
 def _upsert_playlists_for_request(db: Session, user_id: int, req: YouTubeImportRequest) -> None:
     playlist_sources = yts.playlist_ids_from_sources(req.sources)
     if not playlist_sources:
@@ -100,20 +139,20 @@ def _create_internal_playlist_for_result(
     if not title:
         title = f"Import {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}"
 
-    pl = SubtitlePlaylist(
+    temas = _resolve_temas(db, user_id, req.tema_ids)
+    pl = _get_or_create_internal_playlist(
+        db=db,
         user_id=user_id,
-        playlist_id=f"internal:{uuid.uuid4().hex[:16]}",
-        title=title[:500],
-        source_url=None,
-        is_internal=True,
+        title=title,
         language=req.language.strip() or None,
         fallback_languages=_fallback_csv(req.fallback_languages),
         max_videos=min(9999, max(1, req.max_videos)),
         stars=max(0, min(3, req.stars)),
+        temas=temas,
     )
-    pl.temas = _resolve_temas(db, user_id, req.tema_ids)
-    pl.files = files
-    db.add(pl)
+    for f in files:
+        if f not in pl.files:
+            pl.files.append(f)
     db.commit()
 
 
@@ -191,20 +230,19 @@ async def upload_subtitle(
         fallback_csv = _fallback_csv(
             [s.strip() for s in (fallback_languages or "").split(",") if s.strip()]
         )
-        pl = SubtitlePlaylist(
+        temas = _resolve_temas(db, current_user.id, parsed_tema_ids)
+        pl = _get_or_create_internal_playlist(
+            db=db,
             user_id=current_user.id,
-            playlist_id=f"internal:{uuid.uuid4().hex[:16]}",
-            title=title[:500],
-            source_url=None,
-            is_internal=True,
+            title=title,
             language=(language or "").strip() or None,
             fallback_languages=fallback_csv,
             max_videos=9999,
             stars=stars_clamped,
+            temas=temas,
         )
-        pl.temas = _resolve_temas(db, current_user.id, parsed_tema_ids)
-        pl.files = [sub]
-        db.add(pl)
+        if sub not in pl.files:
+            pl.files.append(sub)
         db.commit()
 
     db.refresh(sub)
