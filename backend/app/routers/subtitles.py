@@ -6,11 +6,11 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from sqlalchemy import func
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, contains_eager, joinedload
 
 from ..database import SessionLocal, get_db
 from ..dependencies import get_current_user
-from ..models.subtitle import SubtitleFile, SubtitlePlaylist, SubtitleSegment
+from ..models.subtitle import SubtitleFile, SubtitlePlaylist, SubtitleSegment, subtitle_file_temas
 from ..models.tema import Tema
 from ..models.user_word import UserWord
 from ..models.word_video_ref import WordVideoRef
@@ -668,27 +668,35 @@ def get_file_ref_counts(
 def search_subtitles(
     q: str = Query(min_length=2),
     limit: int = Query(default=30, le=200),
+    tema_ids: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Search subtitle segments by keyword and return matching SegmentRef objects."""
-    file_ids = [
-        r.id for r in db.query(SubtitleFile.id)
-        .filter(SubtitleFile.user_id == current_user.id)
-        .all()
-    ]
+    """Search subtitle segments by keyword, optionally filtered by tema, sorted by stars desc."""
+    parsed_tema_ids = [int(x) for x in (tema_ids or "").split(",") if x.strip().isdigit()]
+
+    files_q = db.query(SubtitleFile.id).filter(SubtitleFile.user_id == current_user.id)
+    if parsed_tema_ids:
+        files_q = files_q.filter(
+            SubtitleFile.id.in_(
+                db.query(subtitle_file_temas.c.subtitle_file_id)
+                .filter(subtitle_file_temas.c.tema_id.in_(parsed_tema_ids))
+            )
+        )
+    file_ids = [r.id for r in files_q.all()]
     if not file_ids:
         return {"results": [], "total": 0}
 
     q_lower = q.lower().strip()
     segs = (
         db.query(SubtitleSegment)
-        .options(joinedload(SubtitleSegment.file))
+        .join(SubtitleFile, SubtitleSegment.file_id == SubtitleFile.id)
+        .options(contains_eager(SubtitleSegment.file))
         .filter(
             SubtitleSegment.file_id.in_(file_ids),
             SubtitleSegment.text_lower.contains(q_lower),
         )
-        .order_by(SubtitleSegment.file_id, SubtitleSegment.start_ms)
+        .order_by(SubtitleFile.stars.desc(), SubtitleSegment.file_id, SubtitleSegment.start_ms)
         .limit(limit)
         .all()
     )

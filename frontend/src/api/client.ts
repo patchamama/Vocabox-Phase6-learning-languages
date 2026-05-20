@@ -305,8 +305,10 @@ export const subtitlesApi = {
     api.get<SegmentContext>(`/subtitles/segment-context/${segmentId}`, { params: { before, after } }),
   getFileRefCounts: () =>
     api.get<{ file_id: number; count: number }[]>('/subtitles/file-ref-counts'),
-  searchSegments: (q: string, limit = 30) =>
-    api.get<SubtitleSearchResult>('/subtitles/search', { params: { q, limit } }),
+  searchSegments: (q: string, limit = 30, temaIds?: number[]) =>
+    api.get<SubtitleSearchResult>('/subtitles/search', {
+      params: { q, limit, ...(temaIds && temaIds.length > 0 ? { tema_ids: temaIds.join(',') } : {}) },
+    }),
   /** Convenience: convert SegmentRef[] from search into WordVideoRef[] for VideoRefsModal */
   segmentsToVideoRefs: (segs: SegmentRef[]): WordVideoRef[] =>
     segs.map((seg, i) => ({ id: -(i + 1), word_id: 0, segment_id: seg.id, segment: seg })),

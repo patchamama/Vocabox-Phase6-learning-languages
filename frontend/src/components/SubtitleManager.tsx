@@ -114,6 +114,7 @@ export default function SubtitleManager() {
 
   // Search
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchTemaIds, setSearchTemaIds] = useState<number[]>([])
   const [searchResults, setSearchResults] = useState<WordVideoRef[] | null>(null)
   const [isSearching, setIsSearching] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
@@ -667,7 +668,7 @@ export default function SubtitleManager() {
     setSearchError(null)
     setSearchResults(null)
     try {
-      const res = await subtitlesApi.searchSegments(q)
+      const res = await subtitlesApi.searchSegments(q, 30, searchTemaIds)
       setSearchResults(subtitlesApi.segmentsToVideoRefs(res.data.results))
     } catch {
       setSearchError(t('import.subtitleSearchError'))
@@ -1292,6 +1293,43 @@ export default function SubtitleManager() {
               : '🔍'}
           </button>
         </div>
+
+        {temas.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-xs text-slate-500">{t('import.searchFilterTema', 'Filtrar por tema')} <span className="text-slate-600">{t('import.searchFilterTemaHint', '(vacío = todos)')}</span></p>
+            <div className="flex flex-wrap gap-1.5">
+              {temas.map((tm) => {
+                const active = searchTemaIds.includes(tm.id)
+                return (
+                  <button
+                    key={tm.id}
+                    type="button"
+                    onClick={() => setSearchTemaIds((prev) =>
+                      active ? prev.filter((id) => id !== tm.id) : [...prev, tm.id]
+                    )}
+                    className={`text-xs px-2 py-1 rounded-lg border transition-colors ${
+                      active
+                        ? 'border-blue-500 bg-blue-500/20 text-blue-200'
+                        : 'border-slate-600 text-slate-400 hover:border-slate-400'
+                    }`}
+                  >
+                    <span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: tm.color }} />
+                    {tm.nombre}
+                  </button>
+                )
+              })}
+              {searchTemaIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTemaIds([])}
+                  className="text-xs px-2 py-1 rounded-lg border border-slate-700 text-slate-500 hover:text-slate-300 transition-colors"
+                >
+                  ✕ {t('import.searchFilterClear', 'Limpiar')}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {searchError && <p className="text-red-400 text-xs">{searchError}</p>}
 
