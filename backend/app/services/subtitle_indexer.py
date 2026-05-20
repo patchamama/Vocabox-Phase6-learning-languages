@@ -167,9 +167,9 @@ def index_word(
     if not by_file:
         return 0
 
-    # Round-robin across files to maximise diversity
+    # Round-robin across files, preserving stars-desc order from file_ids
     selected: list[SubtitleSegment] = []
-    file_order = list(by_file.keys())
+    file_order = [fid for fid in file_ids if fid in by_file]
     cursors = {fid: 0 for fid in file_order}
     while len(selected) < max_refs:
         added = False
@@ -249,6 +249,7 @@ def reindex_all(
             use_palabra=use_palabra,
             use_audio_text=use_audio_text,
             use_significado=use_significado,
+            word_tema_id=uw.word.tema_id,
         )
         if on_progress:
             on_progress(i + 1, total)
