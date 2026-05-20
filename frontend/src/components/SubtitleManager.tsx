@@ -119,6 +119,9 @@ export default function SubtitleManager() {
   const [searchError, setSearchError] = useState<string | null>(null)
   const [searchModal, setSearchModal] = useState<{ query: string; refs: WordVideoRef[] } | null>(null)
 
+  // Collapsible sections
+  const [showUpload, setShowUpload] = useState(false)
+  const [showYtImport, setShowYtImport] = useState(false)
   // Registered playlists
   const [showPlaylists, setShowPlaylists] = useState(false)
   const [playlists, setPlaylists] = useState<SubtitlePlaylist[]>([])
@@ -698,9 +701,18 @@ export default function SubtitleManager() {
 
       {/* ── Upload section ── */}
       <div className="card space-y-3">
-        <h3 className="font-medium text-slate-200">{t('import.subtitleUploadTitle')}</h3>
-        <p className="text-xs text-slate-400">{t('import.subtitlesDesc')}</p>
+        <button
+          onClick={() => setShowUpload((v) => !v)}
+          className="w-full flex items-center justify-between text-left"
+        >
+          <div>
+            <h3 className="font-medium text-slate-200">{t('import.subtitleUploadTitle')}</h3>
+            <p className="text-xs text-slate-400">{t('import.subtitlesDesc')}</p>
+          </div>
+          <span className="text-slate-400 text-sm shrink-0 ml-2">{showUpload ? '▲' : '▼'}</span>
+        </button>
 
+        {showUpload && <>
         {/* Drop zone */}
         <div
           onClick={() => uploadInputRef.current?.click()}
@@ -882,12 +894,23 @@ export default function SubtitleManager() {
               ? t('import.subtitleUploadN', { count: uploadFiles.length })
               : t('import.subtitleUpload')}
         </button>
+        </>}
       </div>
 
       {/* ── YouTube import section ── */}
       <div className="card space-y-3">
-        <h3 className="font-medium text-slate-200">{t('import.ytImportTitle')}</h3>
-        <p className="text-xs text-slate-400">{t('import.ytImportDesc')}</p>
+        <button
+          onClick={() => setShowYtImport((v) => !v)}
+          className="w-full flex items-center justify-between text-left"
+        >
+          <div>
+            <h3 className="font-medium text-slate-200">{t('import.ytImportTitle')}</h3>
+            <p className="text-xs text-slate-400">{t('import.ytImportDesc')}</p>
+          </div>
+          <span className="text-slate-400 text-sm shrink-0 ml-2">{showYtImport ? '▲' : '▼'}</span>
+        </button>
+
+        {showYtImport && <>
 
         <div>
           <label className="text-xs text-slate-400 block mb-1">{t('import.ytSources')}</label>
@@ -1074,6 +1097,7 @@ export default function SubtitleManager() {
             </button>
           )}
         </div>
+        </>}
       </div>
 
       {/* ── Registered playlists ── */}
