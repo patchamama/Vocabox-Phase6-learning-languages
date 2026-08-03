@@ -6,8 +6,11 @@ Ported from test/leo_lookup.py — only the lookup logic, no HTML generation.
 
 import re
 import urllib.parse
-import urllib.request
 from xml.etree import ElementTree as ET
+
+from curl_cffi import requests as cf_requests
+
+from .system_settings import get_youtube_proxy_url
 
 AUDIO_BASE = "https://dict.leo.org/media/audio/{file_id}.mp3"
 
@@ -20,22 +23,38 @@ LANG_PAIRS = {
 }
 
 HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    ),
     "Accept-Language": "es-ES,es;q=0.9",
 }
+
+
+_MAX_ATTEMPTS = 4
 
 
 def _fetch_html(word: str, lp: str) -> str:
     path, _ = LANG_PAIRS[lp]
     encoded = urllib.parse.quote(word, safe="")
     url = f"https://dict.leo.org/{path}/{encoded}"
-    req = urllib.request.Request(url, headers=HEADERS)
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        return resp.read().decode("utf-8", errors="replace")
+
+    # dict.leo.org sits behind Cloudflare, which serves a JS challenge to
+    # plain HTTP clients (fingerprint-based, independent of headers). Route
+    # through the same proxy configured for YouTube and impersonate Chrome's
+    # TLS/JA3 fingerprint via curl_cffi so Cloudflare treats it as a browser.
+    # The proxy pool is rotating and only some exit IPs are still clean, so a
+    # single 403 isn't final — retry a few times to land on a working IP.
+    proxy = get_youtube_proxy_url()
+    proxies = {"http": proxy, "https": proxy} if proxy else None
+
+    last_exc: Exception | None = None
+    for _ in range(_MAX_ATTEMPTS):
+        try:
+            resp = cf_requests.get(
+                url, headers=HEADERS, proxies=proxies, impersonate="chrome124", timeout=20
+            )
+            resp.raise_for_status()
+            return resp.text
+        except Exception as exc:
+            last_exc = exc
+    raise last_exc
 
 
 def _extract_xml(html: str) -> str:
