@@ -16,6 +16,7 @@ YOUTUBE_PROXY_KEY = "youtube_proxy_url"
 YOUTUBE_PROXY_STICKY_SESSION_KEY = "youtube_proxy_sticky_session"
 YOUTUBE_PROXY_STICKY_UNSUPPORTED_KEY = "youtube_proxy_sticky_unsupported"
 YOUTUBE_COOKIES_KEY = "youtube_cookies_netscape"
+LEO_LAST_WORKING_PROXY_KEY = "leo_last_working_proxy"
 
 
 def _get_setting(key: str) -> Optional[str]:
@@ -53,6 +54,16 @@ def get_youtube_proxy_url() -> Optional[str]:
         return db_val
     env_val = (os.environ.get("YOUTUBE_PROXY_URL") or "").strip()
     return env_val or None
+
+
+def get_leo_last_working_proxy() -> Optional[str]:
+    """Return the exact proxy URL that last produced a valid LEO response."""
+    return _get_setting(LEO_LAST_WORKING_PROXY_KEY)
+
+
+def set_leo_last_working_proxy(proxy_url: Optional[str]) -> None:
+    """Persist the exact successful LEO proxy independently from YouTube."""
+    set_setting(LEO_LAST_WORKING_PROXY_KEY, proxy_url)
 
 
 def get_youtube_cookies_text() -> Optional[str]:
