@@ -7,6 +7,7 @@ can set / clear values without touching the .env file.
 from __future__ import annotations
 
 import os
+from datetime import datetime
 from typing import Optional
 
 from ..database import SessionLocal
@@ -17,6 +18,7 @@ YOUTUBE_PROXY_STICKY_SESSION_KEY = "youtube_proxy_sticky_session"
 YOUTUBE_PROXY_STICKY_UNSUPPORTED_KEY = "youtube_proxy_sticky_unsupported"
 YOUTUBE_COOKIES_KEY = "youtube_cookies_netscape"
 LEO_LAST_WORKING_PROXY_KEY = "leo_last_working_proxy"
+LEO_FAST_TIER_DOWN_UNTIL_KEY = "leo_fast_tier_down_until"
 
 
 def _get_setting(key: str) -> Optional[str]:
@@ -64,6 +66,22 @@ def get_leo_last_working_proxy() -> Optional[str]:
 def set_leo_last_working_proxy(proxy_url: Optional[str]) -> None:
     """Persist the exact successful LEO proxy independently from YouTube."""
     set_setting(LEO_LAST_WORKING_PROXY_KEY, proxy_url)
+
+
+def get_leo_fast_tier_down_until() -> Optional[datetime]:
+    """Return when the fast (curl_cffi) LEO tier should be retried again."""
+    raw = _get_setting(LEO_FAST_TIER_DOWN_UNTIL_KEY)
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def set_leo_fast_tier_down_until(until: Optional[datetime]) -> None:
+    """Persist (or clear, with None) the fast-tier cooldown deadline."""
+    set_setting(LEO_FAST_TIER_DOWN_UNTIL_KEY, until.isoformat() if until else None)
 
 
 def get_youtube_cookies_text() -> Optional[str]:

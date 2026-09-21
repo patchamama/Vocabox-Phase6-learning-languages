@@ -77,6 +77,7 @@ if [ "$SKIP_INSTALL" = false ]; then
     echo "      Installing missing dependencies..."
     pip install --quiet --upgrade pip
     pip install --quiet -r "$REQS"
+    python -m playwright install chromium
     echo "$_hash" > "$HASH_FILE"
     echo "      Done."
   else

@@ -56,6 +56,7 @@ if [ "$(cat "$HASH_FILE" 2>/dev/null)" != "$_hash" ]; then
     echo "      Installing missing dependencies..."
     pip install --quiet --upgrade pip
     pip install --quiet -r "$REQS"
+    python -m playwright install chromium
     echo "$_hash" > "$HASH_FILE"
     echo "      Done."
 else

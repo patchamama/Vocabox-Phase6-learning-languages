@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from ..dependencies import get_current_user
 from ..models.user import User
-from ..services.leo_service import LANG_PAIRS, lookup
+from ..services.leo_service import LANG_PAIRS, LeoLookupError, lookup
 
 router = APIRouter(prefix="/leo", tags=["leo"])
 
@@ -72,7 +72,12 @@ def leo_lookup(
     try:
         data = lookup(word.strip(), lp=lp, max_results=results)
     except ValueError as exc:
+        # Word genuinely not found in LEO — a normal outcome, not an error.
         raise HTTPException(status_code=404, detail=str(exc))
+    except LeoLookupError as exc:
+        # Direct access and every configured proxy were blocked — this is an
+        # access problem, distinct from "word not found."
+        raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"LEO lookup failed: {exc}")
     return data
