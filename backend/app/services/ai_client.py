@@ -28,6 +28,10 @@ class AIClient(ABC):
         """Quick connectivity/auth check."""
         ...
 
+    def list_models(self, timeout: int = 15) -> list[str]:
+        """Return available model ids/names. Raises on failure."""
+        raise NotImplementedError
+
 
 class OllamaClient(AIClient):
     """Ollama local LLM via /api/generate."""
@@ -67,6 +71,11 @@ class OllamaClient(AIClient):
         except Exception:
             return False
 
+    def list_models(self, timeout: int = 15) -> list[str]:
+        with urllib.request.urlopen(f"{self.base_url}/api/tags", timeout=timeout) as resp:
+            data = json.loads(resp.read().decode())
+            return sorted(m["name"] for m in data.get("models", []) if m.get("name"))
+
 
 class OpenAIClient(AIClient):
     """
@@ -80,24 +89,43 @@ class OpenAIClient(AIClient):
         self.base_url = base_url.rstrip("/")
 
     def complete(self, prompt: str, model: str, timeout: int) -> str:
-        payload = json.dumps({
+        body = {
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.4,
             "max_tokens": 2500,
-        }).encode()
-        req = urllib.request.Request(
-            f"{self.base_url}/chat/completions",
-            data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}",
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode())
-            return data["choices"][0]["message"]["content"].strip()
+        }
+        # Newer "reasoning" models (gpt-5.x, o1, o3, ...) reject the classic
+        # `max_tokens` / custom `temperature` params. Adapt on the fly instead
+        # of hardcoding model-name prefixes that will go stale.
+        for _ in range(len(body)):
+            req = urllib.request.Request(
+                f"{self.base_url}/chat/completions",
+                data=json.dumps(body).encode(),
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self.api_key}",
+                },
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    data = json.loads(resp.read().decode())
+                    return data["choices"][0]["message"]["content"].strip()
+            except urllib.error.HTTPError as exc:
+                if exc.code != 400:
+                    raise
+                detail = json.loads(exc.read().decode())
+                error = detail.get("error", {})
+                param, code = error.get("param"), error.get("code")
+                if param == "max_tokens" and "max_tokens" in body:
+                    body["max_completion_tokens"] = body.pop("max_tokens")
+                    continue
+                if param == "temperature" and "temperature" in body:
+                    body.pop("temperature")
+                    continue
+                raise
+        raise RuntimeError("OpenAI request failed after parameter-compatibility retries")
 
     def is_available(self, timeout: int = 5) -> bool:
         try:
@@ -109,6 +137,15 @@ class OpenAIClient(AIClient):
             return True
         except Exception:
             return False
+
+    def list_models(self, timeout: int = 15) -> list[str]:
+        req = urllib.request.Request(
+            f"{self.base_url}/models",
+            headers={"Authorization": f"Bearer {self.api_key}"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode())
+            return sorted(m["id"] for m in data.get("data", []) if m.get("id"))
 
 
 class AnthropicClient(AIClient):
@@ -151,6 +188,18 @@ class AnthropicClient(AIClient):
         except Exception:
             return False
 
+    def list_models(self, timeout: int = 15) -> list[str]:
+        req = urllib.request.Request(
+            "https://api.anthropic.com/v1/models?limit=1000",
+            headers={
+                "x-api-key": self.api_key,
+                "anthropic-version": "2023-06-01",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode())
+            return sorted(m["id"] for m in data.get("data", []) if m.get("id"))
+
 
 class GeminiClient(AIClient):
     """Google Generative AI (Gemini) REST API."""
@@ -185,33 +234,35 @@ class GeminiClient(AIClient):
         except Exception:
             return False
 
+    def list_models(self, timeout: int = 15) -> list[str]:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={self.api_key}"
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode())
+            return sorted(
+                m["name"].removeprefix("models/")
+                for m in data.get("models", [])
+                if "generateContent" in m.get("supportedGenerationMethods", [])
+            )
+
+
+def build_client(provider_type: str, api_key: Optional[str] = None, base_url: Optional[str] = None) -> AIClient:
+    """Build an AIClient from raw fields — used to list models before a provider row exists."""
+    if provider_type == "openai":
+        return OpenAIClient(api_key=api_key or "", base_url=base_url or "https://api.openai.com/v1")
+    if provider_type == "anthropic":
+        return AnthropicClient(api_key=api_key or "")
+    if provider_type == "gemini":
+        return GeminiClient(api_key=api_key or "")
+    if provider_type == "azure":
+        return OpenAIClient(api_key=api_key or "", base_url=base_url or "")
+    if provider_type == "openai_compat":
+        return OpenAIClient(api_key=api_key or "none", base_url=base_url or "")
+    return OllamaClient(base_url=base_url or "http://localhost:11434")
+
 
 def build_client_from_provider(provider) -> AIClient:
     """Build an AIClient instance from an AIProvider ORM object."""
-    t = provider.provider_type
-    if t == "openai":
-        return OpenAIClient(
-            api_key=provider.api_key or "",
-            base_url=provider.base_url or "https://api.openai.com/v1",
-        )
-    if t == "anthropic":
-        return AnthropicClient(api_key=provider.api_key or "")
-    if t == "gemini":
-        return GeminiClient(api_key=provider.api_key or "")
-    if t == "azure":
-        # Azure OpenAI: base_url is the full deployment endpoint
-        return OpenAIClient(
-            api_key=provider.api_key or "",
-            base_url=provider.base_url or "",
-        )
-    if t == "openai_compat":
-        # Generic OpenAI-compatible (LM Studio, Groq, Mistral, etc.)
-        return OpenAIClient(
-            api_key=provider.api_key or "none",
-            base_url=provider.base_url or "",
-        )
-    # Default: ollama
-    return OllamaClient(base_url=provider.base_url or "http://localhost:11434")
+    return build_client(provider.provider_type, provider.api_key, provider.base_url)
 
 
 def get_active_client_and_model(user_id: int, db) -> Optional[tuple[AIClient, str]]:

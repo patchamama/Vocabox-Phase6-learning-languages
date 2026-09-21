@@ -7,8 +7,8 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { languagesApi, leoApi, ollamaApi, temasApi, verbformenApi, wordExamplesApi, wordTranslationsApi, wordsApi } from '../api/client'
-import type { VerbformenResult, WordExample } from '../api/client'
+import { aiProvidersApi, languagesApi, leoApi, ollamaApi, temasApi, verbformenApi, wordExamplesApi, wordTranslationsApi, wordsApi } from '../api/client'
+import type { AIProviderInfo, VerbformenResult, WordExample } from '../api/client'
 import { playAudio } from '../utils/audioManager'
 import { useSettingsStore } from '../stores/settingsStore'
 import { enhanceWordDirect } from '../services/ollamaFrontend'
@@ -119,6 +119,11 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
   const [ollamaChecks, setOllamaChecks] = useState<Record<string, boolean>>({})
   const [ollamaSource, setOllamaSource] = useState<OllamaSource | null>(null)
   const ollamaRef = useRef<HTMLDivElement>(null)
+  const [activeProvider, setActiveProvider] = useState<AIProviderInfo | null>(null)
+
+  useEffect(() => {
+    aiProvidersApi.active().then((res) => setActiveProvider(res.data)).catch(() => setActiveProvider(null))
+  }, [])
 
   // Extra translations (multi-language from LEO)
   const [extraTranslations, setExtraTranslations] = useState<WordTranslation[]>([])
@@ -457,8 +462,14 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
     if (!showAdvanced) setShowAdvanced(true)
   }
 
+  // Mirrors the backend's resolution order (get_active_client_and_model): the
+  // active AI provider always wins; Ollama is only the fallback when none is
+  // active. A leftover ollamaTranslationModel from a past setup must not
+  // shadow a currently active provider.
+  const usingOllama = !activeProvider && Boolean(ollamaTranslationModel)
+
   const handleOllamaEnhance = async () => {
-    if (!form.palabra.trim() || !ollamaTranslationModel) return
+    if (!form.palabra.trim() || (!ollamaTranslationModel && !activeProvider)) return
     setOllamaLoading(true)
     setOllamaError(null)
     setOllamaSuggestion(null)
@@ -477,7 +488,10 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
     }
     try {
       let data: OllamaSuggestion
-      if (useFrontendOllama) {
+      // Direct-from-browser Ollama only when Ollama is actually the method in
+      // use (no active provider). Otherwise go through the backend, which
+      // resolves the active AI provider (OpenAI/Claude/etc.).
+      if (useFrontendOllama && usingOllama) {
         try {
           data = await enhanceWordDirect(payload) as OllamaSuggestion
           setOllamaSource('frontend-ollama')
@@ -762,19 +776,19 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
           )}
         </div>
 
-        {/* Ollama enhance button */}
-        {ollamaTranslationModel && (
+        {/* AI enhance button — active AI provider takes priority, Ollama is only the fallback */}
+        {(activeProvider || ollamaTranslationModel) && (
           <div className="relative" ref={ollamaRef}>
             <button
               type="button"
-              title={t('wordEdit.ollamaEnhance')}
+              title={usingOllama ? t('wordEdit.ollamaEnhance') : activeProvider?.name}
               onClick={handleOllamaEnhance}
               disabled={ollamaLoading || !form.palabra.trim()}
               className="flex items-center justify-center w-9 h-9 rounded-lg border border-slate-600 bg-slate-800 hover:border-purple-400 hover:bg-slate-700 disabled:opacity-40 transition-colors"
             >
               {ollamaLoading ? (
                 <span className="text-xs text-slate-400 animate-spin">⟳</span>
-              ) : (
+              ) : usingOllama ? (
                 <img
                   src="https://ollama.com/public/ollama.png"
                   alt="Ollama"
@@ -784,11 +798,13 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
                     ;(e.target as HTMLImageElement).nextElementSibling!.removeAttribute('hidden')
                   }}
                 />
+              ) : (
+                <span className="text-xs font-bold text-purple-400">AI</span>
               )}
               <span hidden className="text-xs font-bold text-purple-400">AI</span>
             </button>
 
-            {/* Ollama suggestion panel */}
+            {/* AI suggestion panel */}
             {(ollamaSuggestion || ollamaError) && (
               <div className="absolute right-0 top-10 z-50 w-80 bg-slate-800 border border-slate-600 rounded-xl shadow-2xl overflow-hidden">
                 {ollamaError && (
@@ -797,7 +813,11 @@ export default function WordEditForm({ word, onSaved, onCancel, onDeleted, onTem
                 {ollamaSuggestion && (
                   <>
                     <div className="px-3 py-2 border-b border-slate-700 text-xs text-slate-400 uppercase tracking-wide flex items-center gap-1.5">
-                      <img src="https://ollama.com/public/ollama.png" alt="" className="w-3.5 h-3.5 rounded" />
+                      {usingOllama ? (
+                        <img src="https://ollama.com/public/ollama.png" alt="" className="w-3.5 h-3.5 rounded" />
+                      ) : (
+                        <span className="text-purple-400 font-bold">AI</span>
+                      )}
                       {t('wordEdit.ollamaSuggestions')}
                       {ollamaSource && (
                         <span

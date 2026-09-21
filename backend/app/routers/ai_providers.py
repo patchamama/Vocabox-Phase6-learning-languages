@@ -16,7 +16,7 @@ from ..database import get_db
 from ..dependencies import get_current_user
 from ..models.ai_provider import AIProvider
 from ..models.user import User
-from ..services.ai_client import build_client_from_provider
+from ..services.ai_client import build_client, build_client_from_provider
 
 router = APIRouter(prefix="/ai-providers", tags=["ai-providers"])
 
@@ -30,6 +30,13 @@ class ProviderCreate(BaseModel):
     base_url: Optional[str] = None
     model_name: str
     is_active: bool = False
+
+
+class ListModelsRequest(BaseModel):
+    provider_type: str
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    provider_id: Optional[int] = None   # when editing, reuse the stored key if api_key is blank
 
 
 class ProviderUpdate(BaseModel):
@@ -69,6 +76,25 @@ def get_active_provider(
         .first()
     )
     return _safe(p) if p else None
+
+
+@router.post("/models")
+def list_models(
+    req: ListModelsRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List available models for a provider type + credentials, before saving."""
+    api_key = req.api_key or None
+    if not api_key and req.provider_id is not None:
+        existing = _get_or_404(req.provider_id, current_user.id, db)
+        api_key = existing.api_key
+    client = build_client(req.provider_type, api_key, req.base_url)
+    try:
+        models = client.list_models(timeout=15)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not list models: {exc}")
+    return {"models": models}
 
 
 @router.post("")

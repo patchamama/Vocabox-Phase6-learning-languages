@@ -604,6 +604,8 @@ export const aiProvidersApi = {
   activate: (id: number) => api.post<AIProviderInfo>(`/ai-providers/${id}/activate`),
   deactivate: (id: number) => api.post<AIProviderInfo>(`/ai-providers/${id}/deactivate`),
   test: (id: number) => api.post<{ ok: boolean; provider_type: string; model: string }>(`/ai-providers/${id}/test`),
+  listModels: (data: { provider_type: string; api_key?: string; base_url?: string; provider_id?: number }) =>
+    api.post<{ models: string[] }>('/ai-providers/models', data),
 }
 
 // ── User Settings ─────────────────────────────────────────────────────────────

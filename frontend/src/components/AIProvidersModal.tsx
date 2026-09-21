@@ -24,15 +24,6 @@ const PROVIDER_TYPES = [
   { key: 'openai_compat', label: 'Compatible con OpenAI (LM Studio, Groq…)', needsKey: true, needsUrl: true },
 ]
 
-const MODEL_SUGGESTIONS: Record<string, string[]> = {
-  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-  anthropic: ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5-20251001', 'claude-3-5-sonnet-20241022'],
-  gemini: ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
-  ollama: ['llama3', 'mistral', 'qwen2.5', 'gemma3'],
-  azure: ['gpt-4o', 'gpt-4-turbo'],
-  openai_compat: ['llama-3.3-70b-versatile', 'mistral-large-latest'],
-}
-
 const TYPE_ICON: Record<string, string> = {
   ollama: '🦙', openai: '🤖', anthropic: '🟠', gemini: '💎',
   azure: '☁', openai_compat: '🔧',
@@ -49,6 +40,12 @@ export default function AIProvidersModal({ onClose, onActiveChanged }: Props) {
   const [saving, setSaving] = useState(false)
   const [testResult, setTestResult] = useState<Record<number, boolean | null>>({})
   const [testing, setTesting] = useState<number | null>(null)
+
+  // Live model listing — fetched from the provider itself once type + key (if needed) are set
+  const [modelOptions, setModelOptions] = useState<string[]>([])
+  const [modelsLoading, setModelsLoading] = useState(false)
+  const [modelsError, setModelsError] = useState<string | null>(null)
+  const [manualModelEntry, setManualModelEntry] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -67,6 +64,9 @@ export default function AIProvidersModal({ onClose, onActiveChanged }: Props) {
   const openAdd = () => {
     setEditId(null)
     setForm({ ...EMPTY_FORM })
+    setModelOptions([])
+    setModelsError(null)
+    setManualModelEntry(false)
     setShowForm(true)
   }
 
@@ -79,8 +79,48 @@ export default function AIProvidersModal({ onClose, onActiveChanged }: Props) {
       base_url: p.base_url ?? '',
       model_name: p.model_name,
     })
+    setModelOptions([])
+    setModelsError(null)
+    setManualModelEntry(false)
     setShowForm(true)
   }
+
+  // Fetch the live model list from the provider once type + credentials look
+  // usable. Debounced so it doesn't fire on every keystroke of the API key.
+  useEffect(() => {
+    if (!showForm) return
+    const meta = providerMeta(form.provider_type)
+    const hasKey = form.api_key.trim().length > 0
+    // Editing without retyping the key still works — the backend falls back
+    // to the stored key for this provider_id.
+    const canTry = !meta.needsKey || hasKey || editId !== null
+    if (!canTry) {
+      setModelOptions([])
+      setModelsError(null)
+      return
+    }
+    setModelsLoading(true)
+    setModelsError(null)
+    const handle = setTimeout(() => {
+      aiProvidersApi
+        .listModels({
+          provider_type: form.provider_type,
+          api_key: form.api_key.trim() || undefined,
+          base_url: form.base_url.trim() || undefined,
+          provider_id: editId ?? undefined,
+        })
+        .then((res) => {
+          setModelOptions(res.data.models)
+          if (res.data.models.length === 0) setModelsError('El proveedor no devolvió modelos.')
+        })
+        .catch(() => {
+          setModelOptions([])
+          setModelsError('No se pudo obtener la lista de modelos — revisá la API key / URL, o escribí el nombre manualmente.')
+        })
+        .finally(() => setModelsLoading(false))
+    }, 500)
+    return () => clearTimeout(handle)
+  }, [showForm, form.provider_type, form.api_key, form.base_url, editId])
 
   const save = async () => {
     if (!form.name.trim() || !form.model_name.trim()) return
@@ -157,7 +197,13 @@ export default function AIProvidersModal({ onClose, onActiveChanged }: Props) {
                 <label className="text-xs text-slate-400 block mb-1">Tipo</label>
                 <select
                   value={form.provider_type}
-                  onChange={(e) => setForm((f) => ({ ...f, provider_type: e.target.value, model_name: MODEL_SUGGESTIONS[e.target.value]?.[0] ?? '' }))}
+                  onChange={(e) => {
+                    const provider_type = e.target.value
+                    setForm((f) => ({ ...f, provider_type, model_name: '' }))
+                    setModelOptions([])
+                    setModelsError(null)
+                    setManualModelEntry(false)
+                  }}
                   className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
                 >
                   {PROVIDER_TYPES.map((pt) => (
@@ -176,24 +222,6 @@ export default function AIProvidersModal({ onClose, onActiveChanged }: Props) {
                   placeholder={`p.ej. ${meta.label}`}
                   className="input w-full"
                 />
-              </div>
-
-              {/* Model */}
-              <div>
-                <label className="text-xs text-slate-400 block mb-1">Modelo</label>
-                <input
-                  list={`models-${form.provider_type}`}
-                  type="text"
-                  value={form.model_name}
-                  onChange={(e) => setForm((f) => ({ ...f, model_name: e.target.value }))}
-                  placeholder="nombre del modelo"
-                  className="input w-full"
-                />
-                <datalist id={`models-${form.provider_type}`}>
-                  {(MODEL_SUGGESTIONS[form.provider_type] ?? []).map((m) => (
-                    <option key={m} value={m} />
-                  ))}
-                </datalist>
               </div>
 
               {/* API Key */}
@@ -233,6 +261,51 @@ export default function AIProvidersModal({ onClose, onActiveChanged }: Props) {
                   />
                 </div>
               )}
+
+              {/* Model — live listbox from the provider, manual fallback */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs text-slate-400">Modelo</label>
+                  {modelOptions.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setManualModelEntry((v) => !v)}
+                      className="text-xs text-blue-400 hover:text-blue-300"
+                    >
+                      {manualModelEntry ? 'Elegir de la lista' : 'Escribir manualmente'}
+                    </button>
+                  )}
+                </div>
+
+                {modelsLoading && (
+                  <p className="text-xs text-slate-500 mb-1">Buscando modelos disponibles…</p>
+                )}
+
+                {modelOptions.length > 0 && !manualModelEntry ? (
+                  <select
+                    value={form.model_name}
+                    onChange={(e) => setForm((f) => ({ ...f, model_name: e.target.value }))}
+                    className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="">Elegí un modelo…</option>
+                    {modelOptions.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={form.model_name}
+                    onChange={(e) => setForm((f) => ({ ...f, model_name: e.target.value }))}
+                    placeholder="nombre del modelo"
+                    className="input w-full"
+                  />
+                )}
+
+                {modelsError && (
+                  <p className="text-xs text-amber-400 mt-1">{modelsError}</p>
+                )}
+              </div>
 
               <div className="flex gap-2 pt-1">
                 <button onClick={() => setShowForm(false)} className="btn-secondary flex-1 text-sm">
